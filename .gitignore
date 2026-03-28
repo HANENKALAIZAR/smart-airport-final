@@ -1,0 +1,82 @@
+# ── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+
+# ── Virtual environments ──────────────────────────────────────
+venv/
+.venv/
+env/
+ENV/
+.env.bak
+
+# ── SECRETS — never commit these ─────────────────────────────
+backend/.env
+.env
+*.env
+!backend/.env.example
+!.env.example
+
+# ── Database ──────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+test_smart_airport.db
+
+# ── Logs ──────────────────────────────────────────────────────
+*.log
+app.log
+backend/app.log
+
+# ── Node / Frontend ───────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+dist/
+.npm
+
+# ── Build outputs ─────────────────────────────────────────────
+*.pyc
+.cache/
+*.tsbuildinfo
+
+# ── IDE ───────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ── Test coverage ─────────────────────────────────────────────
+.coverage
+htmlcov/
+.pytest_cache/
+coverage.xml
+
+# ── Alembic ───────────────────────────────────────────────────
+# Keep migrations but not compiled cache
+backend/migrations/__pycache__/
+
+# ── AI model cache (large binary files — train locally) ───────
+# Uncomment the next line if you don't want to commit model files:
+# backend/app/ai/model/*.json
+# backend/app/ai/model/*.pkl
+
+# ── API response cache ────────────────────────────────────────
+backend/app/data/flight_cache/

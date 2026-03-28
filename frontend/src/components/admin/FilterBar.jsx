@@ -1,0 +1,143 @@
+import { useState } from 'react';
+import { X } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
+
+export default function FilterBar({ onFilterChange }) {
+    const { t } = useLanguage();
+    const [filters, setFilters] = useState({ timeRange: [], riskLevels: [], statuses: [] });
+
+    const timeRanges = [
+        { id: 'morning', label: t('filter_morning') },
+        { id: 'afternoon', label: t('filter_afternoon') },
+        { id: 'evening', label: t('filter_evening') },
+    ];
+
+    const riskLevels = [
+        { id: 'Low', label: t('filter_low_risk'), cls: 'admin-filter-pill--low' },
+        { id: 'Medium', label: t('filter_medium_risk'), cls: 'admin-filter-pill--medium' },
+        { id: 'High', label: t('filter_high_risk'), cls: 'admin-filter-pill--high' },
+    ];
+
+    const statuses = [
+        { id: 'On-Time', label: t('filter_on_time') },
+        { id: 'Delayed', label: t('filter_delayed') },
+        { id: 'Boarding', label: t('filter_boarding') },
+        { id: 'Departed', label: t('filter_departed') },
+    ];
+
+    function toggle(category, value) {
+        setFilters(prev => {
+            const arr = prev[category];
+            const updated = arr.includes(value) ? arr.filter(v => v !== value) : [...arr, value];
+            return { ...prev, [category]: updated };
+        });
+    }
+
+    function apply() { onFilterChange(filters); }
+
+    function reset() {
+        const empty = { timeRange: [], riskLevels: [], statuses: [] };
+        setFilters(empty);
+        onFilterChange(empty);
+    }
+
+    function remove(category, value) {
+        const updated = { ...filters, [category]: filters[category].filter(v => v !== value) };
+        setFilters(updated);
+        onFilterChange(updated);
+    }
+
+    const hasActive = filters.timeRange.length > 0 || filters.riskLevels.length > 0 || filters.statuses.length > 0;
+
+    return (
+        <div className="admin-space-y-3">
+            <div className="admin-filter-bar">
+                <div className="admin-filter-bar__row">
+                    {/* Time */}
+                    <div className="admin-filter-bar__group">
+                        <label className="admin-filter-bar__label">{t('filter_time_range')}</label>
+                        <select
+                            className="admin-filter-bar__select"
+                            onChange={e => { if (e.target.value) toggle('timeRange', e.target.value); }}
+                            value=""
+                        >
+                            <option value="">{t('filter_select_time')}</option>
+                            {timeRanges.map(tr => <option key={tr.id} value={tr.id}>{tr.label}</option>)}
+                        </select>
+                    </div>
+
+                    {/* Risk */}
+                    <div className="admin-filter-bar__group">
+                        <label className="admin-filter-bar__label">{t('filter_risk_level')}</label>
+                        <div className="admin-filter-bar__pills">
+                            {riskLevels.map(r => (
+                                <button
+                                    key={r.id}
+                                    className={`admin-filter-pill ${r.cls} ${filters.riskLevels.includes(r.id) ? 'active' : ''}`}
+                                    onClick={() => toggle('riskLevels', r.id)}
+                                >
+                                    {r.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Status */}
+                    <div className="admin-filter-bar__group">
+                        <label className="admin-filter-bar__label">{t('filter_status')}</label>
+                        <div className="admin-filter-bar__pills">
+                            {statuses.map(s => (
+                                <button
+                                    key={s.id}
+                                    className={`admin-filter-pill ${filters.statuses.includes(s.id) ? 'active' : ''}`}
+                                    onClick={() => toggle('statuses', s.id)}
+                                >
+                                    {s.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="admin-filter-bar__actions">
+                        <button className="admin-btn admin-btn--primary" onClick={apply}>{t('filter_apply')}</button>
+                        <button className="admin-btn admin-btn--outline" onClick={reset}>{t('filter_reset')}</button>
+                    </div>
+                </div>
+            </div>
+
+            {/* Active chips */}
+            {hasActive && (
+                <div className="admin-filter-chips">
+                    {filters.timeRange.map(tr => {
+                        const found = timeRanges.find(x => x.id === tr);
+                        return (
+                            <div key={tr} className="admin-filter-chip admin-filter-chip--time">
+                                {found?.label}
+                                <button className="admin-filter-chip__close" onClick={() => remove('timeRange', tr)}>
+                                    <X size={12} />
+                                </button>
+                            </div>
+                        );
+                    })}
+                    {filters.riskLevels.map(r => (
+                        <div key={r} className={`admin-filter-chip aviation-badge--${r.toLowerCase()}`} style={{ border: '1px solid' }}>
+                            {r} {t('filter_risk_suffix')}
+                            <button className="admin-filter-chip__close" onClick={() => remove('riskLevels', r)}>
+                                <X size={12} />
+                            </button>
+                        </div>
+                    ))}
+                    {filters.statuses.map(s => (
+                        <div key={s} className="admin-filter-chip admin-filter-chip--status">
+                            {s}
+                            <button className="admin-filter-chip__close" onClick={() => remove('statuses', s)}>
+                                <X size={12} />
+                            </button>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}

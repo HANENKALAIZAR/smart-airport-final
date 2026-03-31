@@ -184,11 +184,20 @@ class User(Base):
     updated_at           = Column(TIMESTAMP, default=_now, onupdate=_now)
 
     # ── Profile fields (completed during first-login onboarding) ──
+    employee_id          = Column(String(32), unique=True, nullable=True, index=True)
     phone_number         = Column(String(30), nullable=True)
     date_of_birth        = Column(Date, nullable=True)
-    id_type              = Column(Enum("CIN", "Passport", name="id_type_enum"), nullable=True)
-    id_number            = Column(String(50), nullable=True)
-    id_document_url      = Column(Text, nullable=True)   # base64 data URL (large)
+    nationality          = Column(String(120), nullable=True)
+    gender               = Column(String(20), nullable=True)  # Male | Female
+    residential_address  = Column(Text, nullable=True)
+    emergency_contact_name = Column(String(200), nullable=True)
+    emergency_contact_phone = Column(String(40), nullable=True)
+    emergency_contact_relationship = Column(String(30), nullable=True)  # Parent, Spouse, ...
+    cin_number           = Column(String(50), nullable=True)
+    cin_document_url     = Column(Text, nullable=True)
+    passport_number      = Column(String(50), nullable=True)
+    passport_document_url = Column(Text, nullable=True)
+    passport_expiry_date = Column(Date, nullable=True)
     profile_photo_url    = Column(Text, nullable=True)   # base64 data URL (large)
     personal_email       = Column(String(255), nullable=True)    # personal gmail/yahoo for welcome emails
     id_document_status = Column(
@@ -197,6 +206,9 @@ class User(Base):
     )
     id_document_rejection_reason = Column(Text, nullable=True)
     id_fields_unlocked = Column(SmallInteger, nullable=False, default=0)
+    # JSON list of field keys: full_name, date_of_birth, gender, nationality, cin, passport,
+    # residential_address, emergency_contact — set when super admin approves a correction request.
+    correction_unlock_fields = Column(JSON, nullable=True)
 
 
 # ── In-app notifications (bell) ────────────────────────────
@@ -219,13 +231,49 @@ class CorrectionRequest(Base):
     id = Column(String(36), primary_key=True)
     admin_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     reason = Column(Text, nullable=False)
+    requested_fields = Column(JSON, nullable=True)  # list[str] — fields admin asked to correct
     status = Column(
-        Enum("pending", "unlocked", "dismissed", name="correction_request_status_enum"),
+        Enum(
+            "pending", "unlocked", "dismissed", "fulfilled",
+            name="correction_request_status_enum",
+        ),
         nullable=False,
         default="pending",
     )
     super_admin_note = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP, default=_now)
+
+
+# ── AI Alerts ──────────────────────────────────────────────────
+class AIAlert(Base):
+    __tablename__ = "ai_alerts"
+
+    id = Column(String(36), primary_key=True)
+    flight_number = Column(String(32), nullable=False, index=True)
+    airport_iata = Column(String(3), nullable=False, index=True)
+    airport_name = Column(String(150), nullable=False)
+    risk_pct = Column(SmallInteger, nullable=False, default=0)
+    cause = Column(Text, nullable=False, default="")
+    recommendation = Column(Text, nullable=False, default="")
+
+    decision = Column(
+        Enum("pending", "approved", "rejected", name="ai_alert_decision_enum"),
+        nullable=False,
+        default="pending",
+        index=True,
+    )
+    acted_by_admin_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    decided_at = Column(TIMESTAMP, nullable=True)
+    created_at = Column(TIMESTAMP, default=_now, nullable=False)
+
+    __table_args__ = (
+        Index("idx_ai_alert_airport_flight", "airport_iata", "flight_number"),
+    )
 
 
 # ── Password reset (airport admins / super_admin) ───────────

@@ -22,6 +22,9 @@ export default function FlightTable({ flights, onFlightClick }) {
             case 'Delayed': return 'admin-table__status--delayed';
             case 'Boarding': return 'admin-table__status--boarding';
             case 'Departed': return 'admin-table__status--departed';
+            case 'Cancelled': return 'admin-table__status--cancelled';
+            case 'Landed': return 'admin-table__status--departed';
+            case 'Scheduled': return '';
             default: return '';
         }
     };
@@ -44,7 +47,7 @@ export default function FlightTable({ flights, onFlightClick }) {
                     </thead>
                     <tbody>
                         {paginatedFlights.map(flight => (
-                            <tr key={flight.id} onClick={() => onFlightClick?.(flight)}>
+                            <tr key={flight.id} onClick={() => onFlightClick?.(flight)} style={{ cursor: onFlightClick ? 'pointer' : undefined }}>
                                 <td style={{ fontWeight: 500 }}>{flight.flightNumber}</td>
                                 <td className="admin-table__muted">{flight.airline}</td>
                                 <td>{flight.origin} → {flight.destination}</td>

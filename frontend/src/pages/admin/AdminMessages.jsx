@@ -1,13 +1,14 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     MessageSquare, Send, Plus, X, ChevronDown, ChevronUp,
     CheckCircle, Clock, AlertCircle, Inbox, Filter,
-    ArrowUpRight, ArrowDownLeft, RefreshCw,
+    ArrowUpRight, ArrowDownLeft, RefreshCw, Trash2,
 } from 'lucide-react';
 import { useAirport } from '../../context/AirportContext';
 import { TUNISIAN_AIRPORTS } from '../../context/AirportContext';
 import {
     apiListMessages, apiSendMessage, apiReplyToMessage, apiResolveMessage, apiListAdmins,
+    apiDeleteMessage, apiMarkMessagesInboxRead,
 } from '../../services/adminApi';
 
 const CATEGORIES = [
@@ -54,9 +55,17 @@ export default function AdminMessages() {
     const [form, setForm]               = useState(EMPTY_FORM);
     const [sending, setSending]         = useState(false);
     const [error, setError]             = useState('');
+    const [hoverMsgId, setHoverMsgId]   = useState(null);
+    const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+    const inboxMarkedRef = useRef(false);
 
     // ── Load messages ─────────────────────────────────────────────────
     const loadMessages = useCallback(async () => {
+        if (!inboxMarkedRef.current) {
+            inboxMarkedRef.current = true;
+            await apiMarkMessagesInboxRead();
+            window.dispatchEvent(new CustomEvent('admin-msg-unread-refresh'));
+        }
         setLoading(true);
         const { data, error: err } = await apiListMessages(tab, filterStatus);
         setLoading(false);
@@ -72,8 +81,6 @@ export default function AdminMessages() {
         if (!isSuperAdmin) return;
         apiListAdmins().then(({ data }) => { if (data) setAdminList(data); });
     }, [isSuperAdmin]);
-
-    const inboxUnread = messages.filter(m => m.status === 'open').length;
 
     // ── Send message ──────────────────────────────────────────────────
     async function handleSend(e) {
@@ -115,6 +122,15 @@ export default function AdminMessages() {
         await loadMessages();
     }
 
+    async function handleDeleteMessage(msgId) {
+        const { error: err } = await apiDeleteMessage(msgId);
+        if (err) { setError(err); return; }
+        setConfirmDeleteId(null);
+        if (expandedId === msgId) setExpandedId(null);
+        await loadMessages();
+        window.dispatchEvent(new CustomEvent('admin-msg-unread-refresh'));
+    }
+
     return (
         <div className="admin-page">
             {/* ── Header ── */}
@@ -123,11 +139,6 @@ export default function AdminMessages() {
                     <h1 className="admin-page__title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <MessageSquare size={22} style={{ color: '#6366F1' }} />
                         {isSuperAdmin ? 'Messaging Center' : 'Messages'}
-                        {inboxUnread > 0 && (
-                            <span style={{ background: '#EF4444', color: '#fff', borderRadius: 20, padding: '2px 9px', fontSize: '0.72rem', fontWeight: 700 }}>
-                                {inboxUnread} new
-                            </span>
-                        )}
                     </h1>
                     <p className="admin-page__subtitle">
                         {isSuperAdmin
@@ -160,7 +171,7 @@ export default function AdminMessages() {
             {/* ── Tabs ── */}
             <div style={{ display: 'flex', gap: 0, marginBottom: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                 {[
-                    { key: 'inbox', icon: <ArrowDownLeft size={14} />, label: `Inbox${inboxUnread > 0 ? ` (${inboxUnread})` : ''}` },
+                    { key: 'inbox', icon: <ArrowDownLeft size={14} />, label: 'Inbox' },
                     { key: 'sent',  icon: <ArrowUpRight size={14} />,  label: 'Sent' },
                 ].map(t => (
                     <button
@@ -224,12 +235,18 @@ export default function AdminMessages() {
                     const isExpanded = expandedId === msg.id;
 
                     return (
-                        <div key={msg.id} style={{
-                            background: isExpanded ? 'rgba(99,102,241,0.06)' : 'rgba(255,255,255,0.03)',
-                            border: `1px solid ${isExpanded ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.07)'}`,
-                            borderRadius: 12, overflow: 'hidden', transition: 'all 0.18s',
-                        }}>
-                            <button onClick={() => setExpandedId(isExpanded ? null : msg.id)}
+                        <div
+                            key={msg.id}
+                            onMouseEnter={() => setHoverMsgId(msg.id)}
+                            onMouseLeave={() => { setHoverMsgId(null); }}
+                            style={{
+                                position: 'relative',
+                                background: isExpanded ? 'rgba(99,102,241,0.06)' : 'rgba(255,255,255,0.03)',
+                                border: `1px solid ${isExpanded ? 'rgba(99,102,241,0.3)' : 'rgba(255,255,255,0.07)'}`,
+                                borderRadius: 12, overflow: 'visible', transition: 'all 0.18s',
+                            }}
+                        >
+                            <button type="button" onClick={() => setExpandedId(isExpanded ? null : msg.id)}
                                 style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '13px 18px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left' }}>
                                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: cat.color, flexShrink: 0 }} />
                                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -253,7 +270,70 @@ export default function AdminMessages() {
                                     {st.icon} {st.label}
                                 </span>
                                 {isExpanded ? <ChevronUp size={14} style={{ color: 'rgba(255,255,255,0.3)', flexShrink: 0 }} /> : <ChevronDown size={14} style={{ color: 'rgba(255,255,255,0.3)', flexShrink: 0 }} />}
+                                {hoverMsgId === msg.id && (
+                                    <button
+                                        type="button"
+                                        title="Delete message"
+                                        onClick={(e) => { e.stopPropagation(); setConfirmDeleteId(msg.id); }}
+                                        style={{
+                                            flexShrink: 0,
+                                            padding: 6,
+                                            borderRadius: 8,
+                                            border: '1px solid rgba(239,68,68,0.35)',
+                                            background: 'rgba(239,68,68,0.12)',
+                                            color: '#FCA5A5',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                        }}
+                                    >
+                                        <Trash2 size={15} />
+                                    </button>
+                                )}
                             </button>
+
+                            {confirmDeleteId === msg.id && (
+                                <div
+                                    role="dialog"
+                                    aria-label="Confirm delete"
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{
+                                        position: 'absolute',
+                                        right: 12,
+                                        top: 48,
+                                        zIndex: 20,
+                                        padding: '12px 14px',
+                                        borderRadius: 10,
+                                        background: 'rgba(15,23,42,0.98)',
+                                        border: '1px solid rgba(239,68,68,0.4)',
+                                        boxShadow: '0 12px 32px rgba(0,0,0,0.45)',
+                                        minWidth: 220,
+                                    }}
+                                >
+                                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#F1F5F9', marginBottom: 10 }}>
+                                        Delete this message?
+                                    </div>
+                                    <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                                        <button
+                                            type="button"
+                                            className="admin-btn admin-btn--outline"
+                                            style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+                                            onClick={() => setConfirmDeleteId(null)}
+                                        >
+                                            No
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="admin-btn admin-btn--danger"
+                                            style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+                                            onClick={() => handleDeleteMessage(msg.id)}
+                                        >
+                                            Yes
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
 
                             {isExpanded && (
                                 <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '16px 18px 18px' }}>

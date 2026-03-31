@@ -89,6 +89,7 @@ def airport_admin_user(db):
         full_name="Ahmed Ben Salah",
         role="admin",
         airport_iata="TUN",
+        employee_id="TUN-0001",
         is_active=1,
         must_change_password=0,
     )

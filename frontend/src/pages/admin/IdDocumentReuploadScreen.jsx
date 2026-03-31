@@ -1,5 +1,5 @@
 /**
- * Shown when profile is complete but super admin rejected the ID document.
+ * Shown when profile is complete but super admin rejected identity documents.
  */
 import { useState, useRef } from 'react';
 import { Upload, CheckCircle, AlertCircle, Loader } from 'lucide-react';
@@ -16,14 +16,16 @@ function fileToDataUrl(file) {
 }
 
 export default function IdDocumentReuploadScreen({ user, onComplete }) {
-  const [docUrl, setDocUrl] = useState('');
+  const [cinUrl, setCinUrl] = useState('');
+  const [passportUrl, setPassportUrl] = useState('');
   const [docErr, setDocErr] = useState('');
   const [apiError, setApiError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
-  const ref = useRef();
+  const cinRef = useRef();
+  const passRef = useRef();
 
-  async function onFile(e) {
+  async function onCinFile(e) {
     const file = e.target.files?.[0];
     setDocErr('');
     if (!file) return;
@@ -32,19 +34,30 @@ export default function IdDocumentReuploadScreen({ user, onComplete }) {
       setDocErr(err);
       return;
     }
-    const url = await fileToDataUrl(file);
-    setDocUrl(url);
+    setCinUrl(await fileToDataUrl(file));
+  }
+
+  async function onPassportFile(e) {
+    const file = e.target.files?.[0];
+    setDocErr('');
+    if (!file) return;
+    const err = validateIdDocumentFile(file);
+    if (err) {
+      setDocErr(err);
+      return;
+    }
+    setPassportUrl(await fileToDataUrl(file));
   }
 
   async function submit(e) {
     e.preventDefault();
-    if (!docUrl) {
+    if (!cinUrl && !passportUrl) {
       setDocErr(ERR_ID_FORMAT);
       return;
     }
     setSubmitting(true);
     setApiError('');
-    const { error } = await apiReuploadIdDocument(docUrl);
+    const { error } = await apiReuploadIdDocument(cinUrl || null, passportUrl || null);
     setSubmitting(false);
     if (error) {
       setApiError(error);
@@ -53,8 +66,6 @@ export default function IdDocumentReuploadScreen({ user, onComplete }) {
     setDone(true);
     setTimeout(() => onComplete(), 1200);
   }
-
-  const isPdf = docUrl.startsWith('data:application/pdf');
 
   return (
     <div
@@ -70,7 +81,7 @@ export default function IdDocumentReuploadScreen({ user, onComplete }) {
       <div
         style={{
           width: '100%',
-          maxWidth: 480,
+          maxWidth: 520,
           background: 'rgba(255,255,255,0.03)',
           border: '1px solid rgba(255,255,255,0.08)',
           borderRadius: 16,
@@ -78,14 +89,14 @@ export default function IdDocumentReuploadScreen({ user, onComplete }) {
         }}
       >
         <h1 style={{ margin: '0 0 8px', fontSize: '1.2rem', color: '#fff' }}>
-          Re-upload ID document
+          Re-upload identity documents
         </h1>
         <p style={{ margin: '0 0 20px', fontSize: '0.85rem', color: 'rgba(255,255,255,0.55)', lineHeight: 1.5 }}>
-          Your previous ID was rejected
+          Your previous submission was rejected
           {user?.id_document_rejection_reason
             ? `: ${user.id_document_rejection_reason}`
             : '.'}{' '}
-          Upload a valid JPG, PNG, or PDF (max 5MB).
+          Upload at least one corrected document (JPG, PNG, or PDF, max 5MB each).
         </p>
         {done ? (
           <div style={{ textAlign: 'center', color: '#4ade80', padding: '2rem 0' }}>
@@ -112,30 +123,53 @@ export default function IdDocumentReuploadScreen({ user, onComplete }) {
                 {apiError}
               </div>
             )}
-            <input ref={ref} type="file" accept=".jpg,.jpeg,.png,.pdf" style={{ display: 'none' }} onChange={onFile} />
+            <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.45)', marginBottom: 8 }}>CIN document</p>
+            <input ref={cinRef} type="file" accept=".jpg,.jpeg,.png,.pdf" style={{ display: 'none' }} onChange={onCinFile} />
             <button
               type="button"
-              onClick={() => ref.current?.click()}
+              onClick={() => cinRef.current?.click()}
               style={{
                 width: '100%',
                 border: '2px dashed rgba(30,144,255,0.35)',
                 borderRadius: 12,
                 padding: 16,
-                background: docUrl ? 'rgba(30,144,255,0.06)' : 'rgba(255,255,255,0.02)',
+                marginBottom: 16,
+                background: cinUrl ? 'rgba(30,144,255,0.06)' : 'rgba(255,255,255,0.02)',
                 cursor: 'pointer',
                 color: 'rgba(255,255,255,0.7)',
               }}
             >
-              {docUrl ? (
-                isPdf ? (
-                  <div style={{ fontSize: '0.9rem' }}>PDF selected — click to change</div>
-                ) : (
-                  <img src={docUrl} alt="Preview" style={{ maxHeight: 140, borderRadius: 8 }} />
-                )
+              {cinUrl ? (
+                <div style={{ fontSize: '0.9rem' }}>CIN file selected — click to change</div>
               ) : (
                 <div>
                   <Upload size={28} style={{ marginBottom: 8 }} />
-                  <div style={{ fontSize: '0.85rem' }}>Click to upload ID document</div>
+                  <div style={{ fontSize: '0.85rem' }}>Upload CIN document</div>
+                </div>
+              )}
+            </button>
+            <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.45)', marginBottom: 8 }}>Passport document</p>
+            <input ref={passRef} type="file" accept=".jpg,.jpeg,.png,.pdf" style={{ display: 'none' }} onChange={onPassportFile} />
+            <button
+              type="button"
+              onClick={() => passRef.current?.click()}
+              style={{
+                width: '100%',
+                border: '2px dashed rgba(30,144,255,0.35)',
+                borderRadius: 12,
+                padding: 16,
+                marginBottom: 16,
+                background: passportUrl ? 'rgba(30,144,255,0.06)' : 'rgba(255,255,255,0.02)',
+                cursor: 'pointer',
+                color: 'rgba(255,255,255,0.7)',
+              }}
+            >
+              {passportUrl ? (
+                <div style={{ fontSize: '0.9rem' }}>Passport file selected — click to change</div>
+              ) : (
+                <div>
+                  <Upload size={28} style={{ marginBottom: 8 }} />
+                  <div style={{ fontSize: '0.85rem' }}>Upload passport document</div>
                 </div>
               )}
             </button>
@@ -145,8 +179,8 @@ export default function IdDocumentReuploadScreen({ user, onComplete }) {
             <button
               type="submit"
               className="admin-btn admin-btn--primary"
-              disabled={submitting || !!docErr || !docUrl}
-              style={{ marginTop: 20, width: '100%', height: 44 }}
+              disabled={submitting || !!docErr || (!cinUrl && !passportUrl)}
+              style={{ marginTop: 12, width: '100%', height: 44 }}
             >
               {submitting ? (
                 <>

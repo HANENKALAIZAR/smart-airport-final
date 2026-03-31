@@ -474,14 +474,40 @@
 .admin-table__status--cancelled { color: #FB7185; font-weight: 600; }
 
 /* ── Filter Bar ── */
-.admin-filter-bar { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 12px; padding: 1rem; }
-.admin-filter-bar__row { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; }
-.admin-filter-bar__group { flex: 1; min-width: 200px; }
+.admin-filter-bar {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    padding: 0.85rem;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.75rem;
+    overflow-x: auto;
+    overflow-y: hidden;
+}
+
+.admin-filter-bar__row,
+.admin-filter-bar__row--status,
+.admin-filter-bar__row--actions,
+.admin-filter-bar__group,
+.admin-filter-bar__group--status {
+    /* Legacy layout classes (no longer used by the toolbar redesign). */
+    display: block;
+}
+
+.admin-filter-toolbar__group { display: flex; flex-wrap: nowrap; gap: 0.45rem; white-space: nowrap; }
+.admin-filter-toolbar__actions { display: flex; gap: 0.5rem; flex-shrink: 0; margin-left: auto; }
+
+.admin-filter-bar__select--time { width: 180px; flex: 0 0 180px; }
+
+.admin-filter-pill--compact { padding: 0.35rem 0.6rem; border-radius: 8px; font-size: 0.72rem; }
 .admin-filter-bar__label { display: block; font-size: 0.7rem; font-weight: 600; color: rgba(255, 255, 255, 0.35); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.5rem; }
 .admin-filter-bar__select { width: 100%; padding: 0.5rem 0.75rem; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px; font-size: 0.875rem; background: rgba(255, 255, 255, 0.04); color: #E2E8F0; outline: none; font-family: inherit; }
 .admin-filter-bar__select:focus { border-color: rgba(0, 212, 255, 0.5); box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1); }
-.admin-filter-bar__pills { display: flex; gap: 0.5rem; }
-.admin-filter-bar__actions { display: flex; gap: 0.5rem; }
+.admin-filter-bar__pills { display: flex; gap: 0.5rem; flex-wrap: wrap; row-gap: 0.5rem; }
+.admin-filter-bar__pills--wrap { flex-wrap: wrap; }
+.admin-filter-bar__actions { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-end; flex-shrink: 0; }
 
 .admin-filter-pill {
     padding: 0.5rem 0.75rem;
@@ -502,6 +528,12 @@
 .admin-filter-pill--low.active { background: rgba(52, 211, 153, 0.12); color: #34D399; border-color: rgba(52, 211, 153, 0.3); box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.15); }
 .admin-filter-pill--medium.active { background: rgba(251, 191, 36, 0.12); color: #FBBF24; border-color: rgba(251, 191, 36, 0.3); box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.15); }
 .admin-filter-pill--high.active { background: rgba(248, 113, 113, 0.12); color: #F87171; border-color: rgba(248, 113, 113, 0.3); box-shadow: 0 0 0 2px rgba(0, 212, 255, 0.15); }
+
+.admin-filter-pill.admin-filter-pill--compact {
+    padding: 0.35rem 0.6rem !important;
+    font-size: 0.72rem !important;
+    border-radius: 8px;
+}
 
 /* ══════════════════════════════════════════
    .admin-btn — THE FIX: line-height: 1
@@ -1140,7 +1172,7 @@
 .admin-sidebar__user-avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--adm-sb-accent); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 700; margin: 12px auto 4px; cursor: default; flex-shrink: 0; }
 
 /* ── Dashboard Split ── */
-.admin-dash-split { display: flex; gap: 1.5rem; align-items: flex-start; }
+.admin-dash-split { display: flex; gap: 1.5rem; align-items: flex-start; flex-wrap: nowrap; overflow-x: auto; }
 .admin-dash-split__main { flex: 1; min-width: 0; }
 .admin-dash-split__aside { width: 300px; flex-shrink: 0; }
 
@@ -1197,8 +1229,8 @@
 
 @media (max-width: 1200px) {
     .admin-grid-5 { grid-template-columns: repeat(3, 1fr); }
-    .admin-dash-split { flex-direction: column; }
-    .admin-dash-split__aside { width: 100%; }
+    .admin-dash-split { flex-direction: row; }
+    .admin-dash-split__aside { width: 300px; }
     .global-bottom-row { grid-template-columns: 1fr; }
 }
 

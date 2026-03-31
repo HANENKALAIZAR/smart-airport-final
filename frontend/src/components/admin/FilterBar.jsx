@@ -19,10 +19,13 @@ export default function FilterBar({ onFilterChange }) {
     ];
 
     const statuses = [
-        { id: 'On-Time', label: t('filter_on_time') },
-        { id: 'Delayed', label: t('filter_delayed') },
-        { id: 'Boarding', label: t('filter_boarding') },
-        { id: 'Departed', label: t('filter_departed') },
+        { id: 'Scheduled', label: 'Scheduled' },
+        { id: 'On-Time', label: 'On-Time' },
+        { id: 'Delayed', label: 'Delayed' },
+        { id: 'Boarding', label: 'Boarding' },
+        { id: 'Departed', label: 'Departed' },
+        { id: 'Cancelled', label: 'Cancelled' },
+        { id: 'Landed', label: 'Landed' },
     ];
 
     function toggle(category, value) {
@@ -51,58 +54,59 @@ export default function FilterBar({ onFilterChange }) {
 
     return (
         <div className="admin-space-y-3">
-            <div className="admin-filter-bar">
-                <div className="admin-filter-bar__row">
-                    {/* Time */}
-                    <div className="admin-filter-bar__group">
-                        <label className="admin-filter-bar__label">{t('filter_time_range')}</label>
-                        <select
-                            className="admin-filter-bar__select"
-                            onChange={e => { if (e.target.value) toggle('timeRange', e.target.value); }}
-                            value=""
+            <div className="admin-filter-bar" role="toolbar" aria-label="Dashboard filters">
+                {/* Time Range (compact dropdown) */}
+                <select
+                    className="admin-filter-bar__select admin-filter-bar__select--time"
+                    onChange={(e) => {
+                        if (e.target.value) toggle('timeRange', e.target.value);
+                    }}
+                    value=""
+                >
+                    <option value="">{t('filter_select_time')}</option>
+                    {timeRanges.map(tr => (
+                        <option key={tr.id} value={tr.id}>
+                            {tr.label}
+                        </option>
+                    ))}
+                </select>
+
+                {/* Risk Level (compact toggles) */}
+                <div className="admin-filter-toolbar__group">
+                    {riskLevels.map(r => (
+                        <button
+                            key={r.id}
+                            type="button"
+                            className={`admin-filter-pill ${r.cls} admin-filter-pill--compact ${filters.riskLevels.includes(r.id) ? 'active' : ''}`}
+                            onClick={() => toggle('riskLevels', r.id)}
                         >
-                            <option value="">{t('filter_select_time')}</option>
-                            {timeRanges.map(tr => <option key={tr.id} value={tr.id}>{tr.label}</option>)}
-                        </select>
-                    </div>
+                            {r.label}
+                        </button>
+                    ))}
+                </div>
 
-                    {/* Risk */}
-                    <div className="admin-filter-bar__group">
-                        <label className="admin-filter-bar__label">{t('filter_risk_level')}</label>
-                        <div className="admin-filter-bar__pills">
-                            {riskLevels.map(r => (
-                                <button
-                                    key={r.id}
-                                    className={`admin-filter-pill ${r.cls} ${filters.riskLevels.includes(r.id) ? 'active' : ''}`}
-                                    onClick={() => toggle('riskLevels', r.id)}
-                                >
-                                    {r.label}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
+                {/* Status (compact toggles) */}
+                <div className="admin-filter-toolbar__group">
+                    {statuses.map(s => (
+                        <button
+                            key={s.id}
+                            type="button"
+                            className={`admin-filter-pill admin-filter-pill--compact ${filters.statuses.includes(s.id) ? 'active' : ''}`}
+                            onClick={() => toggle('statuses', s.id)}
+                        >
+                            {s.label}
+                        </button>
+                    ))}
+                </div>
 
-                    {/* Status */}
-                    <div className="admin-filter-bar__group">
-                        <label className="admin-filter-bar__label">{t('filter_status')}</label>
-                        <div className="admin-filter-bar__pills">
-                            {statuses.map(s => (
-                                <button
-                                    key={s.id}
-                                    className={`admin-filter-pill ${filters.statuses.includes(s.id) ? 'active' : ''}`}
-                                    onClick={() => toggle('statuses', s.id)}
-                                >
-                                    {s.label}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="admin-filter-bar__actions">
-                        <button className="admin-btn admin-btn--primary" onClick={apply}>{t('filter_apply')}</button>
-                        <button className="admin-btn admin-btn--outline" onClick={reset}>{t('filter_reset')}</button>
-                    </div>
+                {/* Actions (right-aligned, always on the line) */}
+                <div className="admin-filter-toolbar__actions">
+                    <button type="button" className="admin-btn admin-btn--primary" onClick={apply}>
+                        {t('filter_apply')}
+                    </button>
+                    <button type="button" className="admin-btn admin-btn--outline" onClick={reset}>
+                        {t('filter_reset')}
+                    </button>
                 </div>
             </div>
 

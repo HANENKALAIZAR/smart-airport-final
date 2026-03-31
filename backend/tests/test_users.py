@@ -68,6 +68,7 @@ class TestUserManagement:
         assert data["role"] == "admin"
         assert data["must_change_password"] == 1
         assert data["airport_iata"] == "DJE"
+        assert data.get("employee_id") == "DJE-0001"
 
     def test_create_admin_duplicate_email(self, client, super_admin_token):
         body = {

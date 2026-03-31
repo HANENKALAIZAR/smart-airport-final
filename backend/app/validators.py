@@ -4,6 +4,8 @@ Shared validation: Tunisian phone numbers and base64 data-URL uploads.
 
 import base64
 import re
+from datetime import date
+from typing import Optional
 
 TUNISIAN_PHONE_RE = re.compile(r"^\+216[2459]\d{7}$")
 
@@ -27,6 +29,44 @@ def normalize_tunisian_phone(raw: str) -> str:
 
 def validate_tunisian_phone_digits(phone: str) -> bool:
     return bool(TUNISIAN_PHONE_RE.match(normalize_tunisian_phone(phone)))
+
+
+def normalize_emergency_contact_phone(raw: Optional[str]) -> str:
+    """Keep only + and digits (no spaces, letters, or other symbols)."""
+    if raw is None:
+        return ""
+    return re.sub(r"[^+\d]", "", str(raw).strip())
+
+
+def validate_emergency_contact_phone(raw: Optional[str]) -> bool:
+    """
+    Tunisian: +216[2459] + 7 digits (exactly 8 digits after +216).
+    International (non-216): + then 7–15 digits total after +.
+    Only + and digits allowed before normalization.
+    """
+    s = normalize_emergency_contact_phone(raw)
+    if not s or s[0] != "+":
+        return False
+    if not re.match(r"^\+\d+$", s):
+        return False
+    rest = s[1:]
+    if s.startswith("+216"):
+        return bool(TUNISIAN_PHONE_RE.match(normalize_tunisian_phone(s)))
+    if 7 <= len(rest) <= 15:
+        return True
+    return False
+
+
+def validate_passport_number(raw: str) -> bool:
+    """Letter(s) then digit(s), min 6 characters total."""
+    if not raw or len(raw.strip()) < 6:
+        return False
+    t = raw.strip()
+    return bool(re.match(r"^[A-Za-z]+[0-9][A-Za-z0-9]*$", t))
+
+
+def validate_passport_expiry_future(d: date) -> bool:
+    return d > date.today()
 
 
 def _parse_data_url(data_url: str) -> tuple[str, bytes]:

@@ -99,10 +99,11 @@ export async function apiLogin(email, password) {
 }
 
 export async function apiChangePassword(currentPassword, newPassword) {
-  return request('POST', '/auth/change-password', {
-    current_password: currentPassword,
-    new_password: newPassword,
-  });
+  const body = { new_password: newPassword };
+  if (currentPassword != null && String(currentPassword).trim() !== '') {
+    body.current_password = String(currentPassword).trim();
+  }
+  return request('POST', '/auth/change-password', body);
 }
 
 export async function apiGetMe() {
@@ -206,8 +207,19 @@ export async function apiPatchSettings(payload) {
   return request('PATCH', '/users/me/settings', payload);
 }
 
-export async function apiReuploadIdDocument(idDocumentUrl) {
-  return request('POST', '/users/me/id-document', { id_document_url: idDocumentUrl });
+export async function apiPatchSuperAdminProfile(payload) {
+  return request('PATCH', '/users/me/super-admin-profile', payload);
+}
+
+export async function apiReuploadIdDocument(cinDocumentUrl, passportDocumentUrl) {
+  const body = {};
+  if (cinDocumentUrl) body.cin_document_url = cinDocumentUrl;
+  if (passportDocumentUrl) body.passport_document_url = passportDocumentUrl;
+  return request('POST', '/users/me/id-document', body);
+}
+
+export async function apiPatchAdminProfile(userId, payload) {
+  return request('PATCH', `/users/admins/${userId}/profile`, payload);
 }
 
 export async function apiGetAdminReview(userId) {
@@ -218,8 +230,24 @@ export async function apiPostIdReview(userId, action, reason) {
   return request('POST', `/users/admins/${userId}/id-review`, { action, reason });
 }
 
-export async function apiSubmitCorrectionRequest(reason) {
-  return request('POST', '/users/me/correction-request', { reason });
+export async function apiSubmitCorrectionRequest(reason, fields) {
+  return request('POST', '/users/me/correction-request', { reason, fields });
+}
+
+export async function apiAiAlertGenerated(payload) {
+  return request('POST', '/notifications/ai-alert-generated', payload);
+}
+
+export async function apiAiAlertAction(payload) {
+  return request('POST', '/notifications/ai-alert-action', payload);
+}
+
+export async function apiGetAiAlerts(airportIata, decision = 'all') {
+  const params = new URLSearchParams();
+  if (airportIata) params.set('airport_iata', airportIata);
+  if (decision && decision !== 'all') params.set('decision', decision);
+  const qs = params.toString();
+  return request('GET', `/notifications/ai-alerts${qs ? `?${qs}` : ''}`);
 }
 
 export async function apiResubmitIdProfile(payload) {
@@ -260,6 +288,18 @@ export async function apiReplyToMessage(messageId, body) {
 
 export async function apiResolveMessage(messageId) {
   return request('PATCH', `/messages/${messageId}/resolve`);
+}
+
+export async function apiGetMessageUnreadCount() {
+  return request('GET', '/messages/unread-count');
+}
+
+export async function apiMarkMessagesInboxRead() {
+  return request('POST', '/messages/mark-inbox-read', {});
+}
+
+export async function apiDeleteMessage(messageId) {
+  return request('DELETE', `/messages/${messageId}`);
 }
 
 // ── Dashboard ─────────────────────────────────────────────────────────────

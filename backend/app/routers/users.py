@@ -5,6 +5,7 @@ Super-admin-only endpoints for creating and managing airport admins.
 All endpoints require a valid super_admin JWT token.
 """
 
+import json
 import re
 import uuid
 import secrets
@@ -12,7 +13,7 @@ import string
 import logging
 from datetime import datetime, timezone, date
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
@@ -28,8 +29,11 @@ from app.services.email_service import (
 )
 from app.services.in_app_notify import notify_all_super_admins, notify_airport_admin
 from app.schemas.schemas import (
+    CORRECTION_FIELD_KEYS,
     ProfileCompleteRequest,
     PatchMySettingsRequest,
+    SuperAdminSelfProfilePatch,
+    SuperAdminAdminProfilePatch,
     IdDocumentReuploadRequest,
     AdminReviewDetail,
     IdReviewRequest,
@@ -43,6 +47,10 @@ from app.validators import (
     validate_tunisian_phone_digits,
     validate_id_document_data_url,
     validate_profile_photo_data_url,
+    validate_emergency_contact_phone,
+    normalize_emergency_contact_phone,
+    validate_passport_number,
+    validate_passport_expiry_future,
 )
 
 logger = logging.getLogger(__name__)
@@ -50,6 +58,73 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/users", tags=["User Management"])
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+_LEGACY_FULL_CORRECTION_FIELDS = list(CORRECTION_FIELD_KEYS)
+
+
+def _parse_json_list(raw) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [str(x) for x in raw]
+    if isinstance(raw, str):
+        try:
+            data = json.loads(raw)
+            return [str(x) for x in (data or []) if x]
+        except Exception:
+            return []
+    return []
+
+
+def _unlock_set(user: User) -> set[str]:
+    return set(_parse_json_list(getattr(user, "correction_unlock_fields", None)))
+
+
+def _fulfill_unlocked_cr(db: Session, user: User) -> None:
+    cr = (
+        db.query(CorrectionRequest)
+        .filter(
+            CorrectionRequest.admin_id == user.id,
+            CorrectionRequest.status == "unlocked",
+        )
+        .order_by(CorrectionRequest.created_at.desc())
+        .first()
+    )
+    if cr:
+        cr.status = "fulfilled"
+
+
+def _remove_unlock_keys(db: Session, user: User, keys_to_remove: list[str]) -> None:
+    ul = _parse_json_list(user.correction_unlock_fields)
+    if not ul:
+        return
+    s = set(ul)
+    for k in keys_to_remove:
+        s.discard(k)
+    user.correction_unlock_fields = list(s) if s else None
+    user.id_fields_unlocked = 1 if ({"cin", "passport"} & s) else 0
+    if not s:
+        user.id_fields_unlocked = 0
+        _fulfill_unlocked_cr(db, user)
+
+
+def _unlock_keys_for_patch_field(name: str) -> list[str]:
+    m = {
+        "full_name": ["full_name"],
+        "date_of_birth": ["date_of_birth"],
+        "gender": ["gender"],
+        "nationality": ["nationality"],
+        "residential_address": ["residential_address"],
+        "emergency_contact_name": ["emergency_contact"],
+        "emergency_contact_phone": ["emergency_contact"],
+        "emergency_contact_relationship": ["emergency_contact"],
+        "cin_number": ["cin"],
+        "cin_document_url": ["cin"],
+        "passport_number": ["passport"],
+        "passport_document_url": ["passport"],
+        "passport_expiry_date": ["passport"],
+    }
+    return m.get(name, [])
 
 
 # ── Airport slug map ────────────────────────────────────────────────────
@@ -66,6 +141,32 @@ AIRPORT_SLUGS = {
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────
+
+def _allocate_employee_id(db: Session, airport_iata: str) -> str:
+    """Next [IATA]-#### for admins at this airport (4-digit zero-padded)."""
+    prefix = f"{airport_iata.upper()}-"
+    rows = (
+        db.query(User.employee_id)
+        .filter(
+            User.role == "admin",
+            User.airport_iata == airport_iata.upper(),
+            User.employee_id.isnot(None),
+        )
+        .all()
+    )
+    best = 0
+    for (eid,) in rows:
+        if not eid:
+            continue
+        up = eid.upper()
+        if up.startswith(prefix) and "-" in eid:
+            try:
+                num = int(eid.split("-", 1)[1])
+                best = max(best, num)
+            except ValueError:
+                pass
+    return f"{prefix}{best + 1:04d}"
+
 
 def _generate_temp_password(length: int = 12) -> str:
     """Generate a cryptographically secure temporary password."""
@@ -155,6 +256,7 @@ class AdminOut(BaseModel):
     is_active: int
     must_change_password: int
     profile_complete: int = 0
+    employee_id: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -166,12 +268,14 @@ class AdminListItem(BaseModel):
     email: str
     personal_email: Optional[str] = None
     airport_iata: Optional[str] = None
-    role: str
     is_active: int
     profile_complete: int = 0
+    employee_id: Optional[str] = None
     id_document_status: Optional[str] = None
     created_at: Optional[datetime] = None
     last_login: Optional[datetime] = None
+    onboarding_active: bool = False
+    verification_status: str = "pending_review"
 
     class Config:
         from_attributes = True
@@ -308,6 +412,7 @@ def create_admin(
         is_active=1,
         must_change_password=1,
         profile_complete=0,
+        employee_id=_allocate_employee_id(db, airport_iata),
     )
     db.add(user)
     db.flush()  # get user.id
@@ -354,17 +459,14 @@ def complete_my_profile(
     Admin completes their onboarding profile after changing password.
     Sets profile_complete=1.
     """
-    if payload.id_type not in ("CIN", "Passport"):
-        raise HTTPException(status_code=422, detail="id_type must be 'CIN' or 'Passport'")
-
-    if payload.id_type == "CIN" and not re.match(r"^\d{8}$", payload.id_number):
+    if not re.match(r"^\d{8}$", payload.cin_number.strip()):
         raise HTTPException(status_code=422, detail="CIN must be exactly 8 digits")
 
-    if payload.id_type == "Passport" and not re.match(
-        r"^[A-Z0-9]{8,9}$", payload.id_number.upper()
-    ):
+    pnum = payload.passport_number.strip()
+    if not validate_passport_number(pnum):
         raise HTTPException(
-            status_code=422, detail="Passport must be 8-9 alphanumeric characters"
+            status_code=422,
+            detail="Passport number must be letters followed by digits (min. 6 characters).",
         )
 
     try:
@@ -374,6 +476,30 @@ def complete_my_profile(
             raise HTTPException(status_code=422, detail="Must be at least 18 years old")
     except ValueError:
         raise HTTPException(status_code=422, detail="date_of_birth must be YYYY-MM-DD")
+
+    try:
+        pexp = datetime.strptime(payload.passport_expiry_date, "%Y-%m-%d").date()
+        if not validate_passport_expiry_future(pexp):
+            raise HTTPException(
+                status_code=422, detail="Passport expiry must be a future date.",
+            )
+    except ValueError:
+        raise HTTPException(status_code=422, detail="passport_expiry_date must be YYYY-MM-DD")
+
+    nat = (payload.nationality or "").strip()
+    if not nat:
+        raise HTTPException(status_code=422, detail="Nationality is required.")
+    addr = (payload.residential_address or "").strip()
+    if not addr:
+        raise HTTPException(status_code=422, detail="Residential address is required.")
+    ec_name = (payload.emergency_contact_name or "").strip()
+    if not ec_name:
+        raise HTTPException(status_code=422, detail="Emergency contact name is required.")
+    if not validate_emergency_contact_phone(payload.emergency_contact_phone):
+        raise HTTPException(
+            status_code=422,
+            detail="Emergency contact phone must be a valid Tunisian (+216…) or international (+…) number.",
+        )
 
     phone_norm = normalize_tunisian_phone(payload.phone_number)
     if not validate_tunisian_phone_digits(phone_norm):
@@ -386,15 +512,26 @@ def complete_my_profile(
 
     try:
         validate_profile_photo_data_url(payload.profile_photo_url)
-        validate_id_document_data_url(payload.id_document_url)
+        validate_id_document_data_url(payload.cin_document_url)
+        validate_id_document_data_url(payload.passport_document_url)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
     current_user.phone_number = phone_norm
     current_user.date_of_birth = dob
-    current_user.id_type = payload.id_type
-    current_user.id_number = payload.id_number
-    current_user.id_document_url = payload.id_document_url
+    current_user.nationality = nat
+    current_user.gender = payload.gender
+    current_user.residential_address = addr
+    current_user.emergency_contact_name = ec_name
+    current_user.emergency_contact_phone = normalize_emergency_contact_phone(
+        payload.emergency_contact_phone
+    )
+    current_user.emergency_contact_relationship = payload.emergency_contact_relationship
+    current_user.cin_number = payload.cin_number.strip()
+    current_user.cin_document_url = payload.cin_document_url
+    current_user.passport_number = pnum.upper()
+    current_user.passport_document_url = payload.passport_document_url
+    current_user.passport_expiry_date = pexp
     current_user.profile_photo_url = payload.profile_photo_url
     current_user.profile_complete = 1
     current_user.id_document_status = "pending"
@@ -405,7 +542,7 @@ def complete_my_profile(
     iata = current_user.airport_iata or ""
     airport_label = AIRPORT_DISPLAY.get(iata, iata or "Unknown")
     body = (
-        f"{current_user.full_name} assigned to {airport_label} has submitted their ID document for review."
+        f"{current_user.full_name} assigned to {airport_label} has submitted identity documents for review."
     )
     try:
         notify_all_super_admins(
@@ -432,14 +569,39 @@ def patch_my_settings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update phone and/or profile photo (airport admins)."""
+    """Update phone, photo, and profile fields allowed by correction unlock (airport admins)."""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only airport admins can update these fields here.")
-    if payload.phone_number is None and payload.profile_photo_url is None:
+    data = payload.model_dump(exclude_unset=True)
+    if not data:
         raise HTTPException(status_code=422, detail="Nothing to update.")
 
-    if payload.phone_number is not None:
-        phone_norm = normalize_tunisian_phone(payload.phone_number)
+    unlock = _unlock_set(current_user)
+    profile_done = int(getattr(current_user, "profile_complete", 0) or 0) == 1
+    always_ok = {"phone_number", "profile_photo_url"}
+
+    for key in data.keys():
+        if key in always_ok:
+            continue
+        if not profile_done:
+            raise HTTPException(
+                status_code=403,
+                detail="Complete your profile before editing these fields.",
+            )
+        if not unlock:
+            raise HTTPException(
+                status_code=403,
+                detail="This field is locked. Request a correction to edit identity information.",
+            )
+        needed = _unlock_keys_for_patch_field(key)
+        if not needed or not any(n in unlock for n in needed):
+            raise HTTPException(
+                status_code=403,
+                detail="This field is not unlocked for correction.",
+            )
+
+    if "phone_number" in data:
+        phone_norm = normalize_tunisian_phone(data["phone_number"])
         if not validate_tunisian_phone_digits(phone_norm):
             raise HTTPException(
                 status_code=422,
@@ -449,16 +611,245 @@ def patch_my_settings(
             )
         current_user.phone_number = phone_norm
 
-    if payload.profile_photo_url is not None:
+    if "profile_photo_url" in data:
         try:
-            validate_profile_photo_data_url(payload.profile_photo_url)
+            validate_profile_photo_data_url(data["profile_photo_url"])
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
-        current_user.profile_photo_url = payload.profile_photo_url
+        current_user.profile_photo_url = data["profile_photo_url"]
+
+    if "full_name" in data:
+        fn = (data["full_name"] or "").strip()
+        if not fn:
+            raise HTTPException(status_code=422, detail="Full name cannot be empty.")
+        current_user.full_name = fn
+
+    if "date_of_birth" in data:
+        dob_raw = data["date_of_birth"]
+        if dob_raw:
+            try:
+                dob = datetime.strptime(dob_raw, "%Y-%m-%d").date()
+                age = (date.today() - dob).days // 365
+                if age < 18:
+                    raise HTTPException(status_code=422, detail="Must be at least 18 years old")
+            except ValueError:
+                raise HTTPException(status_code=422, detail="date_of_birth must be YYYY-MM-DD")
+            current_user.date_of_birth = dob
+        else:
+            current_user.date_of_birth = None
+
+    if "gender" in data:
+        g = data["gender"]
+        if g is not None and g not in ("Male", "Female"):
+            raise HTTPException(status_code=422, detail="gender must be Male or Female.")
+        current_user.gender = g
+
+    if "nationality" in data:
+        current_user.nationality = (data["nationality"] or "").strip() or None
+
+    if "residential_address" in data:
+        current_user.residential_address = (data["residential_address"] or "").strip() or None
+
+    if "emergency_contact_name" in data:
+        current_user.emergency_contact_name = (data["emergency_contact_name"] or "").strip() or None
+
+    if "emergency_contact_phone" in data:
+        raw = data["emergency_contact_phone"]
+        if raw is not None and str(raw).strip():
+            if not validate_emergency_contact_phone(raw):
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "Emergency contact phone must match Tunisian (+216…) or international (+ and 7–15 digits)."
+                    ),
+                )
+            current_user.emergency_contact_phone = normalize_emergency_contact_phone(raw)
+        else:
+            current_user.emergency_contact_phone = None
+
+    if "emergency_contact_relationship" in data:
+        current_user.emergency_contact_relationship = data["emergency_contact_relationship"]
+
+    if "cin_number" in data:
+        num = (data["cin_number"] or "").strip()
+        if num and not re.match(r"^\d{8}$", num):
+            raise HTTPException(status_code=422, detail="CIN must be exactly 8 digits")
+        current_user.cin_number = num or None
+
+    if "cin_document_url" in data:
+        try:
+            validate_id_document_data_url(data["cin_document_url"])
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        current_user.cin_document_url = data["cin_document_url"]
+        current_user.id_document_status = "pending"
+        current_user.id_document_rejection_reason = None
+
+    if "passport_number" in data:
+        pnum = (data["passport_number"] or "").strip()
+        if pnum and not validate_passport_number(pnum):
+            raise HTTPException(
+                status_code=422,
+                detail="Passport number must be letters followed by digits (min. 6 characters).",
+            )
+        current_user.passport_number = pnum.upper() if pnum else None
+
+    if "passport_expiry_date" in data:
+        raw = data["passport_expiry_date"]
+        if raw:
+            try:
+                pexp = datetime.strptime(raw, "%Y-%m-%d").date()
+            except ValueError:
+                raise HTTPException(status_code=422, detail="passport_expiry_date must be YYYY-MM-DD")
+            if not validate_passport_expiry_future(pexp):
+                raise HTTPException(
+                    status_code=422, detail="Passport expiry must be a future date.",
+                )
+            current_user.passport_expiry_date = pexp
+        else:
+            current_user.passport_expiry_date = None
+
+    if "passport_document_url" in data:
+        try:
+            validate_id_document_data_url(data["passport_document_url"])
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        current_user.passport_document_url = data["passport_document_url"]
+        current_user.id_document_status = "pending"
+        current_user.id_document_rejection_reason = None
+
+    to_remove: list[str] = []
+    if "full_name" in data and "full_name" in unlock:
+        to_remove.append("full_name")
+    if "date_of_birth" in data and "date_of_birth" in unlock:
+        to_remove.append("date_of_birth")
+    if "gender" in data and "gender" in unlock:
+        to_remove.append("gender")
+    if "nationality" in data and "nationality" in unlock:
+        to_remove.append("nationality")
+    if "residential_address" in data and "residential_address" in unlock:
+        to_remove.append("residential_address")
+    if "emergency_contact" in unlock and any(
+        k in data
+        for k in (
+            "emergency_contact_name",
+            "emergency_contact_phone",
+            "emergency_contact_relationship",
+        )
+    ):
+        to_remove.append("emergency_contact")
+    if "cin" in unlock and "cin_document_url" in data:
+        to_remove.append("cin")
+    if "passport" in unlock and "passport_document_url" in data:
+        to_remove.append("passport")
+
+    current_user.updated_at = datetime.now(timezone.utc)
+    if to_remove:
+        _remove_unlock_keys(db, current_user, list(dict.fromkeys(to_remove)))
+    db.commit()
+
+    return {"message": "Settings updated"}
+
+
+@router.patch("/me/super-admin-profile", status_code=200)
+def patch_super_admin_self_profile(
+    payload: SuperAdminSelfProfilePatch,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Super admin: full edit of own profile (no ID review workflow)."""
+    if current_user.role != "super_admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only super administrators can use this endpoint.",
+        )
+    data = payload.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(status_code=422, detail="Nothing to update.")
+
+    if "full_name" in data:
+        fn = (data["full_name"] or "").strip()
+        if not fn:
+            raise HTTPException(status_code=422, detail="Full name cannot be empty.")
+        current_user.full_name = fn
+
+    if "phone_number" in data:
+        phone_norm = normalize_tunisian_phone(data["phone_number"])
+        if not validate_tunisian_phone_digits(phone_norm):
+            raise HTTPException(
+                status_code=422,
+                detail="Please enter a valid Tunisian phone number (e.g. +216 9X XXX XXX)",
+            )
+        current_user.phone_number = phone_norm
+
+    if "profile_photo_url" in data:
+        try:
+            validate_profile_photo_data_url(data["profile_photo_url"])
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        current_user.profile_photo_url = data["profile_photo_url"]
+
+    if "date_of_birth" in data:
+        dob_raw = data["date_of_birth"]
+        if dob_raw:
+            try:
+                dob = datetime.strptime(dob_raw, "%Y-%m-%d").date()
+                age = (date.today() - dob).days // 365
+                if age < 18:
+                    raise HTTPException(status_code=422, detail="Must be at least 18 years old")
+            except ValueError:
+                raise HTTPException(status_code=422, detail="date_of_birth must be YYYY-MM-DD")
+            current_user.date_of_birth = dob
+        else:
+            current_user.date_of_birth = None
+
+    if "cin_number" in data:
+        num = (data["cin_number"] or "").strip()
+        if num and not re.match(r"^\d{8}$", num):
+            raise HTTPException(status_code=422, detail="CIN must be exactly 8 digits")
+        current_user.cin_number = num or None
+
+    if "passport_number" in data:
+        pnum = (data["passport_number"] or "").strip()
+        if pnum and not validate_passport_number(pnum):
+            raise HTTPException(
+                status_code=422,
+                detail="Passport number must be letters followed by digits (min. 6 characters).",
+            )
+        current_user.passport_number = pnum.upper() if pnum else None
+
+    if "passport_expiry_date" in data:
+        raw = data["passport_expiry_date"]
+        if raw:
+            try:
+                pexp = datetime.strptime(raw, "%Y-%m-%d").date()
+            except ValueError:
+                raise HTTPException(status_code=422, detail="passport_expiry_date must be YYYY-MM-DD")
+            current_user.passport_expiry_date = pexp
+        else:
+            current_user.passport_expiry_date = None
+
+    if "cin_document_url" in data:
+        try:
+            validate_id_document_data_url(data["cin_document_url"])
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        current_user.cin_document_url = data["cin_document_url"]
+        current_user.id_document_status = "approved"
+        current_user.id_document_rejection_reason = None
+
+    if "passport_document_url" in data:
+        try:
+            validate_id_document_data_url(data["passport_document_url"])
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        current_user.passport_document_url = data["passport_document_url"]
+        current_user.id_document_status = "approved"
+        current_user.id_document_rejection_reason = None
 
     current_user.updated_at = datetime.now(timezone.utc)
     db.commit()
-    return {"message": "Settings updated"}
+    return {"message": "Profile updated"}
 
 
 @router.post("/me/id-document", status_code=200)
@@ -467,7 +858,7 @@ def reupload_id_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Re-submit ID document after super admin rejection."""
+    """Re-submit CIN and/or passport document after super admin rejection."""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not allowed.")
     if current_user.id_document_status != "rejected":
@@ -476,12 +867,27 @@ def reupload_id_document(
             detail="Re-upload is only available after your ID was rejected.",
         )
 
-    try:
-        validate_id_document_data_url(payload.id_document_url)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+    cin_u = payload.cin_document_url
+    pass_u = payload.passport_document_url
+    if not cin_u and not pass_u:
+        raise HTTPException(
+            status_code=422,
+            detail="Provide at least one of cin_document_url or passport_document_url.",
+        )
 
-    current_user.id_document_url = payload.id_document_url
+    if cin_u:
+        try:
+            validate_id_document_data_url(cin_u)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        current_user.cin_document_url = cin_u
+    if pass_u:
+        try:
+            validate_id_document_data_url(pass_u)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        current_user.passport_document_url = pass_u
+
     current_user.id_document_status = "pending"
     current_user.id_document_rejection_reason = None
     current_user.updated_at = datetime.now(timezone.utc)
@@ -490,7 +896,7 @@ def reupload_id_document(
     iata = current_user.airport_iata or ""
     airport_label = AIRPORT_DISPLAY.get(iata, iata or "Unknown")
     body = (
-        f"{current_user.full_name} assigned to {airport_label} has submitted their ID document for review."
+        f"{current_user.full_name} assigned to {airport_label} has submitted identity documents for review."
     )
     try:
         notify_all_super_admins(
@@ -516,46 +922,83 @@ def resubmit_unlocked_id_profile(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """After super admin unlocks ID fields, admin saves corrected ID data."""
+    """After super admin unlocks CIN and/or passport, admin saves corrected ID data."""
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Not allowed.")
-    if not getattr(current_user, "id_fields_unlocked", 0):
+    unlock = _unlock_set(current_user)
+    legacy = int(getattr(current_user, "id_fields_unlocked", 0) or 0)
+    need_cin = "cin" in unlock or (legacy and not unlock)
+    need_pass = "passport" in unlock or (legacy and not unlock)
+    if not need_cin and not need_pass:
         raise HTTPException(
             status_code=422,
-            detail="ID fields are not unlocked.",
+            detail="ID fields are not unlocked for correction.",
         )
 
-    if payload.id_type not in ("CIN", "Passport"):
-        raise HTTPException(status_code=422, detail="id_type must be 'CIN' or 'Passport'")
+    pexp = None
+    if need_cin:
+        if not payload.cin_number or not str(payload.cin_number).strip():
+            raise HTTPException(status_code=422, detail="CIN number is required.")
+        if not re.match(r"^\d{8}$", str(payload.cin_number).strip()):
+            raise HTTPException(status_code=422, detail="CIN must be exactly 8 digits")
+        if not payload.cin_document_url:
+            raise HTTPException(status_code=422, detail="CIN document is required.")
+        try:
+            validate_id_document_data_url(payload.cin_document_url)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
 
-    if payload.id_type == "CIN" and not re.match(r"^\d{8}$", payload.id_number):
-        raise HTTPException(status_code=422, detail="CIN must be exactly 8 digits")
+    if need_pass:
+        pnum = (payload.passport_number or "").strip()
+        if not validate_passport_number(pnum):
+            raise HTTPException(
+                status_code=422,
+                detail="Passport number must be letters followed by digits (min. 6 characters).",
+            )
+        if not payload.passport_expiry_date:
+            raise HTTPException(status_code=422, detail="Passport expiry is required.")
+        try:
+            pexp = datetime.strptime(payload.passport_expiry_date, "%Y-%m-%d").date()
+            if not validate_passport_expiry_future(pexp):
+                raise HTTPException(
+                    status_code=422, detail="Passport expiry must be a future date.",
+                )
+        except ValueError:
+            raise HTTPException(status_code=422, detail="passport_expiry_date must be YYYY-MM-DD")
+        if not payload.passport_document_url:
+            raise HTTPException(status_code=422, detail="Passport document is required.")
+        try:
+            validate_id_document_data_url(payload.passport_document_url)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
 
-    if payload.id_type == "Passport" and not re.match(
-        r"^[A-Z0-9]{8,9}$", payload.id_number.upper()
-    ):
-        raise HTTPException(
-            status_code=422, detail="Passport must be 8-9 alphanumeric characters"
-        )
+    if need_cin:
+        current_user.cin_number = str(payload.cin_number).strip()
+        current_user.cin_document_url = payload.cin_document_url
+    if need_pass:
+        pnum = (payload.passport_number or "").strip()
+        current_user.passport_number = pnum.upper()
+        current_user.passport_document_url = payload.passport_document_url
+        current_user.passport_expiry_date = pexp
 
-    try:
-        validate_id_document_data_url(payload.id_document_url)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-
-    current_user.id_type = payload.id_type
-    current_user.id_number = payload.id_number
-    current_user.id_document_url = payload.id_document_url
     current_user.id_fields_unlocked = 0
     current_user.id_document_status = "pending"
     current_user.id_document_rejection_reason = None
     current_user.updated_at = datetime.now(timezone.utc)
+
+    to_remove: list[str] = []
+    if need_cin and ("cin" in unlock or (legacy and not unlock)):
+        to_remove.append("cin")
+    if need_pass and ("passport" in unlock or (legacy and not unlock)):
+        to_remove.append("passport")
+    if to_remove:
+        _remove_unlock_keys(db, current_user, to_remove)
     db.commit()
 
     iata = current_user.airport_iata or ""
     airport_label = AIRPORT_DISPLAY.get(iata, iata or "Unknown")
     body = (
-        f"{current_user.full_name} assigned to {airport_label} has submitted their ID document for review."
+        f"{current_user.full_name} assigned to {airport_label} has submitted identity documents for review."
     )
     try:
         notify_all_super_admins(
@@ -585,6 +1028,11 @@ def submit_my_correction_request(
         raise HTTPException(status_code=403, detail="Not allowed.")
     if not current_user.profile_complete:
         raise HTTPException(status_code=422, detail="Complete your profile first.")
+    if _unlock_set(current_user):
+        raise HTTPException(
+            status_code=422,
+            detail="Finish saving your unlocked correction fields before requesting another change.",
+        )
     if getattr(current_user, "id_fields_unlocked", 0):
         raise HTTPException(
             status_code=422,
@@ -614,6 +1062,7 @@ def submit_my_correction_request(
         id=str(uuid.uuid4()),
         admin_id=current_user.id,
         reason=reason,
+        requested_fields=list(payload.fields),
         status="pending",
     )
     db.add(cr)
@@ -645,6 +1094,138 @@ def submit_my_correction_request(
     }
 
 
+@router.patch("/admins/{user_id}/profile", status_code=200)
+def patch_admin_profile_by_super(
+    user_id: int,
+    payload: SuperAdminAdminProfilePatch,
+    db: Session = Depends(get_db),
+    _super: User = Depends(require_super_admin),
+):
+    """Super admin: edit any field on an airport admin (including read-only fields for the admin)."""
+    user = db.query(User).filter(User.id == user_id, User.role == "admin").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Admin not found.")
+    data = payload.model_dump(exclude_unset=True)
+    if not data:
+        raise HTTPException(status_code=422, detail="Nothing to update.")
+
+    if "full_name" in data:
+        fn = (data["full_name"] or "").strip()
+        if not fn:
+            raise HTTPException(status_code=422, detail="Full name cannot be empty.")
+        user.full_name = fn
+
+    if "personal_email" in data:
+        pe = (data["personal_email"] or "").strip()
+        if pe and "@" not in pe:
+            raise HTTPException(status_code=422, detail="Invalid personal email.")
+        user.personal_email = pe or None
+
+    if "phone_number" in data:
+        phone_norm = normalize_tunisian_phone(data["phone_number"])
+        if not validate_tunisian_phone_digits(phone_norm):
+            raise HTTPException(
+                status_code=422,
+                detail="Please enter a valid Tunisian phone number (e.g. +216 9X XXX XXX)",
+            )
+        user.phone_number = phone_norm
+
+    if "profile_photo_url" in data:
+        try:
+            validate_profile_photo_data_url(data["profile_photo_url"])
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        user.profile_photo_url = data["profile_photo_url"]
+
+    if "date_of_birth" in data:
+        dob_raw = data["date_of_birth"]
+        if dob_raw:
+            try:
+                dob = datetime.strptime(dob_raw, "%Y-%m-%d").date()
+                age = (date.today() - dob).days // 365
+                if age < 18:
+                    raise HTTPException(status_code=422, detail="Must be at least 18 years old")
+            except ValueError:
+                raise HTTPException(status_code=422, detail="date_of_birth must be YYYY-MM-DD")
+            user.date_of_birth = dob
+        else:
+            user.date_of_birth = None
+
+    if "nationality" in data:
+        user.nationality = (data["nationality"] or "").strip() or None
+
+    if "gender" in data:
+        g = data["gender"]
+        if g is not None and g not in ("Male", "Female"):
+            raise HTTPException(status_code=422, detail="gender must be Male or Female.")
+        user.gender = g
+
+    if "residential_address" in data:
+        user.residential_address = (data["residential_address"] or "").strip() or None
+
+    if "emergency_contact_name" in data:
+        user.emergency_contact_name = (data["emergency_contact_name"] or "").strip() or None
+
+    if "emergency_contact_phone" in data:
+        raw = data["emergency_contact_phone"]
+        if raw is not None and str(raw).strip():
+            if not validate_emergency_contact_phone(raw):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Emergency contact phone must be Tunisian (+216…) or international (+…).",
+                )
+            user.emergency_contact_phone = normalize_emergency_contact_phone(raw)
+        else:
+            user.emergency_contact_phone = None
+
+    if "emergency_contact_relationship" in data:
+        user.emergency_contact_relationship = data["emergency_contact_relationship"]
+
+    if "cin_number" in data:
+        num = (data["cin_number"] or "").strip()
+        if num and not re.match(r"^\d{8}$", num):
+            raise HTTPException(status_code=422, detail="CIN must be exactly 8 digits")
+        user.cin_number = num or None
+
+    if "passport_number" in data:
+        pnum = (data["passport_number"] or "").strip()
+        if pnum and not validate_passport_number(pnum):
+            raise HTTPException(
+                status_code=422,
+                detail="Passport number must be letters followed by digits (min. 6 characters).",
+            )
+        user.passport_number = pnum.upper() if pnum else None
+
+    if "passport_expiry_date" in data:
+        raw = data["passport_expiry_date"]
+        if raw:
+            try:
+                pexp = datetime.strptime(raw, "%Y-%m-%d").date()
+            except ValueError:
+                raise HTTPException(status_code=422, detail="passport_expiry_date must be YYYY-MM-DD")
+            user.passport_expiry_date = pexp
+        else:
+            user.passport_expiry_date = None
+
+    if "cin_document_url" in data:
+        try:
+            validate_id_document_data_url(data["cin_document_url"])
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        user.cin_document_url = data["cin_document_url"]
+
+    if "passport_document_url" in data:
+        try:
+            validate_id_document_data_url(data["passport_document_url"])
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        user.passport_document_url = data["passport_document_url"]
+
+    user.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return {"message": "Admin profile updated"}
+
+
 @router.get("/admins/{user_id}/review", response_model=AdminReviewDetail)
 def get_admin_review_detail(
     user_id: int,
@@ -671,6 +1252,7 @@ def get_admin_review_detail(
             status=str(cr.status),
             super_admin_note=cr.super_admin_note,
             created_at=cr.created_at,
+            requested_fields=_parse_json_list(cr.requested_fields),
         )
     return base.model_copy(
         update={
@@ -700,8 +1282,11 @@ def unlock_admin_id_correction(
     if not cr:
         raise HTTPException(status_code=404, detail="No pending correction request.")
     cr.status = "unlocked"
-    user.id_fields_unlocked = 1
-    user.id_document_status = "pending"
+    fields = _parse_json_list(cr.requested_fields)
+    if not fields:
+        fields = list(_LEGACY_FULL_CORRECTION_FIELDS)
+    user.correction_unlock_fields = fields
+    user.id_fields_unlocked = 1 if ({"cin", "passport"} & set(fields)) else 0
     user.updated_at = datetime.now(timezone.utc)
     db.commit()
     try:
@@ -795,13 +1380,88 @@ def review_admin_id_document(
     return {"message": f"ID marked as {label}"}
 
 
+def _admin_verification_status(
+    u: User,
+    pending_correction_ids: set[int],
+) -> str:
+    if u.id in pending_correction_ids:
+        return "under_review"
+    st = getattr(u, "id_document_status", None)
+    if st == "rejected":
+        return "rejected"
+    if st == "approved":
+        return "approved"
+    return "pending_review"
+
+
+def _admin_onboarding_active(u: User) -> bool:
+    if int(getattr(u, "is_active", 0) or 0) != 1:
+        return False
+    if int(getattr(u, "must_change_password", 0) or 0) != 0:
+        return False
+    if int(getattr(u, "profile_complete", 0) or 0) != 1:
+        return False
+    if getattr(u, "id_document_status", None) != "approved":
+        return False
+    return True
+
+
 @router.get("/admins", response_model=list[AdminListItem])
 def list_admins(
     db: Session = Depends(get_db),
     _super: User = Depends(require_super_admin),
+    status_filter: Optional[str] = Query(None, alias="status"),
+    verification: Optional[str] = Query(None, alias="verification"),
 ):
-    """Return all airport admin users."""
-    return db.query(User).filter(User.role == "admin").all()
+    """Return airport admins with onboarding and verification metadata."""
+    admins = (
+        db.query(User)
+        .filter(User.role == "admin")
+        .order_by(User.id.asc())
+        .all()
+    )
+    pending_correction_ids = {
+        int(r[0])
+        for r in db.query(CorrectionRequest.admin_id)
+        .filter(CorrectionRequest.status == "pending")
+        .all()
+    }
+
+    rows: list[AdminListItem] = []
+    for u in admins:
+        vs = _admin_verification_status(u, pending_correction_ids)
+        oa = _admin_onboarding_active(u)
+        if status_filter == "active" and not oa:
+            continue
+        if status_filter == "inactive" and oa:
+            continue
+        if verification and verification != "all":
+            if verification == "approved" and vs != "approved":
+                continue
+            if verification == "pending_review" and vs != "pending_review":
+                continue
+            if verification == "under_review" and vs != "under_review":
+                continue
+            if verification == "rejected" and vs != "rejected":
+                continue
+        rows.append(
+            AdminListItem(
+                id=u.id,
+                full_name=u.full_name,
+                email=u.email,
+                personal_email=u.personal_email,
+                airport_iata=u.airport_iata,
+                is_active=u.is_active,
+                profile_complete=int(u.profile_complete or 0),
+                employee_id=u.employee_id,
+                id_document_status=getattr(u, "id_document_status", None),
+                created_at=u.created_at,
+                last_login=u.last_login,
+                onboarding_active=oa,
+                verification_status=vs,
+            )
+        )
+    return rows
 
 
 @router.delete("/admins/{user_id}", status_code=status.HTTP_204_NO_CONTENT)

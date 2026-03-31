@@ -51,10 +51,8 @@ function ProgressStep({ step, current }) {
 }
 
 export default function ChangePasswordScreen({ user, onComplete }) {
-    const [current, setCurrent] = useState('');
     const [next, setNext] = useState('');
     const [confirm, setConfirm] = useState('');
-    const [showCurrent, setShowCurrent] = useState(false);
     const [showNext, setShowNext] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
     const [loading, setLoading] = useState(false);
@@ -66,10 +64,9 @@ export default function ChangePasswordScreen({ user, onComplete }) {
     const passwordsMatch = next === confirm && confirm !== '';
 
     function validate() {
-        if (!current || !next || !confirm) return 'All fields are required.';
+        if (!next || !confirm) return 'All fields are required.';
         if (!allRulesPassed) return 'New password does not meet the security policy.';
         if (!passwordsMatch) return 'New passwords do not match.';
-        if (next === current) return 'New password must be different from your temporary password.';
         return null;
     }
 
@@ -80,7 +77,7 @@ export default function ChangePasswordScreen({ user, onComplete }) {
 
         setError('');
         setLoading(true);
-        const { error: apiError } = await apiChangePassword(current, next);
+        const { error: apiError } = await apiChangePassword(null, next);
         setLoading(false);
 
         if (apiError) { setError(apiError); return; }
@@ -120,7 +117,7 @@ export default function ChangePasswordScreen({ user, onComplete }) {
                     </div>
                     <h1 style={{ margin: 0, fontSize: '1.3rem', fontWeight: 700, color: '#fff' }}>Set Your Password</h1>
                     <p style={{ margin: '6px 0 0', fontSize: '0.85rem', color: 'rgba(255,255,255,0.55)' }}>
-                        Welcome, {firstName}! Your account was created with a temporary password. Please set a new secure password to continue.
+                        Welcome, {firstName}! You signed in with your temporary password. Choose a new secure password to continue.
                     </p>
                 </div>
 
@@ -137,24 +134,6 @@ export default function ChangePasswordScreen({ user, onComplete }) {
                                 <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 1 }} /><span>{error}</span>
                             </div>
                         )}
-
-                        {/* Temporary password */}
-                        <div>
-                            <label style={labelStyle}>Temporary Password (from email)</label>
-                            <div style={{ marginTop: 8, position: 'relative' }}>
-                                <input
-                                    type={showCurrent ? 'text' : 'password'}
-                                    className="admin-form-input"
-                                    value={current}
-                                    onChange={e => setCurrent(e.target.value)}
-                                    placeholder="Enter the password from your email"
-                                    style={{ paddingRight: 42 }}
-                                    autoComplete="current-password"
-                                    required
-                                />
-                                <ToggleBtn show={showCurrent} onToggle={() => setShowCurrent(v => !v)} />
-                            </div>
-                        </div>
 
                         {/* New password */}
                         <div>
@@ -224,14 +203,14 @@ export default function ChangePasswordScreen({ user, onComplete }) {
                                 />
                                 <ToggleBtn show={showConfirm} onToggle={() => setShowConfirm(v => !v)} />
                             </div>
-                            {confirm && !passwordsMatch && <p style={{ margin: '5px 0 0', fontSize: '0.73rem', color: '#f87171' }}>✗ Passwords don't match</p>}
+                            {confirm && !passwordsMatch && <p style={{ margin: '5px 0 0', fontSize: '0.73rem', color: '#f87171' }}>✗ Passwords don&apos;t match</p>}
                             {confirm && passwordsMatch && <p style={{ margin: '5px 0 0', fontSize: '0.73rem', color: '#4ade80' }}>✓ Passwords match</p>}
                         </div>
 
                         <button
                             type="submit"
                             className="admin-btn admin-btn--primary"
-                            disabled={loading || !allRulesPassed || !passwordsMatch || !current}
+                            disabled={loading || !allRulesPassed || !passwordsMatch}
                             style={{ marginTop: 8, height: 48, fontSize: '0.95rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
                         >
                             {loading ? <><Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> Updating…</> : <><Lock size={18} /> Set New Password & Continue</>}

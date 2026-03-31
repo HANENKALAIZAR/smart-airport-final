@@ -2,11 +2,13 @@
 Authentication API router.
 """
 
+import json
 import logging
 import re
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from slowapi import Limiter
@@ -133,22 +135,37 @@ def change_password(
     Change password for the currently authenticated user.
     Required on first login when must_change_password = 1.
     """
-    current_password = payload.get("current_password", "")
-    new_password = payload.get("new_password", "")
+    current_password = (payload.get("current_password") or "").strip()
+    new_password = payload.get("new_password", "") or ""
 
-    if not current_password or not new_password:
+    if not new_password:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Both current_password and new_password are required",
+            detail="new_password is required",
         )
 
-    if not verify_password(current_password, current_user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Current password is incorrect",
-        )
+    must_set_initial = bool(current_user.must_change_password)
 
-    assert_new_password_policy(new_password, must_differ_from=current_password)
+    if must_set_initial:
+        # User already authenticated with the temporary password; no need to send it again.
+        if verify_password(new_password, current_user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="New password must be different from your current password",
+            )
+        assert_new_password_policy(new_password)
+    else:
+        if not current_password:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="current_password is required",
+            )
+        if not verify_password(current_password, current_user.password_hash):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Current password is incorrect",
+            )
+        assert_new_password_policy(new_password, must_differ_from=current_password)
 
     current_user.password_hash = hash_password(new_password)
     current_user.must_change_password = 0
@@ -157,6 +174,30 @@ def change_password(
 
     logger.info(f"Password changed for user: {current_user.email}")
     return {"message": "Password updated successfully"}
+
+
+def _mask_ident(value: Optional[str]) -> Optional[str]:
+    """Mask ID numbers for airport admins viewing /me (last 4 visible)."""
+    if not value:
+        return value
+    s = str(value)
+    if len(s) <= 4:
+        return "••••"
+    return "•" * min(12, len(s) - 4) + s[-4:]
+
+
+def _parse_unlock_list(raw) -> list[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [str(x) for x in raw]
+    if isinstance(raw, str):
+        try:
+            data = json.loads(raw)
+            return [str(x) for x in (data or []) if x]
+        except Exception:
+            return []
+    return []
 
 
 @router.get("/me", response_model=UserOut)
@@ -176,7 +217,25 @@ def get_me(
         )
         .first()
     )
-    return base.model_copy(update={"correction_request_pending": pend is not None})
+    ul = set(_parse_unlock_list(getattr(current_user, "correction_unlock_fields", None)))
+    has_cin_unlock = "cin" in ul
+    has_pass_unlock = "passport" in ul
+    legacy_unlock = int(getattr(current_user, "id_fields_unlocked", 0) or 0)
+    id_unlock = legacy_unlock or has_cin_unlock or has_pass_unlock
+    upd = {
+        "correction_request_pending": pend is not None,
+        "correction_unlock_fields": sorted(ul) if ul else None,
+        "id_fields_unlocked": 1 if id_unlock else 0,
+    }
+    if has_cin_unlock or (legacy_unlock and not ul):
+        upd["cin_number"] = getattr(current_user, "cin_number", None)
+    else:
+        upd["cin_number"] = _mask_ident(getattr(current_user, "cin_number", None))
+    if has_pass_unlock or (legacy_unlock and not ul):
+        upd["passport_number"] = getattr(current_user, "passport_number", None)
+    else:
+        upd["passport_number"] = _mask_ident(getattr(current_user, "passport_number", None))
+    return base.model_copy(update=upd)
 
 
 def _token_expiry_naive_utc(expires_at: datetime) -> datetime:

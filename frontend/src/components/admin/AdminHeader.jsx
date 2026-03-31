@@ -1,10 +1,21 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, User, Calendar as CalendarIcon, ChevronDown, Building2, Bell } from 'lucide-react';
+import { Search, Calendar as CalendarIcon, ChevronDown, Building2, Bell } from 'lucide-react';
 import { useAirport, TUNISIAN_AIRPORTS } from '../../context/AirportContext';
 import { useLanguage } from '../../context/LanguageContext';
 import LanguageSwitcher from '../LanguageSwitcher';
-import { apiGetNotificationSummary, apiMarkNotificationRead, apiMarkAllNotificationsRead } from '../../services/adminApi';
+import { apiGetNotificationSummary, apiMarkNotificationRead, apiMarkAllNotificationsRead, apiGetMe } from '../../services/adminApi';
+
+function initialsFromName(name) {
+    if (!name || !String(name).trim()) return '?';
+    return String(name)
+        .trim()
+        .split(/\s+/)
+        .map((w) => w[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase();
+}
 
 function formatNotifTime(iso) {
     if (!iso) return '';
@@ -24,8 +35,16 @@ export default function AdminHeader({ selectedDate, onDateClick }) {
     const [airportDropdownOpen, setAirportDropdownOpen] = useState(false);
     const [notifOpen, setNotifOpen] = useState(false);
     const [summary, setSummary] = useState(null);
+    const [headerUser, setHeaderUser] = useState(null);
     const dropdownRef = useRef(null);
     const notifRef = useRef(null);
+
+    const loadMe = useCallback(async () => {
+        const token = localStorage.getItem('admin_token');
+        if (!token || token === 'demo') return;
+        const { data } = await apiGetMe();
+        if (data) setHeaderUser(data);
+    }, []);
 
     const loadSummary = useCallback(async () => {
         const token = localStorage.getItem('admin_token');
@@ -36,9 +55,13 @@ export default function AdminHeader({ selectedDate, onDateClick }) {
 
     useEffect(() => {
         loadSummary();
-        const iv = setInterval(loadSummary, 45000);
+        loadMe();
+        const iv = setInterval(() => {
+            loadSummary();
+            loadMe();
+        }, 45000);
         return () => clearInterval(iv);
-    }, [loadSummary]);
+    }, [loadSummary, loadMe]);
 
     const badgeCount =
         role === 'super_admin'
@@ -46,6 +69,12 @@ export default function AdminHeader({ selectedDate, onDateClick }) {
             : (summary?.unread_count ?? 0);
 
     const items = summary?.items ?? [];
+
+    useEffect(() => {
+        const onRefreshMe = () => loadMe();
+        window.addEventListener('admin-header-refresh-me', onRefreshMe);
+        return () => window.removeEventListener('admin-header-refresh-me', onRefreshMe);
+    }, [loadMe]);
 
     useEffect(() => {
         function handleClick(e) {
@@ -210,9 +239,52 @@ export default function AdminHeader({ selectedDate, onDateClick }) {
                     )}
                 </div>
 
-                <div className="admin-header__user">
-                    <User size={20} style={{ color: 'rgba(255,255,255,0.5)' }} />
-                    <span>{role === 'super_admin' ? t('superAdmin') : t('admin')}</span>
+                <div className="admin-header__user" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {headerUser?.profile_photo_url ? (
+                        <img
+                            src={headerUser.profile_photo_url}
+                            alt=""
+                            style={{
+                                width: 36,
+                                height: 36,
+                                borderRadius: '50%',
+                                objectFit: 'cover',
+                                border: '2px solid rgba(255,255,255,0.12)',
+                            }}
+                        />
+                    ) : (
+                        <div
+                            style={{
+                                width: 36,
+                                height: 36,
+                                borderRadius: '50%',
+                                background: 'linear-gradient(135deg, rgba(99,102,241,0.5), rgba(14,165,233,0.35))',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                color: '#F1F5F9',
+                            }}
+                        >
+                            {initialsFromName(headerUser?.full_name)}
+                        </div>
+                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>
+                        <span
+                            style={{
+                                fontSize: '0.88rem',
+                                fontWeight: 600,
+                                color: '#F1F5F9',
+                                maxWidth: 200,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            {headerUser?.full_name || (role === 'super_admin' ? t('superAdmin') : t('admin'))}
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>

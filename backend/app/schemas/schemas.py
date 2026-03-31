@@ -6,6 +6,18 @@ from datetime import datetime, date
 from pydantic import BaseModel, field_validator
 from typing import Optional, Literal
 
+# Keys for correction-request field selection (must match backend users router).
+CORRECTION_FIELD_KEYS = frozenset({
+    "full_name",
+    "date_of_birth",
+    "gender",
+    "nationality",
+    "cin",
+    "passport",
+    "residential_address",
+    "emergency_contact",
+})
+
 
 # ── Airport ──────────────────────────────────────────────────
 
@@ -188,18 +200,28 @@ class UserOut(BaseModel):
     must_change_password: int = 0
     profile_complete: int = 0
     personal_email: Optional[str] = None
+    employee_id: Optional[str] = None
     phone_number: Optional[str] = None
     date_of_birth: Optional[date] = None
-    id_type: Optional[str] = None
-    id_number: Optional[str] = None
-    id_document_url: Optional[str] = None
+    nationality: Optional[str] = None
+    gender: Optional[str] = None
+    residential_address: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    emergency_contact_relationship: Optional[str] = None
+    cin_number: Optional[str] = None
+    cin_document_url: Optional[str] = None
+    passport_number: Optional[str] = None
+    passport_document_url: Optional[str] = None
+    passport_expiry_date: Optional[date] = None
     profile_photo_url: Optional[str] = None
     id_document_status: Optional[str] = None
     id_document_rejection_reason: Optional[str] = None
     id_fields_unlocked: int = 0
     correction_request_pending: Optional[bool] = None
+    correction_unlock_fields: Optional[list[str]] = None
 
-    @field_validator("id_type", "id_document_status", mode="before")
+    @field_validator("id_document_status", "gender", "emergency_contact_relationship", mode="before")
     @classmethod
     def _coerce_enums(cls, v):
         if v is None:
@@ -225,20 +247,81 @@ class TokenOut(BaseModel):
 
 class ProfileCompleteRequest(BaseModel):
     phone_number: str
-    date_of_birth: str           # ISO date string YYYY-MM-DD
-    id_type: str                 # 'CIN' or 'Passport'
-    id_number: str
-    id_document_url: str         # base64 data URL
-    profile_photo_url: str       # base64 data URL
+    date_of_birth: str  # YYYY-MM-DD
+    nationality: str
+    gender: Literal["Male", "Female"]
+    residential_address: str
+    emergency_contact_name: str
+    emergency_contact_phone: str
+    emergency_contact_relationship: Literal["Parent", "Spouse", "Sibling", "Friend", "Other"]
+    cin_number: str
+    cin_document_url: str
+    passport_number: str
+    passport_document_url: str
+    passport_expiry_date: str  # YYYY-MM-DD
+    profile_photo_url: str
 
 
 class PatchMySettingsRequest(BaseModel):
     phone_number: Optional[str] = None
     profile_photo_url: Optional[str] = None
+    full_name: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    gender: Optional[Literal["Male", "Female"]] = None
+    nationality: Optional[str] = None
+    residential_address: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    emergency_contact_relationship: Optional[
+        Literal["Parent", "Spouse", "Sibling", "Friend", "Other"]
+    ] = None
+    cin_number: Optional[str] = None
+    cin_document_url: Optional[str] = None
+    passport_number: Optional[str] = None
+    passport_document_url: Optional[str] = None
+    passport_expiry_date: Optional[str] = None
+
+
+class SuperAdminSelfProfilePatch(BaseModel):
+    """Super admin may update any of their own profile fields (all optional; send only what changes)."""
+
+    full_name: Optional[str] = None
+    phone_number: Optional[str] = None
+    profile_photo_url: Optional[str] = None
+    date_of_birth: Optional[str] = None  # YYYY-MM-DD
+    cin_number: Optional[str] = None
+    cin_document_url: Optional[str] = None
+    passport_number: Optional[str] = None
+    passport_document_url: Optional[str] = None
+    passport_expiry_date: Optional[str] = None
+
+
+class SuperAdminAdminProfilePatch(BaseModel):
+    """Super admin: edit another airport admin’s profile (all optional)."""
+
+    full_name: Optional[str] = None
+    personal_email: Optional[str] = None
+    phone_number: Optional[str] = None
+    profile_photo_url: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    nationality: Optional[str] = None
+    gender: Optional[Literal["Male", "Female"]] = None
+    residential_address: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    emergency_contact_relationship: Optional[
+        Literal["Parent", "Spouse", "Sibling", "Friend", "Other"]
+    ] = None
+    cin_number: Optional[str] = None
+    cin_document_url: Optional[str] = None
+    passport_number: Optional[str] = None
+    passport_document_url: Optional[str] = None
+    passport_expiry_date: Optional[str] = None
 
 
 class IdDocumentReuploadRequest(BaseModel):
-    id_document_url: str
+    cin_document_url: Optional[str] = None
+    passport_document_url: Optional[str] = None
 
 
 class CorrectionRequestOut(BaseModel):
@@ -247,6 +330,7 @@ class CorrectionRequestOut(BaseModel):
     status: str
     super_admin_note: Optional[str] = None
     created_at: Optional[datetime] = None
+    requested_fields: list[str] = []
 
     class Config:
         from_attributes = True
@@ -258,11 +342,20 @@ class AdminReviewDetail(BaseModel):
     email: str
     personal_email: Optional[str] = None
     airport_iata: Optional[str] = None
+    employee_id: Optional[str] = None
     phone_number: Optional[str] = None
     date_of_birth: Optional[date] = None
-    id_type: Optional[str] = None
-    id_number: Optional[str] = None
-    id_document_url: Optional[str] = None
+    nationality: Optional[str] = None
+    gender: Optional[str] = None
+    residential_address: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    emergency_contact_relationship: Optional[str] = None
+    cin_number: Optional[str] = None
+    cin_document_url: Optional[str] = None
+    passport_number: Optional[str] = None
+    passport_document_url: Optional[str] = None
+    passport_expiry_date: Optional[date] = None
     profile_photo_url: Optional[str] = None
     id_document_status: Optional[str] = None
     id_document_rejection_reason: Optional[str] = None
@@ -270,7 +363,7 @@ class AdminReviewDetail(BaseModel):
     id_fields_unlocked: int = 0
     correction_request: Optional[CorrectionRequestOut] = None
 
-    @field_validator("id_type", "id_document_status", mode="before")
+    @field_validator("id_document_status", "gender", "emergency_contact_relationship", mode="before")
     @classmethod
     def _coerce_enums(cls, v):
         if v is None:
@@ -288,6 +381,17 @@ class IdReviewRequest(BaseModel):
 
 class MeCorrectionRequestBody(BaseModel):
     reason: str
+    fields: list[str]
+
+    @field_validator("fields")
+    @classmethod
+    def _validate_fields(cls, v: list[str]) -> list[str]:
+        if not v:
+            raise ValueError("Select at least one field to correct.")
+        bad = [x for x in v if x not in CORRECTION_FIELD_KEYS]
+        if bad:
+            raise ValueError(f"Invalid field keys: {bad}")
+        return list(dict.fromkeys(v))
 
 
 class CorrectionDismissBody(BaseModel):
@@ -295,9 +399,23 @@ class CorrectionDismissBody(BaseModel):
 
 
 class IdProfileResubmitRequest(BaseModel):
-    id_type: str
-    id_number: str
-    id_document_url: str
+    cin_number: Optional[str] = None
+    cin_document_url: Optional[str] = None
+    passport_number: Optional[str] = None
+    passport_document_url: Optional[str] = None
+    passport_expiry_date: Optional[str] = None
+
+
+class AiAlertGeneratedBody(BaseModel):
+    flight_number: str
+    brief_cause: str = ""
+    recommendation: str = ""
+    risk_pct: int = 0
+
+
+class AiAlertActionBody(BaseModel):
+    flight_number: str
+    action: Literal["approved", "rejected"]
 
 
 class ForgotPasswordRequest(BaseModel):

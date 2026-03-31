@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -58,6 +59,79 @@ def _serialize_message(msg: Message) -> dict:
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────
+# Static paths before "" so they are not swallowed by the list route.
+
+@router.get("/unread-count")
+def get_unread_message_count(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Inbox threads still in 'open' status (not yet opened / in progress)."""
+    if current_user.role == "super_admin":
+        n = (
+            db.query(func.count(Message.id))
+            .filter(Message.direction == "to_super", Message.status == "open")
+            .scalar()
+        )
+    else:
+        n = (
+            db.query(func.count(Message.id))
+            .filter(
+                Message.direction == "to_admin",
+                Message.to_user_id == current_user.id,
+                Message.status == "open",
+            )
+            .scalar()
+        )
+    return {"count": int(n or 0)}
+
+
+@router.post("/mark-inbox-read", status_code=200)
+def mark_inbox_messages_read(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """When the user opens the Messages page, clear 'unread' (open → in_progress)."""
+    now = datetime.now(timezone.utc)
+    if current_user.role == "super_admin":
+        q = db.query(Message).filter(
+            Message.direction == "to_super",
+            Message.status == "open",
+        )
+    else:
+        q = db.query(Message).filter(
+            Message.direction == "to_admin",
+            Message.to_user_id == current_user.id,
+            Message.status == "open",
+        )
+    count = 0
+    for msg in q.all():
+        msg.status = "in_progress"
+        msg.updated_at = now
+        count += 1
+    db.commit()
+    return {"marked": count}
+
+
+@router.delete("/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_message(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Permanently delete a message (sender or recipient only)."""
+    msg = db.query(Message).filter(Message.id == message_id).first()
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if msg.from_user_id != current_user.id and msg.to_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You cannot delete this message")
+    db.query(MessageReply).filter(MessageReply.message_id == message_id).delete(
+        synchronize_session=False
+    )
+    db.delete(msg)
+    db.commit()
+    return None
+
 
 @router.get("")
 def list_messages(

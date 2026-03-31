@@ -5,6 +5,7 @@ import FlightDetailsModal from '../../components/admin/FlightDetailsModal';
 import FilterBar from '../../components/admin/FilterBar';
 import Pagination from '../../components/Pagination';
 import AircraftList from '../../components/AircraftList';
+import AirportAdminAIAlerts from './AirportAdminAIAlerts';
 import SuperAdminAIAlerts from './SuperAdminAIAlerts';
 import { useAirport } from '../../context/AirportContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -17,6 +18,8 @@ const STATUS_CLASS = {
     'delayed': 'admin-table__status--delayed',
     'cancelled': 'admin-table__status--cancelled',
     'landed': 'admin-table__status--departed',
+    'boarding': 'admin-table__status--boarding',
+    'departed': 'admin-table__status--departed',
 };
 
 const STATUS_LABEL = {
@@ -25,7 +28,28 @@ const STATUS_LABEL = {
     'delayed': 'Delayed',
     'cancelled': 'Cancelled',
     'landed': 'Landed',
+    'boarding': 'Boarding',
+    'departed': 'Departed',
 };
+
+function normalizeFlightStatus(raw) {
+    const s = String(raw || '').toLowerCase().replace(/\s+/g, '_').replace(/-/g, '_');
+    const map = {
+        scheduled: 'scheduled',
+        active: 'scheduled',
+        on_time: 'on_time',
+        ontime: 'on_time',
+        delayed: 'delayed',
+        delay: 'delayed',
+        boarding: 'boarding',
+        departed: 'departed',
+        cancelled: 'cancelled',
+        canceled: 'cancelled',
+        landed: 'landed',
+        complete: 'landed',
+    };
+    return map[s] || (['scheduled', 'on_time', 'delayed', 'boarding', 'departed', 'cancelled', 'landed'].includes(s) ? s : 'scheduled');
+}
 
 function formatTime(iso) {
     if (!iso) return '—';
@@ -41,12 +65,12 @@ function buildMockFlights(iata) {
     return [
         { id: 1, flight_number: `TU721`, airline_name: 'Tunisair', direction: 'departure', dep_iata: iata, arr_iata: 'CDG', arr_airport: 'Paris Charles de Gaulle', dep_scheduled: new Date(Date.now() - 3600000).toISOString(), dep_gate: 'B3', dep_terminal: '1', arr_gate: null, arr_terminal: null, status: 'delayed', delay_minutes: 45 },
         { id: 2, flight_number: `TU302`, airline_name: 'Tunisair', direction: 'departure', dep_iata: iata, arr_iata: 'FCO', arr_airport: 'Rome Fiumicino', dep_scheduled: new Date(Date.now() + 1800000).toISOString(), dep_gate: 'A7', dep_terminal: '1', arr_gate: null, arr_terminal: null, status: 'on_time', delay_minutes: 0 },
-        { id: 3, flight_number: `AF1234`, airline_name: 'Air France', direction: 'arrival', dep_iata: 'CDG', arr_iata: iata, dep_airport: 'Paris CDG', arr_scheduled: new Date(Date.now() + 2700000).toISOString(), arr_gate: 'C2', arr_terminal: '2', dep_gate: null, dep_terminal: null, status: 'on_time', delay_minutes: 0 },
+        { id: 3, flight_number: `AF1234`, airline_name: 'Air France', direction: 'arrival', dep_iata: 'CDG', arr_iata: iata, dep_airport: 'Paris CDG', arr_scheduled: new Date(Date.now() + 2700000).toISOString(), arr_gate: 'C2', arr_terminal: '2', dep_gate: null, dep_terminal: null, status: 'boarding', delay_minutes: 0 },
         { id: 4, flight_number: `LH490`, airline_name: 'Lufthansa', direction: 'arrival', dep_iata: 'FRA', arr_iata: iata, dep_airport: 'Frankfurt', arr_scheduled: new Date(Date.now() + 5400000).toISOString(), arr_gate: 'D1', arr_terminal: '2', dep_gate: null, dep_terminal: null, status: 'delayed', delay_minutes: 20 },
         { id: 5, flight_number: `TU505`, airline_name: 'Tunisair', direction: 'departure', dep_iata: iata, arr_iata: 'LHR', arr_airport: 'London Heathrow', dep_scheduled: new Date(Date.now() + 7200000).toISOString(), dep_gate: 'B9', dep_terminal: '1', arr_gate: null, arr_terminal: null, status: 'scheduled', delay_minutes: 0 },
         { id: 6, flight_number: `IB3456`, airline_name: 'Iberia', direction: 'arrival', dep_iata: 'MAD', arr_iata: iata, dep_airport: 'Madrid Barajas', arr_scheduled: new Date(Date.now() - 900000).toISOString(), arr_gate: 'A3', arr_terminal: '1', dep_gate: null, dep_terminal: null, status: 'landed', delay_minutes: 0 },
         { id: 7, flight_number: `TU801`, airline_name: 'Tunisair', direction: 'departure', dep_iata: iata, arr_iata: 'DUS', arr_airport: 'Dusseldorf', dep_scheduled: new Date(Date.now() + 10800000).toISOString(), dep_gate: 'C5', dep_terminal: '1', arr_gate: null, arr_terminal: null, status: 'cancelled', delay_minutes: 0 },
-        { id: 8, flight_number: `VY1234`, airline_name: 'Vueling', direction: 'arrival', dep_iata: 'BCN', arr_iata: iata, dep_airport: 'Barcelona', arr_scheduled: new Date(Date.now() + 3600000).toISOString(), arr_gate: 'B6', arr_terminal: '2', dep_gate: null, dep_terminal: null, status: 'on_time', delay_minutes: 0 },
+        { id: 8, flight_number: `VY1234`, airline_name: 'Vueling', direction: 'arrival', dep_iata: 'BCN', arr_iata: iata, dep_airport: 'Barcelona', arr_scheduled: new Date(Date.now() + 3600000).toISOString(), arr_gate: 'B6', arr_terminal: '2', dep_gate: null, dep_terminal: null, status: 'departed', delay_minutes: 0 },
     ];
 }
 
@@ -79,7 +103,8 @@ export default function AdminDashboard({ selectedDate }) {
             const res = await fetch(`/api/aviationstack/flights/${selectedAirport.iata}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const json = await res.json();
-            const fetched = json.flights || [];
+            const rawList = json.flights || [];
+            const fetched = rawList.map((f) => ({ ...f, status: normalizeFlightStatus(f.status) }));
             if (fetched.length > 0) {
                 setFlights(fetched);
             } else {
@@ -158,8 +183,8 @@ export default function AdminDashboard({ selectedDate }) {
             {/* Filter Bar */}
             <FilterBar onFilterChange={setFilters} />
 
-            {/* Main content: flight table + AI Alerts panel (super admin only) */}
-            <div className={isSuperAdmin ? 'admin-dash-split' : ''}>
+            {/* Main content: flight table + AI side panel */}
+            <div className="admin-dash-split">
                 <div className="admin-dash-split__main">
                     {/* Direction toggle + table header */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: '1rem', flexWrap: 'wrap' }}>
@@ -299,12 +324,10 @@ export default function AdminDashboard({ selectedDate }) {
                     </div>
                 </div>
 
-                {/* AI Alerts panel for super admin */}
-                {isSuperAdmin && (
-                    <div className="admin-dash-split__aside">
-                        <SuperAdminAIAlerts />
-                    </div>
-                )}
+                {/* AI side panel (right column, fixed-width) */}
+                <div className="admin-dash-split__aside">
+                    {isSuperAdmin ? <SuperAdminAIAlerts /> : <AirportAdminAIAlerts />}
+                </div>
             </div>
 
 

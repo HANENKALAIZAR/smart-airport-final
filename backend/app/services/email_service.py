@@ -18,12 +18,9 @@ logger = logging.getLogger(__name__)
 # ── Airport display names map ─────────────────────────────────
 AIRPORT_DISPLAY = {
     "TUN": "Tunis-Carthage",
-    "SFA": "Sfax-Thyna",
     "MIR": "Monastir-Habib Bourguiba",
     "DJE": "Djerba-Zarzis",
-    "TOE": "Tozeur-Nefta",
     "NBE": "Enfidha-Hammamet",
-    "TBJ": "Tabarka-Aïn Draham",
 }
 
 
@@ -332,3 +329,5 @@ def send_password_reset_email(
     except Exception as exc:
         logger.error(f"Password reset email failed: {exc}")
         return False
+
+

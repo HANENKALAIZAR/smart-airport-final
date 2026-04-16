@@ -77,3 +77,25 @@ def require_super_admin(user: User = Depends(get_current_user)) -> User:
             detail="Super-admin access required",
         )
     return user
+
+
+def require_approved_admin(user: User = Depends(get_current_user)) -> User:
+    """
+    Require admin or super_admin role AND, for airport admins, an approved profile.
+    Super admins bypass the approval check.
+    Airport admins whose id_document_status is not 'approved' receive HTTP 403
+    with a clear message so the frontend can route them to the pending screen.
+    """
+    if user.role not in ("admin", "super_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    if user.role == "admin":
+        doc_status = str(getattr(user, "id_document_status", None) or "")
+        if doc_status != "approved":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Profile approval pending. Please wait for super admin approval.",
+            )
+    return user

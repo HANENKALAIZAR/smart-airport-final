@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Target, TrendingUp, BrainCircuit, AlertTriangle, CheckCircle } from 'lucide-react';
 import { predictCustom } from '../services/api';
+import CustomSelect from '../components/ui/CustomSelect';
 
 const WEATHER_OPTIONS = [
     { label: 'Clear', severity: 0.1 },
@@ -114,25 +115,27 @@ export default function PredictionPlayground() {
                         <div className="form-row form-row--3">
                             <div className="form-group">
                                 <label className="form-label">Hour of Day</label>
-                                <select className="form-select" value={features.hour_of_day} onChange={e => handleChange('hour_of_day', parseInt(e.target.value))}>
-                                    {[...Array(24)].map((_, i) => <option key={i} value={i}>{String(i).padStart(2, '0')}:00</option>)}
-                                </select>
+                                <CustomSelect
+                                    options={[...Array(24)].map((_, i) => ({ value: i, label: `${String(i).padStart(2, '0')}:00` }))}
+                                    value={features.hour_of_day}
+                                    onChange={(val) => handleChange('hour_of_day', Number(val))}
+                                />
                             </div>
                             <div className="form-group">
                                 <label className="form-label">Day of Week</label>
-                                <select className="form-select" value={features.day_of_week} onChange={e => handleChange('day_of_week', parseInt(e.target.value))}>
-                                    {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((d, i) => (
-                                        <option key={i} value={i}>{d}</option>
-                                    ))}
-                                </select>
+                                <CustomSelect
+                                    options={['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((d, i) => ({ value: i, label: d }))}
+                                    value={features.day_of_week}
+                                    onChange={(val) => handleChange('day_of_week', Number(val))}
+                                />
                             </div>
                             <div className="form-group">
                                 <label className="form-label">Month</label>
-                                <select className="form-select" value={features.month} onChange={e => handleChange('month', parseInt(e.target.value))}>
-                                    {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((m, i) => (
-                                        <option key={i} value={i + 1}>{m}</option>
-                                    ))}
-                                </select>
+                                <CustomSelect
+                                    options={['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((m, i) => ({ value: i + 1, label: m }))}
+                                    value={features.month}
+                                    onChange={(val) => handleChange('month', Number(val))}
+                                />
                             </div>
                         </div>
 

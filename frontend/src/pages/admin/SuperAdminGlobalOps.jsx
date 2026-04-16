@@ -3,10 +3,9 @@ import { useLanguage } from '../../context/LanguageContext';
 
 const AIRPORTS_DATA = [
     { code: 'TUN', name: 'Tunis', city: 'Tunis', totalFlights: 147, delayed: 12, onTimePct: 91.8, aiAcc: 94, risk: 'Low', perf: 92 },
-    { code: 'SFA', name: 'Sfax', city: 'Sfax', totalFlights: 203, delayed: 28, onTimePct: 86.2, aiAcc: 89, risk: 'Medium', perf: 68 },
     { code: 'MIR', name: 'Monastir', city: 'Monastir', totalFlights: 189, delayed: 35, onTimePct: 81.5, aiAcc: 85, risk: 'High', perf: 45 },
     { code: 'DJE', name: 'Djerba', city: 'Djerba', totalFlights: 178, delayed: 18, onTimePct: 89.9, aiAcc: 91, risk: 'Low', perf: 80 },
-    { code: 'TOE', name: 'Tozeur', city: 'Tozeur', totalFlights: 165, delayed: 22, onTimePct: 86.7, aiAcc: 88, risk: 'Medium', perf: 62 },
+    { code: 'NBE', name: 'Enfidha', city: 'Enfidha', totalFlights: 172, delayed: 20, onTimePct: 88.4, aiAcc: 90, risk: 'Low', perf: 78 },
 ];
 
 const TOP_AIRLINES = [

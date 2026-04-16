@@ -226,8 +226,8 @@ export async function apiGetAdminReview(userId) {
   return request('GET', `/users/admins/${userId}/review`);
 }
 
-export async function apiPostIdReview(userId, action, reason) {
-  return request('POST', `/users/admins/${userId}/id-review`, { action, reason });
+export async function apiPostIdReview(userId, action, reason, rejected_fields = []) {
+  return request('POST', `/users/admins/${userId}/id-review`, { action, reason, rejected_fields });
 }
 
 export async function apiSubmitCorrectionRequest(reason, fields) {
@@ -262,7 +262,7 @@ export async function apiDismissAdminCorrection(userId, note) {
   return request('POST', `/users/admins/${userId}/correction/dismiss`, { note: note || null });
 }
 
-export async function apiDeactivateAdmin(userId) {
+export async function apiDeleteAdmin(userId) {
   return request('DELETE', `/users/admins/${userId}`);
 }
 
@@ -286,8 +286,8 @@ export async function apiReplyToMessage(messageId, body) {
   return request('POST', `/messages/${messageId}/reply`, { body });
 }
 
-export async function apiResolveMessage(messageId) {
-  return request('PATCH', `/messages/${messageId}/resolve`);
+export async function apiUpdateMessageStatus(messageId, status) {
+  return request('PATCH', `/messages/${messageId}/status`, { status });
 }
 
 export async function apiGetMessageUnreadCount() {

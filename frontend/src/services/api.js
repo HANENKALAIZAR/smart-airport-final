@@ -45,11 +45,7 @@ const ABJ = { id: 33, iata_code: 'ABJ', name: 'Félix-Houphouët-Boigny', city: 
 const NIM = { id: 34, iata_code: 'NIM', name: 'Diori Hamani Intl', city: 'Niamey', country: 'Niger', region: 'AF' };
 const CKY = { id: 35, iata_code: 'CKY', name: 'Conakry Intl', city: 'Conakry', country: 'Guinea', region: 'AF' };
 const DSS = { id: 36, iata_code: 'DSS', name: 'Blaise Diagne Intl', city: 'Dakar (Diass)', country: 'Senegal', region: 'AF' };
-const TOE = { id: 37, iata_code: 'TOE', name: 'Tozeur–Nefta Intl', city: 'Tozeur', country: 'Tunisia', region: 'AF' };
 const NBE = { id: 41, iata_code: 'NBE', name: 'Enfidha–Hammamet Intl', city: 'Enfidha', country: 'Tunisia', region: 'AF' };
-const SFA = { id: 43, iata_code: 'SFA', name: 'Sfax–Thyna Intl', city: 'Sfax', country: 'Tunisia', region: 'AF' };
-const TBJ = { id: 44, iata_code: 'TBJ', name: 'Tabarka–Aïn Draham', city: 'Tabarka', country: 'Tunisia', region: 'AF' };
-const GAF = { id: 45, iata_code: 'GAF', name: 'Gafsa–Ksar Intl', city: 'Gafsa', country: 'Tunisia', region: 'AF' };
 const CTA = { id: 38, iata_code: 'CTA', name: 'Catania-Fontanarossa', city: 'Catania', country: 'Italy', region: 'EU' };
 const YUL = { id: 39, iata_code: 'YUL', name: 'Montréal-Trudeau', city: 'Montreal', country: 'Canada', region: 'NA' };
 const LIN = { id: 40, iata_code: 'LIN', name: 'Milano Linate', city: 'Milan', country: 'Italy', region: 'EU' };
@@ -350,14 +346,6 @@ const MOCK_FLIGHTS = [
     actual_departure: '2026-02-15T07:35:00', actual_arrival: '2026-02-15T08:30:00',
     airline: { id: 19, iata_code: 'UG', name: 'Tunisair Express', reliability_score: 0.69 },
     origin_airport: DJE, dest_airport: TUN,
-  },
-  {
-    id: 29, flight_number: 'UG160', status: 'on_time', delay_minutes: 0, distance_km: 380,
-    aircraft_type: 'ATR72',
-    scheduled_departure: '2026-02-15T16:00:00', scheduled_arrival: '2026-02-15T17:10:00',
-    actual_departure: '2026-02-15T16:05:00', actual_arrival: '2026-02-15T17:15:00',
-    airline: { id: 19, iata_code: 'UG', name: 'Tunisair Express', reliability_score: 0.69 },
-    origin_airport: TOE, dest_airport: TUN,
   },
   {
     id: 30, flight_number: 'LH8374', status: 'on_time', delay_minutes: 0, distance_km: 1510,
@@ -818,126 +806,8 @@ const MOCK_FLIGHTS = [
     airline: { id: 6, iata_code: 'SV', name: 'Saudia', reliability_score: 0.75 },
     origin_airport: JED, dest_airport: MIR,
   },
-
-  // ── SFAX (SFA) ────────────────────────────────────
-  {
-    id: 130, flight_number: 'TU302', status: 'on_time', delay_minutes: 0, distance_km: 1650,
-    aircraft_type: 'A319',
-    scheduled_departure: '2026-02-15T07:30:00', scheduled_arrival: '2026-02-15T10:00:00',
-    actual_departure: '2026-02-15T07:35:00', actual_arrival: '2026-02-15T10:05:00',
-    airline: { id: 1, iata_code: 'TU', name: 'Tunisair', reliability_score: 0.71 },
-    origin_airport: SFA, dest_airport: CDG,
-  },
-  {
-    id: 131, flight_number: 'UG170', status: 'on_time', delay_minutes: 0, distance_km: 270,
-    aircraft_type: 'ATR72',
-    scheduled_departure: '2026-02-15T09:00:00', scheduled_arrival: '2026-02-15T10:00:00',
-    actual_departure: '2026-02-15T09:05:00', actual_arrival: '2026-02-15T10:00:00',
-    airline: { id: 19, iata_code: 'UG', name: 'Tunisair Express', reliability_score: 0.69 },
-    origin_airport: SFA, dest_airport: TUN,
-  },
-  {
-    id: 132, flight_number: 'UG171', status: 'delayed', delay_minutes: 40, distance_km: 270,
-    aircraft_type: 'ATR72',
-    scheduled_departure: '2026-02-15T16:00:00', scheduled_arrival: '2026-02-15T17:00:00',
-    actual_departure: '2026-02-15T16:40:00', actual_arrival: '2026-02-15T17:40:00',
-    airline: { id: 19, iata_code: 'UG', name: 'Tunisair Express', reliability_score: 0.69 },
-    origin_airport: TUN, dest_airport: SFA,
-    delay_cause: {
-      icon: '✈️', title: 'Late Incoming Aircraft',
-      summary: 'The ATR72 arrived late from its previous rotation from Tozeur, causing a delay in turnaround.',
-      passenger_tip: 'Tunisair Express is providing refreshments at the gate.'
-    },
-  },
-  {
-    id: 133, flight_number: 'TU304S', status: 'on_time', delay_minutes: 0, distance_km: 760,
-    aircraft_type: 'A319',
-    scheduled_departure: '2026-02-15T13:00:00', scheduled_arrival: '2026-02-15T14:45:00',
-    actual_departure: '2026-02-15T13:05:00', actual_arrival: '2026-02-15T14:50:00',
-    airline: { id: 1, iata_code: 'TU', name: 'Tunisair', reliability_score: 0.71 },
-    origin_airport: SFA, dest_airport: MRS,
-  },
-
-  // ── TOZEUR (TOE) ──────────────────────────────────
-  {
-    id: 140, flight_number: 'UG162', status: 'on_time', delay_minutes: 0, distance_km: 380,
-    aircraft_type: 'ATR72',
-    scheduled_departure: '2026-02-15T08:00:00', scheduled_arrival: '2026-02-15T09:10:00',
-    actual_departure: '2026-02-15T08:05:00', actual_arrival: '2026-02-15T09:15:00',
-    airline: { id: 19, iata_code: 'UG', name: 'Tunisair Express', reliability_score: 0.69 },
-    origin_airport: TUN, dest_airport: TOE,
-  },
-  {
-    id: 141, flight_number: 'TO3480', status: 'on_time', delay_minutes: 0, distance_km: 1600,
-    aircraft_type: 'B737',
-    scheduled_departure: '2026-02-15T11:30:00', scheduled_arrival: '2026-02-15T14:00:00',
-    actual_departure: '2026-02-15T11:35:00', actual_arrival: '2026-02-15T14:05:00',
-    airline: { id: 7, iata_code: 'TO', name: 'Transavia France', reliability_score: 0.72 },
-    origin_airport: ORY, dest_airport: TOE,
-  },
-  {
-    id: 142, flight_number: 'UG164', status: 'delayed', delay_minutes: 30, distance_km: 380,
-    aircraft_type: 'ATR72',
-    scheduled_departure: '2026-02-15T17:00:00', scheduled_arrival: '2026-02-15T18:10:00',
-    actual_departure: '2026-02-15T17:30:00', actual_arrival: '2026-02-15T18:40:00',
-    airline: { id: 19, iata_code: 'UG', name: 'Tunisair Express', reliability_score: 0.69 },
-    origin_airport: TOE, dest_airport: TUN,
-    delay_cause: {
-      icon: '🏜️', title: 'Desert Dust Haze',
-      summary: 'Saharan dust reduced visibility at Tozeur–Nefta airport, requiring a brief delay until conditions improved.',
-      passenger_tip: 'Tunisair Express is offering refreshments at the small terminal café.'
-    },
-  },
-
-  // ── TABARKA (TBJ) ─────────────────────────────────
-  {
-    id: 150, flight_number: 'UG180', status: 'on_time', delay_minutes: 0, distance_km: 185,
-    aircraft_type: 'ATR72',
-    scheduled_departure: '2026-02-15T09:00:00', scheduled_arrival: '2026-02-15T09:45:00',
-    actual_departure: '2026-02-15T09:05:00', actual_arrival: '2026-02-15T09:50:00',
-    airline: { id: 19, iata_code: 'UG', name: 'Tunisair Express', reliability_score: 0.69 },
-    origin_airport: TBJ, dest_airport: TUN,
-  },
-  {
-    id: 151, flight_number: 'UG181', status: 'on_time', delay_minutes: 0, distance_km: 185,
-    aircraft_type: 'ATR72',
-    scheduled_departure: '2026-02-15T16:30:00', scheduled_arrival: '2026-02-15T17:15:00',
-    actual_departure: '2026-02-15T16:35:00', actual_arrival: '2026-02-15T17:20:00',
-    airline: { id: 19, iata_code: 'UG', name: 'Tunisair Express', reliability_score: 0.69 },
-    origin_airport: TUN, dest_airport: TBJ,
-  },
-  {
-    id: 152, flight_number: 'TO3490', status: 'on_time', delay_minutes: 0, distance_km: 1350,
-    aircraft_type: 'B737',
-    scheduled_departure: '2026-02-15T14:00:00', scheduled_arrival: '2026-02-15T16:15:00',
-    actual_departure: '2026-02-15T14:10:00', actual_arrival: '2026-02-15T16:20:00',
-    airline: { id: 7, iata_code: 'TO', name: 'Transavia France', reliability_score: 0.72 },
-    origin_airport: ORY, dest_airport: TBJ,
-  },
-
-  // ── GAFSA (GAF) ───────────────────────────────────
-  {
-    id: 160, flight_number: 'UG190', status: 'on_time', delay_minutes: 0, distance_km: 340,
-    aircraft_type: 'ATR72',
-    scheduled_departure: '2026-02-15T08:30:00', scheduled_arrival: '2026-02-15T09:30:00',
-    actual_departure: '2026-02-15T08:35:00', actual_arrival: '2026-02-15T09:35:00',
-    airline: { id: 19, iata_code: 'UG', name: 'Tunisair Express', reliability_score: 0.69 },
-    origin_airport: GAF, dest_airport: TUN,
-  },
-  {
-    id: 161, flight_number: 'UG191', status: 'delayed', delay_minutes: 50, distance_km: 340,
-    aircraft_type: 'ATR72',
-    scheduled_departure: '2026-02-15T15:00:00', scheduled_arrival: '2026-02-15T16:00:00',
-    actual_departure: '2026-02-15T15:50:00', actual_arrival: '2026-02-15T16:50:00',
-    airline: { id: 19, iata_code: 'UG', name: 'Tunisair Express', reliability_score: 0.69 },
-    origin_airport: TUN, dest_airport: GAF,
-    delay_cause: {
-      icon: '🛠️', title: 'Aircraft Swap',
-      summary: 'The originally assigned ATR72 required a minor maintenance check. A replacement aircraft was arranged, causing a departure delay.',
-      passenger_tip: 'Tunisair Express is offering refreshments during the wait.'
-    },
-  },
 ];
+
 
 const MOCK_PREDICTIONS = {
   1: {

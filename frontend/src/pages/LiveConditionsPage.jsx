@@ -32,18 +32,6 @@ const RUNWAY_DATA = {
     MIR: [
         { id: 'RWY 07/25', status: 'Active', note: 'Main runway – 2850m' },
     ],
-    SFA: [
-        { id: 'RWY 15/33', status: 'Active', note: 'Main runway – 2400m' },
-    ],
-    TOE: [
-        { id: 'RWY 09/27', status: 'Active', note: 'Single runway – 2500m' },
-    ],
-    TBJ: [
-        { id: 'RWY 13/31', status: 'Active', note: 'Single runway – 2000m' },
-    ],
-    GAF: [
-        { id: 'RWY 04/22', status: 'Active', note: 'Single runway – 2500m' },
-    ],
 };
 
 function seededRandom(seed) {

@@ -32,6 +32,7 @@ function passportErr(s) {
 
 export default function SuperAdminProfileForm({ profile, onSaved }) {
     const [fullName, setFullName] = useState('');
+    const [personalEmail, setPersonalEmail] = useState('');
     const [phoneDraft, setPhoneDraft] = useState('+216 ');
     const [dob, setDob] = useState('');
     const [cinNumber, setCinNumber] = useState('');
@@ -52,6 +53,7 @@ export default function SuperAdminProfileForm({ profile, onSaved }) {
     useEffect(() => {
         if (!profile) return;
         setFullName(profile.full_name || '');
+        setPersonalEmail(profile.personal_email || '');
         setPhoneDraft(formatTunisiaPhoneInput(profile.phone_number || '+216 '));
         setDob(profile.date_of_birth ? String(profile.date_of_birth).slice(0, 10) : '');
         setCinNumber(profile.cin_number || '');
@@ -128,6 +130,7 @@ export default function SuperAdminProfileForm({ profile, onSaved }) {
         setSaving(true);
         const payload = {
             full_name: fullName.trim(),
+            personal_email: personalEmail.trim() || null,
             phone_number: phoneDraft.replace(/\s/g, ''),
             date_of_birth: dob || null,
             cin_number: cinNumber || null,
@@ -244,6 +247,10 @@ export default function SuperAdminProfileForm({ profile, onSaved }) {
                 <div style={{ gridColumn: '1 / -1' }}>
                     <label style={labelStyle}>Full name</label>
                     <input className="admin-form-input" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
+                </div>
+                <div style={{ gridColumn: '1 / -1' }}>
+                    <label style={labelStyle}>Personal email (recovery)</label>
+                    <input className="admin-form-input" type="email" value={personalEmail} onChange={(e) => setPersonalEmail(e.target.value)} required />
                 </div>
                 <div>
                     <label style={labelStyle}>Work email</label>

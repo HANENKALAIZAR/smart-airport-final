@@ -1,25 +1,39 @@
 """
 Pytest configuration and shared fixtures.
-Uses an in-memory SQLite database so no PostgreSQL is needed for tests.
+Uses an isolated in-memory SQLite database and test-only settings.
 """
+
+import os
+
+os.environ["TESTING"] = "true"
+os.environ["DEBUG"] = "false"
+os.environ["RUN_STARTUP_TASKS"] = "false"
+os.environ["SECRET_KEY"] = "test-secret-key-for-pytest-only"
+os.environ["DB_USER"] = "test"
+os.environ["DB_PASS"] = "test"
+os.environ["DB_HOST"] = "localhost"
+os.environ["DB_PORT"] = "5432"
+os.environ["DB_NAME"] = "smart_airport_test"
 
 import pytest
 from fastapi.testclient import TestClient
+from passlib.context import CryptContext
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from passlib.context import CryptContext
+from sqlalchemy.pool import StaticPool
 
-from app.main import app
 from app.database import Base, get_db
+from app.main import app
 from app.models.models import User
-from app.config import settings
+from app.routers.auth import limiter as auth_limiter
 
-# Force a test SECRET_KEY so JWT works in tests
-settings.SECRET_KEY = "test-secret-key-for-pytest-only"
+SQLITE_URL = "sqlite+pysqlite:///:memory:"
 
-SQLITE_URL = "sqlite:///./test_smart_airport.db"
-
-engine = create_engine(SQLITE_URL, connect_args={"check_same_thread": False})
+engine = create_engine(
+    SQLITE_URL,
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -31,9 +45,7 @@ def setup_database():
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
-    import os
-    if os.path.exists("test_smart_airport.db"):
-        os.remove("test_smart_airport.db")
+    engine.dispose()
 
 
 @pytest.fixture
@@ -42,25 +54,34 @@ def db():
     connection = engine.connect()
     transaction = connection.begin()
     session = TestingSessionLocal(bind=connection)
-    yield session
-    session.close()
-    transaction.rollback()
-    connection.close()
+    try:
+        yield session
+    finally:
+        session.close()
+        transaction.rollback()
+        connection.close()
 
 
 @pytest.fixture
 def client(db):
     """TestClient with DB override."""
+
     def override_get_db():
         try:
             yield db
         finally:
             pass
 
+    app.state.limiter.limiter.storage.reset()
+    auth_limiter.limiter.storage.reset()
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
-        yield c
-    app.dependency_overrides.clear()
+    try:
+        with TestClient(app) as c:
+            yield c
+    finally:
+        app.state.limiter.limiter.storage.reset()
+        auth_limiter.limiter.storage.reset()
+        app.dependency_overrides.clear()
 
 
 @pytest.fixture
@@ -92,6 +113,8 @@ def airport_admin_user(db):
         employee_id="TUN-0001",
         is_active=1,
         must_change_password=0,
+        profile_complete=1,
+        id_document_status="approved",
     )
     db.add(user)
     db.commit()
@@ -102,10 +125,13 @@ def airport_admin_user(db):
 @pytest.fixture
 def super_admin_token(client, super_admin_user):
     """Get JWT token for super admin."""
-    resp = client.post("/api/auth/login", json={
-        "email": "superadmin@smartairport.tn",
-        "password": "SuperPass@123",
-    })
+    resp = client.post(
+        "/api/auth/login",
+        json={
+            "email": "superadmin@smartairport.tn",
+            "password": "SuperPass@123",
+        },
+    )
     assert resp.status_code == 200
     return resp.json()["access_token"]
 
@@ -113,9 +139,12 @@ def super_admin_token(client, super_admin_user):
 @pytest.fixture
 def admin_token(client, airport_admin_user):
     """Get JWT token for airport admin."""
-    resp = client.post("/api/auth/login", json={
-        "email": "ahmed.bensalah@tunis-carthage.tn",
-        "password": "TempPass@456",
-    })
+    resp = client.post(
+        "/api/auth/login",
+        json={
+            "email": "ahmed.bensalah@tunis-carthage.tn",
+            "password": "TempPass@456",
+        },
+    )
     assert resp.status_code == 200
     return resp.json()["access_token"]

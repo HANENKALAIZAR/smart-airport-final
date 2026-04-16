@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Phone, Mail, MapPin, Send, AlertTriangle, Plane } from 'lucide-react';
 import { useAirport } from '../context/AirportContext';
 import { useLanguage } from '../context/LanguageContext';
+import CustomSelect from '../components/ui/CustomSelect';
 
 /* ── Per-airport contact data ──────────────────────────────── */
 const AIRPORT_CONTACTS = {
@@ -75,67 +76,8 @@ const AIRPORT_CONTACTS = {
         ],
         lostFound: { location: 'Terminal – Arrivals Hall', hours: '06:00 – 21:00', phone: '+216 73 521 500', email: 'lostandfound@monastir.airport.tn' },
     },
-    SFA: {
-        phone: '+216 74 278 000',
-        email: 'info@sfax.airport.tn',
-        address: ['Sfax–Thyna International Airport', 'Route de l\'aéroport, 3000 Sfax', 'Sfax, Tunisia'],
-        emergency: [
-            { name: 'Airport Emergency', number: '+216 74 278 000', icon: '🚨', available: '24/7' },
-            { name: 'Medical Emergency', number: '190', icon: '🏥', available: '24/7' },
-            { name: 'Police', number: '193', icon: '👮', available: '24/7' },
-            { name: 'Fire Department', number: '198', icon: '🚒', available: '24/7' },
-        ],
-        airlines: [
-            { airline: 'Tunisair', phone: '+216 74 278 100', desk: 'Terminal', flag: '🇹🇳' },
-        ],
-        lostFound: { location: 'Terminal', hours: '07:00 – 20:00', phone: '+216 74 278 200', email: 'lostandfound@sfax.airport.tn' },
-    },
-    TOE: {
-        phone: '+216 76 452 000',
-        email: 'info@tozeur.airport.tn',
-        address: ['Tozeur–Nefta International Airport', 'Route de Nefta, 2200 Tozeur', 'Tozeur, Tunisia'],
-        emergency: [
-            { name: 'Airport Emergency', number: '+216 76 452 000', icon: '🚨', available: '24/7' },
-            { name: 'Medical Emergency', number: '190', icon: '🏥', available: '24/7' },
-            { name: 'Police', number: '193', icon: '👮', available: '24/7' },
-            { name: 'Fire Department', number: '198', icon: '🚒', available: '24/7' },
-        ],
-        airlines: [
-            { airline: 'Tunisair', phone: '+216 76 452 100', desk: 'Terminal', flag: '🇹🇳' },
-        ],
-        lostFound: { location: 'Terminal', hours: '07:00 – 19:00', phone: '+216 76 452 200', email: 'lostandfound@tozeur.airport.tn' },
-    },
-    TBJ: {
-        phone: '+216 78 670 000',
-        email: 'info@tabarka.airport.tn',
-        address: ['Tabarka–Aïn Draham International Airport', 'Route de l\'aéroport, 8110 Tabarka', 'Jendouba, Tunisia'],
-        emergency: [
-            { name: 'Airport Emergency', number: '+216 78 670 000', icon: '🚨', available: '24/7' },
-            { name: 'Medical Emergency', number: '190', icon: '🏥', available: '24/7' },
-            { name: 'Police', number: '193', icon: '👮', available: '24/7' },
-            { name: 'Fire Department', number: '198', icon: '🚒', available: '24/7' },
-        ],
-        airlines: [
-            { airline: 'Tunisair', phone: '+216 78 670 100', desk: 'Terminal', flag: '🇹🇳' },
-        ],
-        lostFound: { location: 'Terminal', hours: '07:00 – 19:00', phone: '+216 78 670 200', email: 'lostandfound@tabarka.airport.tn' },
-    },
-    GAF: {
-        phone: '+216 76 226 000',
-        email: 'info@gafsa.airport.tn',
-        address: ['Gafsa–Ksar International Airport', 'Route de l\'aéroport, 2100 Gafsa', 'Gafsa, Tunisia'],
-        emergency: [
-            { name: 'Airport Emergency', number: '+216 76 226 000', icon: '🚨', available: '24/7' },
-            { name: 'Medical Emergency', number: '190', icon: '🏥', available: '24/7' },
-            { name: 'Police', number: '193', icon: '👮', available: '24/7' },
-            { name: 'Fire Department', number: '198', icon: '🚒', available: '24/7' },
-        ],
-        airlines: [
-            { airline: 'Tunisair', phone: '+216 76 226 100', desk: 'Terminal', flag: '🇹🇳' },
-        ],
-        lostFound: { location: 'Terminal', hours: '07:00 – 19:00', phone: '+216 76 226 200', email: 'lostandfound@gafsa.airport.tn' },
-    },
 };
+
 
 export default function ContactPage() {
     const { selectedAirport } = useAirport();
@@ -258,15 +200,18 @@ export default function ContactPage() {
                             <input type="email" placeholder={t('contact_email_address')} value={formData.email} onChange={e => setFormData(p => ({ ...p, email: e.target.value }))} required
                                 style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #E2E8F0', fontSize: '0.85rem', outline: 'none' }} />
                         </div>
-                        <select value={formData.subject} onChange={e => setFormData(p => ({ ...p, subject: e.target.value }))} required
-                            style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #E2E8F0', fontSize: '0.85rem', outline: 'none', background: '#fff' }}>
-                            <option value="">{t('contact_select_subject')}</option>
-                            <option value="lost">{t('contact_subject_lost')}</option>
-                            <option value="complaint">{t('contact_subject_complaint')}</option>
-                            <option value="feedback">{t('contact_subject_feedback')}</option>
-                            <option value="accessibility">{t('contact_subject_accessibility')}</option>
-                            <option value="other">{t('contact_subject_other')}</option>
-                        </select>
+                        <CustomSelect
+                            placeholder={t('contact_select_subject')}
+                            options={[
+                                { value: 'lost', label: t('contact_subject_lost') },
+                                { value: 'complaint', label: t('contact_subject_complaint') },
+                                { value: 'feedback', label: t('contact_subject_feedback') },
+                                { value: 'accessibility', label: t('contact_subject_accessibility') },
+                                { value: 'other', label: t('contact_subject_other') },
+                            ]}
+                            value={formData.subject || null}
+                            onChange={(val) => setFormData(p => ({ ...p, subject: val }))}
+                        />
                         <textarea placeholder={t('contact_your_message')} value={formData.message} onChange={e => setFormData(p => ({ ...p, message: e.target.value }))} required rows={4}
                             style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid #E2E8F0', fontSize: '0.85rem', outline: 'none', resize: 'vertical' }} />
                         <button type="submit" style={{ padding: '14px', borderRadius: 10, background: '#1E293B', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>

@@ -7,9 +7,10 @@ import {
 import { useAirport } from '../../context/AirportContext';
 import { TUNISIAN_AIRPORTS } from '../../context/AirportContext';
 import {
-    apiListMessages, apiSendMessage, apiReplyToMessage, apiResolveMessage, apiListAdmins,
+    apiListMessages, apiSendMessage, apiReplyToMessage, apiUpdateMessageStatus, apiListAdmins,
     apiDeleteMessage, apiMarkMessagesInboxRead,
 } from '../../services/adminApi';
+import CustomSelect from '../../components/ui/CustomSelect';
 
 const CATEGORIES = [
     { value: 'technical',   label: '🔧 Technical',   color: '#3B82F6' },
@@ -19,7 +20,7 @@ const CATEGORIES = [
 ];
 
 const STATUS_CONFIG = {
-    open:        { icon: <AlertCircle size={12} />, label: 'Open',        color: '#F59E0B' },
+    open:        { icon: <AlertCircle size={12} />, label: 'Pending',     color: '#F59E0B' },
     in_progress: { icon: <Clock size={12} />,       label: 'In Progress', color: '#3B82F6' },
     resolved:    { icon: <CheckCircle size={12} />, label: 'Resolved',    color: '#22C55E' },
 };
@@ -95,7 +96,7 @@ export default function AdminMessages() {
             body: form.body.trim(),
             ...(isSuperAdmin ? { to_user_id: parseInt(form.to_user_id) } : {}),
         };
-        const { data, error: err } = await apiSendMessage(payload);
+        const { error: err } = await apiSendMessage(payload);
         setSending(false);
 
         if (err) { setError(err); return; }
@@ -115,9 +116,9 @@ export default function AdminMessages() {
         await loadMessages();
     }
 
-    // ── Resolve ───────────────────────────────────────────────────────
-    async function handleResolve(msgId) {
-        const { error: err } = await apiResolveMessage(msgId);
+    // ── Status Update ─────────────────────────────────────────────────
+    async function handleStatusUpdate(msgId, newStatus) {
+        const { error: err } = await apiUpdateMessageStatus(msgId, newStatus);
         if (err) { setError(err); return; }
         await loadMessages();
     }
@@ -202,7 +203,7 @@ export default function AdminMessages() {
                         color: filterStatus === s ? '#A5B4FC' : 'rgba(255,255,255,0.4)',
                         transition: 'all 0.15s',
                     }}>
-                        {s === 'all' ? 'All' : s === 'in_progress' ? 'In Progress' : s.charAt(0).toUpperCase() + s.slice(1)}
+                        {s === 'all' ? 'All' : s === 'open' ? 'Pending' : s === 'in_progress' ? 'In Progress' : 'Resolved'}
                     </button>
                 ))}
                 <span style={{ fontSize: '0.72rem', color: 'rgba(255,255,255,0.25)', marginLeft: 'auto' }}>
@@ -251,7 +252,10 @@ export default function AdminMessages() {
                                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: cat.color, flexShrink: 0 }} />
                                 <div style={{ flex: 1, minWidth: 0 }}>
                                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                        <span style={{ fontWeight: 600, fontSize: '0.88rem', color: '#F1F5F9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 280 }}>
+                                        {tab === 'inbox' && !msg.is_read && (
+                                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#6366F1', flexShrink: 0 }} />
+                                        )}
+                                        <span style={{ fontWeight: (!msg.is_read && tab === 'inbox') ? 700 : 500, fontSize: '0.88rem', color: (!msg.is_read && tab === 'inbox') ? '#FFFFFF' : '#F1F5F9', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 280 }}>
                                             {msg.subject}
                                         </span>
                                         <span style={{ fontSize: '0.68rem', padding: '2px 7px', borderRadius: 20, background: `${cat.color}1A`, color: cat.color, border: `1px solid ${cat.color}33`, flexShrink: 0 }}>
@@ -367,11 +371,9 @@ export default function AdminMessages() {
                                             <button onClick={() => handleReply(msg.id)} className="admin-btn admin-btn--primary" style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
                                                 <Send size={14} /> Reply
                                             </button>
-                                            {isSuperAdmin && (
-                                                <button onClick={() => handleResolve(msg.id)} style={{ padding: '8px 14px', borderRadius: 8, background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)', color: '#22C55E', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
-                                                    <CheckCircle size={13} /> Resolve
-                                                </button>
-                                            )}
+                                            <button onClick={() => handleStatusUpdate(msg.id, 'resolved')} className="admin-btn admin-btn--outline" style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0, color: '#22C55E', borderColor: 'rgba(34, 197, 94, 0.3)' }}>
+                                                <CheckCircle size={14} /> Resolve
+                                            </button>
                                         </div>
                                     )}
 
@@ -409,12 +411,13 @@ export default function AdminMessages() {
                                 {isSuperAdmin && (
                                     <div>
                                         <label style={{ display: 'block', fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Recipient</label>
-                                        <select required className="admin-form-input" value={form.to_user_id} onChange={e => setForm(f => ({ ...f, to_user_id: e.target.value }))}>
-                                            <option value="">— Select an administrator —</option>
-                                            {adminList.map(a => (
-                                                <option key={a.id} value={a.id}>{a.full_name} · {a.airport_iata}</option>
-                                            ))}
-                                        </select>
+                                        <CustomSelect
+                                            required
+                                            placeholder="— Select an administrator —"
+                                            options={adminList.map(a => ({ value: String(a.id), label: `${a.full_name} · ${a.airport_iata}` }))}
+                                            value={form.to_user_id ? String(form.to_user_id) : null}
+                                            onChange={(val) => setForm(f => ({ ...f, to_user_id: val }))}
+                                        />
                                     </div>
                                 )}
 

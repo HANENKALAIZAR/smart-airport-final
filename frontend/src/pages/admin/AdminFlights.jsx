@@ -4,6 +4,7 @@ import { apiGetFlights } from '../../services/adminApi';
 import FlightTable from '../../components/admin/FlightTable';
 import FlightDetailsModal from '../../components/admin/FlightDetailsModal';
 import { useLanguage } from '../../context/LanguageContext';
+import CustomSelect from '../../components/ui/CustomSelect';
 
 /* ── Adapt backend data to admin table format ─── */
 function adaptFlight(f) {
@@ -92,12 +93,18 @@ export default function AdminFlights() {
                         style={{ ...inputStyle, paddingLeft: 32 }}
                     />
                 </div>
-                <select value={riskFilter} onChange={e => setRiskFilter(e.target.value)} style={{ ...inputStyle, width: 'auto' }}>
-                    <option value="all">All Risk Levels</option>
-                    <option value="High">High Risk</option>
-                    <option value="Medium">Medium Risk</option>
-                    <option value="Low">Low Risk</option>
-                </select>
+                <div style={{ width: 180 }}>
+                    <CustomSelect
+                        options={[
+                            { value: 'all', label: 'All Risk Levels' },
+                            { value: 'High', label: 'High Risk' },
+                            { value: 'Medium', label: 'Medium Risk' },
+                            { value: 'Low', label: 'Low Risk' },
+                        ]}
+                        value={riskFilter}
+                        onChange={setRiskFilter}
+                    />
+                </div>
                 <button type="button" className="admin-btn admin-btn--outline" onClick={load} style={{ display: 'flex', alignItems: 'center', gap: 5 }} title="Refresh">
                     <RefreshCw size={14} /> Refresh
                 </button>

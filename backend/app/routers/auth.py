@@ -2,7 +2,6 @@
 Authentication API router.
 """
 
-import json
 import logging
 import re
 import secrets
@@ -20,7 +19,7 @@ import bcrypt
 from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models.models import User, PasswordResetToken, CorrectionRequest
+from app.models.models import User, PasswordResetToken
 from app.schemas.schemas import (
     UserOut,
     LoginRequest,
@@ -116,12 +115,22 @@ def login(request: Request, credentials: LoginRequest, db: Session = Depends(get
         "airport": user.airport_iata,
     })
 
+    is_approved = (
+        str(user.role) == "super_admin"
+        or str(getattr(user, "id_document_status", None) or "") == "approved"
+    )
+    profile_complete = bool(getattr(user, "profile_complete", 0))
+
+    user_out = UserOut.model_validate(user)
+    user_out = user_out.model_copy(update={"is_approved": is_approved})
+
     logger.info(f"Successful login: {user.email} (role={user.role})")
     return TokenOut(
         access_token=token,
         must_change_password=bool(user.must_change_password),
-        profile_complete=bool(getattr(user, "profile_complete", 0)),
-        user=UserOut.model_validate(user),
+        profile_complete=profile_complete,
+        is_approved=is_approved,
+        user=user_out,
     )
 
 
@@ -176,66 +185,17 @@ def change_password(
     return {"message": "Password updated successfully"}
 
 
-def _mask_ident(value: Optional[str]) -> Optional[str]:
-    """Mask ID numbers for airport admins viewing /me (last 4 visible)."""
-    if not value:
-        return value
-    s = str(value)
-    if len(s) <= 4:
-        return "••••"
-    return "•" * min(12, len(s) - 4) + s[-4:]
-
-
-def _parse_unlock_list(raw) -> list[str]:
-    if raw is None:
-        return []
-    if isinstance(raw, list):
-        return [str(x) for x in raw]
-    if isinstance(raw, str):
-        try:
-            data = json.loads(raw)
-            return [str(x) for x in (data or []) if x]
-        except Exception:
-            return []
-    return []
-
-
 @router.get("/me", response_model=UserOut)
 def get_me(
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
     """Return the currently authenticated user's profile."""
-    base = UserOut.model_validate(current_user)
-    if current_user.role != "admin":
-        return base
-    pend = (
-        db.query(CorrectionRequest)
-        .filter(
-            CorrectionRequest.admin_id == current_user.id,
-            CorrectionRequest.status == "pending",
-        )
-        .first()
+    is_approved = (
+        str(current_user.role) == "super_admin"
+        or str(getattr(current_user, "id_document_status", None) or "") == "approved"
     )
-    ul = set(_parse_unlock_list(getattr(current_user, "correction_unlock_fields", None)))
-    has_cin_unlock = "cin" in ul
-    has_pass_unlock = "passport" in ul
-    legacy_unlock = int(getattr(current_user, "id_fields_unlocked", 0) or 0)
-    id_unlock = legacy_unlock or has_cin_unlock or has_pass_unlock
-    upd = {
-        "correction_request_pending": pend is not None,
-        "correction_unlock_fields": sorted(ul) if ul else None,
-        "id_fields_unlocked": 1 if id_unlock else 0,
-    }
-    if has_cin_unlock or (legacy_unlock and not ul):
-        upd["cin_number"] = getattr(current_user, "cin_number", None)
-    else:
-        upd["cin_number"] = _mask_ident(getattr(current_user, "cin_number", None))
-    if has_pass_unlock or (legacy_unlock and not ul):
-        upd["passport_number"] = getattr(current_user, "passport_number", None)
-    else:
-        upd["passport_number"] = _mask_ident(getattr(current_user, "passport_number", None))
-    return base.model_copy(update=upd)
+    base = UserOut.model_validate(current_user)
+    return base.model_copy(update={"is_approved": is_approved})
 
 
 def _token_expiry_naive_utc(expires_at: datetime) -> datetime:
@@ -254,37 +214,46 @@ def forgot_password(
     """
     Always returns the same message. If the work email exists, sends reset link to personal_email.
     """
-    msg = "If this email exists, a reset link has been sent to your personal email address."
+    msg = "If this account exists and has a recovery email configured, a reset link will be sent."
     email = body.work_email.lower().strip()
     user = (
         db.query(User)
         .filter(User.email == email, User.role.in_(["admin", "super_admin"]))
         .first()
     )
-    if user and user.is_active:
-        personal = (getattr(user, "personal_email", None) or "").strip()
-        if personal:
-            db.query(PasswordResetToken).filter(
-                PasswordResetToken.admin_id == user.id,
-                PasswordResetToken.used == 0,
-            ).update({PasswordResetToken.used: 1})
-            raw_token = secrets.token_urlsafe(32)
-            rec = PasswordResetToken(
-                id=str(uuid.uuid4()),
-                admin_id=user.id,
-                token=raw_token,
-                expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
-                used=0,
-            )
-            db.add(rec)
-            db.commit()
-            base = (settings.FRONTEND_URL or "").rstrip("/")
-            reset_url = f"{base}/reset-password?token={raw_token}"
-            first = user.full_name.split()[0] if user.full_name.strip() else "there"
-            try:
-                send_password_reset_email(personal, reset_url, first)
-            except Exception as exc:
-                logger.error(f"Password reset email failed: {exc}")
+    if not user or not user.is_active:
+        # Prevent user enumeration by returning success message silently
+        return {"message": msg}
+
+    personal_email = (getattr(user, "personal_email", None) or "").strip()
+    if not personal_email:
+        raise HTTPException(
+            status_code=400,
+            detail="Your profile does not have a personal recovery email configured. Please contact your administrator.",
+        )
+
+    db.query(PasswordResetToken).filter(
+        PasswordResetToken.admin_id == user.id,
+        PasswordResetToken.used == 0,
+    ).update({PasswordResetToken.used: 1})
+    raw_token = secrets.token_urlsafe(32)
+    rec = PasswordResetToken(
+        id=str(uuid.uuid4()),
+        admin_id=user.id,
+        token=raw_token,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=24),
+        used=0,
+    )
+    db.add(rec)
+    db.commit()
+    base = (settings.FRONTEND_URL or "").rstrip("/")
+    reset_url = f"{base}/reset-password?token={raw_token}"
+    first = user.full_name.split()[0] if user.full_name.strip() else "there"
+    try:
+        send_password_reset_email(personal_email, reset_url, first)
+    except Exception as exc:
+        logger.error(f"Password reset email failed: {exc}")
+    
     return {"message": msg}
 
 

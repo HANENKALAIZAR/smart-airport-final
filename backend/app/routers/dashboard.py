@@ -10,7 +10,7 @@ from sqlalchemy import func, case
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.dependencies import require_admin
+from app.dependencies import require_approved_admin
 from app.models.models import Flight, Prediction, FlightFeature, Airline, User
 from app.schemas.schemas import (
     DashboardOverview, FlightListOut, DelayCause, DelayHistoryPoint,
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 def get_overview(
     days: int = Query(30, description="Number of past days to include"),
     db: Session = Depends(get_db),
-    _user: User = Depends(require_admin),
+    _user: User = Depends(require_approved_admin),
 ):
     """Staff dashboard: overall flight statistics."""
     cutoff = datetime.utcnow() - timedelta(days=days)
@@ -66,7 +66,7 @@ def get_at_risk_flights(
     threshold: float = Query(50.0, description="Risk score threshold"),
     limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    _user: User = Depends(require_admin),
+    _user: User = Depends(require_approved_admin),
 ):
     """Get flights with high delay risk scores."""
     high_risk_flight_ids = (
@@ -93,7 +93,7 @@ def get_at_risk_flights(
 @router.get("/delay-causes", response_model=list[DelayCause])
 def get_delay_causes(
     db: Session = Depends(get_db),
-    _user: User = Depends(require_admin),
+    _user: User = Depends(require_approved_admin),
 ):
     """Analyze main causes of delays from flight features."""
     delayed_features = (
@@ -146,7 +146,7 @@ def get_delay_history(
     days: int = Query(90, description="Number of past days"),
     group_by: str = Query("week", description="Group by: day, week, month"),
     db: Session = Depends(get_db),
-    _user: User = Depends(require_admin),
+    _user: User = Depends(require_approved_admin),
 ):
     """Historical delay statistics grouped by time period."""
     cutoff = datetime.utcnow() - timedelta(days=days)

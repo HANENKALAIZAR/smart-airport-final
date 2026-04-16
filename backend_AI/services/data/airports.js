@@ -103,29 +103,8 @@ const AIRPORTS = {
       { name: "Yasmine Hammamet marina", distance: "25 min", description: "Modern resort area with restaurants & shops" },
       { name: "Pupput Roman site", distance: "22 min", description: "Ancient Roman archaeological site" },
     ],
-  },
-  SFA: {
-    name: "Sfax–Thyna International Airport",
-    city: "Sfax",
-    country: "Tunisia",
-    restaurants: [
-      { name: "Sfax Airport Café", terminal: "Main Terminal", type: "Café", open: "06:00–20:00" },
-      { name: "Snack Thyna", terminal: "Departures", type: "Snacks", open: "06:00–21:00" },
-    ],
-    lounges: [],
-    wifi: "Free Wi-Fi — network: SFA_Wifi_Free",
-    hotels_nearby: [
-      { name: "Hotel Thyna Sfax", distance: "10 min by taxi", stars: 3, approx_price: "100 TND/night" },
-      { name: "Novotel Sfax Centre", distance: "12 min by taxi", stars: 4, approx_price: "180 TND/night" },
-      { name: "Les Oliviers Palace Hotel", distance: "15 min by taxi", stars: 4, approx_price: "160 TND/night" },
-    ],
-    tourist_activities: [
-      { name: "Sfax medina", distance: "12 min", description: "One of Tunisia's best-preserved medinas" },
-      { name: "Kerkennah Islands", distance: "45 min + ferry", description: "Peaceful islands, fishing villages, nature" },
-      { name: "Regional Museum of Sfax", distance: "12 min", description: "Local history and archaeology exhibits" },
-    ],
-  },
 };
+
 
 // EU member state airport codes (partial list covering routes from Tunisia)
 const EU_AIRPORTS = [
@@ -150,7 +129,7 @@ const EU_AIRPORTS = [
 ];
 
 // Tunisian airport codes
-const TN_AIRPORTS = ["TUN", "DJE", "MIR", "NBE", "SFA", "TOE", "GAF", "GAE"];
+const TN_AIRPORTS = ["TUN", "DJE", "MIR", "NBE"];
 
 function getRouteType(depIata, arrIata, airlineIata) {
   const depIsEU = EU_AIRPORTS.includes(depIata);

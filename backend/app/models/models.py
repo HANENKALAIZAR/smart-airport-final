@@ -5,8 +5,8 @@ SQLAlchemy ORM models for Smart Airport Operations.
 from datetime import datetime, timezone
 from sqlalchemy import (
     Column, Integer, String, DateTime, Enum, ForeignKey,
-    DECIMAL, Text, JSON, TIMESTAMP, SmallInteger, Date,
-    Index,
+    DECIMAL, Text, JSON, TIMESTAMP, SmallInteger, Date, Boolean,
+    Index, Float
 )
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -71,6 +71,11 @@ class Flight(Base):
     delay_minutes = Column(Integer, nullable=False, default=0)
     distance_km = Column(Integer, nullable=False, default=0)
     aircraft_type = Column(String(30), nullable=True)
+    # v10: direct IATA codes for fast feature-pipeline joins (no airline/airport join needed)
+    flight_date  = Column(Date, nullable=True, index=True)
+    dep_iata     = Column(String(3), nullable=True, index=True)
+    arr_iata     = Column(String(3), nullable=True)
+    source       = Column(String(20), nullable=True, default="manual")
     created_at = Column(TIMESTAMP, default=_now)
     updated_at = Column(TIMESTAMP, default=_now, onupdate=_now)
 
@@ -135,6 +140,18 @@ class FlightFeature(Base):
     is_delayed = Column(SmallInteger, nullable=False, default=0, index=True)
     delay_minutes = Column(Integer, nullable=False, default=0)
 
+    # v11: reliability scoring
+    confidence_score = Column(Float, nullable=True, default=1.0)
+    usable_for_ml    = Column(Boolean, nullable=True, default=True)
+
+    # v10: raw weather values stored alongside computed severity
+    temperature_c    = Column(DECIMAL(5, 2), nullable=True)
+    wind_speed_kmh   = Column(DECIMAL(6, 2), nullable=True)
+    visibility_km    = Column(DECIMAL(5, 2), nullable=True)
+    precipitation_mm = Column(DECIMAL(5, 2), nullable=True)
+    # v10: version tag so pipeline knows which rows need reprocessing
+    feature_version  = Column(String(10), nullable=True, default="v1")
+
     created_at = Column(TIMESTAMP, default=_now)
 
     flight = relationship("Flight", back_populates="features")
@@ -146,7 +163,9 @@ class Prediction(Base):
     __tablename__ = "predictions"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    flight_id = Column(Integer, ForeignKey("flights.id"), nullable=False, index=True)
+    # v10: flight_id is nullable — predictions on live flights not yet in DB use flight_number
+    flight_id = Column(Integer, ForeignKey("flights.id"), nullable=True, index=True)
+    flight_number = Column(String(10), nullable=True, index=True)   # set when flight_id is NULL
     risk_score = Column(DECIMAL(5, 2), nullable=False)
     predicted_delay_min = Column(Integer, nullable=False, default=0)
     confidence = Column(DECIMAL(4, 3), nullable=False, default=0.000)
@@ -165,6 +184,9 @@ class Prediction(Base):
 
 class User(Base):
     __tablename__ = "users"
+    __table_args__ = (
+        Index('ix_unique_super_admin', 'role', unique=True, postgresql_where=(Column('role') == 'super_admin')),
+    )
 
     id                   = Column(Integer, primary_key=True, autoincrement=True)
     email                = Column(String(255), unique=True, nullable=False)
@@ -205,10 +227,7 @@ class User(Base):
         nullable=True,
     )
     id_document_rejection_reason = Column(Text, nullable=True)
-    id_fields_unlocked = Column(SmallInteger, nullable=False, default=0)
-    # JSON list of field keys: full_name, date_of_birth, gender, nationality, cin, passport,
-    # residential_address, emergency_contact — set when super admin approves a correction request.
-    correction_unlock_fields = Column(JSON, nullable=True)
+    rejected_fields = Column(JSON, nullable=True)  # List of explicitly rejected field keys
 
 
 # ── In-app notifications (bell) ────────────────────────────
@@ -225,23 +244,7 @@ class InAppNotification(Base):
     created_at = Column(TIMESTAMP, default=_now)
 
 
-class CorrectionRequest(Base):
-    __tablename__ = "correction_requests"
 
-    id = Column(String(36), primary_key=True)
-    admin_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    reason = Column(Text, nullable=False)
-    requested_fields = Column(JSON, nullable=True)  # list[str] — fields admin asked to correct
-    status = Column(
-        Enum(
-            "pending", "unlocked", "dismissed", "fulfilled",
-            name="correction_request_status_enum",
-        ),
-        nullable=False,
-        default="pending",
-    )
-    super_admin_note = Column(Text, nullable=True)
-    created_at = Column(TIMESTAMP, default=_now)
 
 
 # ── AI Alerts ──────────────────────────────────────────────────
@@ -335,6 +338,7 @@ class Message(Base):
         Enum("open", "in_progress", "resolved", name="msg_status"),
         nullable=False, default="open",
     )
+    is_read      = Column(Boolean, nullable=False, default=False)
     created_at   = Column(TIMESTAMP, default=_now)
     updated_at   = Column(TIMESTAMP, default=_now, onupdate=_now)
 
@@ -376,3 +380,29 @@ class AuditLog(Base):
     created_at     = Column(TIMESTAMP, default=_now)
 
     super_admin = relationship("User", foreign_keys=[super_admin_id])
+
+
+# ── Model Metrics (v10) ─────────────────────────────────────────────
+
+class ModelMetrics(Base):
+    """Stores evaluation metrics for each trained model version."""
+    __tablename__ = "model_metrics"
+
+    id                = Column(Integer, primary_key=True, autoincrement=True)
+    model_version     = Column(String(30), nullable=False)
+    trained_at        = Column(TIMESTAMP, default=_now, nullable=False)
+    n_train_samples   = Column(Integer, nullable=True)
+    n_test_samples    = Column(Integer, nullable=True)
+    train_cutoff_date = Column(Date, nullable=True)
+    accuracy          = Column(DECIMAL(5, 4), nullable=True)
+    precision_score   = Column(DECIMAL(5, 4), nullable=True)
+    recall            = Column(DECIMAL(5, 4), nullable=True)
+    f1                = Column(DECIMAL(5, 4), nullable=True)
+    roc_auc           = Column(DECIMAL(5, 4), nullable=True)
+    mae_minutes       = Column(DECIMAL(6, 2), nullable=True)
+    rmse_minutes      = Column(DECIMAL(6, 2), nullable=True)
+    r2_score          = Column(DECIMAL(5, 4), nullable=True)
+    feature_columns   = Column(JSON, nullable=True)
+    hyperparams       = Column(JSON, nullable=True)  # includes confusion matrix
+    notes             = Column(Text, nullable=True)
+    is_active         = Column(SmallInteger, nullable=False, default=0)

@@ -203,46 +203,6 @@ VALUES (
         'Africa/Tunis',
         35.758600,
         10.754600
-    ),
-    (
-        'SFA',
-        'Sfax–Thyna International Airport',
-        'Sfax',
-        'Tunisia',
-        'Africa',
-        'Africa/Tunis',
-        34.717900,
-        10.690000
-    ),
-    (
-        'TOE',
-        'Tozeur–Nefta International Airport',
-        'Tozeur',
-        'Tunisia',
-        'Africa',
-        'Africa/Tunis',
-        33.939500,
-        8.110560
-    ),
-    (
-        'TBJ',
-        'Tabarka–Aïn Draham International',
-        'Tabarka',
-        'Tunisia',
-        'Africa',
-        'Africa/Tunis',
-        36.979800,
-        8.876930
-    ),
-    (
-        'GAF',
-        'Gafsa–Ksar International Airport',
-        'Gafsa',
-        'Tunisia',
-        'Africa',
-        'Africa/Tunis',
-        34.422000,
-        8.822250
     ) ON CONFLICT (iata_code) DO NOTHING;
 -- Major airlines
 INSERT INTO airlines (iata_code, name, reliability_score)

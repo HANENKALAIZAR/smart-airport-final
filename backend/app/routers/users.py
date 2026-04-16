@@ -5,7 +5,6 @@ Super-admin-only endpoints for creating and managing airport admins.
 All endpoints require a valid super_admin JWT token.
 """
 
-import json
 import re
 import uuid
 import secrets
@@ -14,22 +13,30 @@ import logging
 from datetime import datetime, timezone, date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from typing import Optional
 
 from app.database import get_db
-from app.models.models import User, AuditLog, CorrectionRequest
+from app.models.models import (
+    User,
+    AuditLog,
+    AIAlert,
+    InAppNotification,
+    Message,
+    MessageReply,
+    PasswordResetToken,
+)
 from app.dependencies import require_super_admin, get_current_user
 from app.services.email_service import (
     send_welcome_email,
-    send_id_rejection_email,
     AIRPORT_DISPLAY,
 )
 from app.services.in_app_notify import notify_all_super_admins, notify_airport_admin
 from app.schemas.schemas import (
-    CORRECTION_FIELD_KEYS,
     ProfileCompleteRequest,
     PatchMySettingsRequest,
     SuperAdminSelfProfilePatch,
@@ -37,10 +44,6 @@ from app.schemas.schemas import (
     IdDocumentReuploadRequest,
     AdminReviewDetail,
     IdReviewRequest,
-    CorrectionRequestOut,
-    MeCorrectionRequestBody,
-    CorrectionDismissBody,
-    IdProfileResubmitRequest,
 )
 from app.validators import (
     normalize_tunisian_phone,
@@ -59,84 +62,13 @@ router = APIRouter(prefix="/api/users", tags=["User Management"])
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-_LEGACY_FULL_CORRECTION_FIELDS = list(CORRECTION_FIELD_KEYS)
-
-
-def _parse_json_list(raw) -> list[str]:
-    if raw is None:
-        return []
-    if isinstance(raw, list):
-        return [str(x) for x in raw]
-    if isinstance(raw, str):
-        try:
-            data = json.loads(raw)
-            return [str(x) for x in (data or []) if x]
-        except Exception:
-            return []
-    return []
-
-
-def _unlock_set(user: User) -> set[str]:
-    return set(_parse_json_list(getattr(user, "correction_unlock_fields", None)))
-
-
-def _fulfill_unlocked_cr(db: Session, user: User) -> None:
-    cr = (
-        db.query(CorrectionRequest)
-        .filter(
-            CorrectionRequest.admin_id == user.id,
-            CorrectionRequest.status == "unlocked",
-        )
-        .order_by(CorrectionRequest.created_at.desc())
-        .first()
-    )
-    if cr:
-        cr.status = "fulfilled"
-
-
-def _remove_unlock_keys(db: Session, user: User, keys_to_remove: list[str]) -> None:
-    ul = _parse_json_list(user.correction_unlock_fields)
-    if not ul:
-        return
-    s = set(ul)
-    for k in keys_to_remove:
-        s.discard(k)
-    user.correction_unlock_fields = list(s) if s else None
-    user.id_fields_unlocked = 1 if ({"cin", "passport"} & s) else 0
-    if not s:
-        user.id_fields_unlocked = 0
-        _fulfill_unlocked_cr(db, user)
-
-
-def _unlock_keys_for_patch_field(name: str) -> list[str]:
-    m = {
-        "full_name": ["full_name"],
-        "date_of_birth": ["date_of_birth"],
-        "gender": ["gender"],
-        "nationality": ["nationality"],
-        "residential_address": ["residential_address"],
-        "emergency_contact_name": ["emergency_contact"],
-        "emergency_contact_phone": ["emergency_contact"],
-        "emergency_contact_relationship": ["emergency_contact"],
-        "cin_number": ["cin"],
-        "cin_document_url": ["cin"],
-        "passport_number": ["passport"],
-        "passport_document_url": ["passport"],
-        "passport_expiry_date": ["passport"],
-    }
-    return m.get(name, [])
-
 
 # ── Airport slug map ────────────────────────────────────────────────────
 AIRPORT_SLUGS = {
     "TUN": "tun",
-    "SFA": "sfa",
     "MIR": "mir",
     "DJE": "dje",
-    "TOE": "toe",
     "NBE": "nbe",
-    "TBJ": "tbj",
-    "GAF": "gaf",
 }
 
 
@@ -536,19 +468,21 @@ def complete_my_profile(
     current_user.profile_complete = 1
     current_user.id_document_status = "pending"
     current_user.id_document_rejection_reason = None
+    current_user.rejected_fields = None
     current_user.updated_at = datetime.now(timezone.utc)
     db.commit()
 
     iata = current_user.airport_iata or ""
     airport_label = AIRPORT_DISPLAY.get(iata, iata or "Unknown")
-    body = (
-        f"{current_user.full_name} assigned to {airport_label} has submitted identity documents for review."
+    notify_body = (
+        f"{current_user.full_name} assigned to {airport_label} has submitted their profile for approval."
     )
+    # In-app notification to all super admins
     try:
         notify_all_super_admins(
             db,
-            kind="id_submitted_review",
-            body=body,
+            kind="profile_submitted_review",
+            body=notify_body,
             context={
                 "action": "open_admin_review",
                 "admin_id": current_user.id,
@@ -556,11 +490,11 @@ def complete_my_profile(
         )
         db.commit()
     except Exception as exc:
-        logger.error(f"In-app ID review notification error: {exc}")
+        logger.error(f"In-app profile review notification error: {exc}")
         db.rollback()
 
     logger.info(f"Profile completed: {current_user.email}")
-    return {"message": "Profile completed successfully"}
+    return {"message": "Profile submitted successfully. Waiting for super admin approval."}
 
 
 @router.patch("/me/settings", status_code=200)
@@ -569,45 +503,82 @@ def patch_my_settings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update phone, photo, and profile fields allowed by correction unlock (airport admins)."""
+    """
+    Update editable profile fields for airport admins.
+    Always allowed: phone_number, profile_photo_url, residential_address, emergency contact.
+    All other profile fields are read-only (managed by super admin).
+    """
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only airport admins can update these fields here.")
     data = payload.model_dump(exclude_unset=True)
     if not data:
         raise HTTPException(status_code=422, detail="Nothing to update.")
 
-    unlock = _unlock_set(current_user)
-    profile_done = int(getattr(current_user, "profile_complete", 0) or 0) == 1
-    always_ok = {"phone_number", "profile_photo_url"}
+    if current_user.id_document_status == "rejected":
+        # Targeted correction mode
+        allowed_keys = set(current_user.rejected_fields or [])
+        if not allowed_keys:
+            raise HTTPException(status_code=403, detail="No editable fields during rejection.")
+    else:
+        # Standard settings mode (approved or pending but mostly approved)
+        allowed_keys = {
+            "phone_number",
+            "profile_photo_url",
+            "residential_address",
+            "emergency_contact_name",
+            "emergency_contact_phone",
+            "emergency_contact_relationship",
+        }
 
     for key in data.keys():
-        if key in always_ok:
-            continue
-        if not profile_done:
+        if key not in allowed_keys:
             raise HTTPException(
                 status_code=403,
-                detail="Complete your profile before editing these fields.",
+                detail=f"Field '{key}' is read-only. Contact your super admin to change it.",
             )
-        if not unlock:
-            raise HTTPException(
-                status_code=403,
-                detail="This field is locked. Request a correction to edit identity information.",
-            )
-        needed = _unlock_keys_for_patch_field(key)
-        if not needed or not any(n in unlock for n in needed):
-            raise HTTPException(
-                status_code=403,
-                detail="This field is not unlocked for correction.",
-            )
+
+    # Need tracking for standard vs ID fields to resubmit
+    is_resubmit = current_user.id_document_status == "rejected"
+    # Special validations for ID fields if they were allowed
+    if "passport_number" in data:
+        pnum = (data["passport_number"] or "").strip()
+        if pnum and not validate_passport_number(pnum):
+             raise HTTPException(status_code=422, detail="Passport number invalid.")
+        current_user.passport_number = pnum.upper()
+    if "passport_expiry_date" in data:
+        try:
+             current_user.passport_expiry_date = datetime.strptime(data["passport_expiry_date"], "%Y-%m-%d").date()
+        except ValueError:
+             raise HTTPException(status_code=422, detail="Invalid passport expiry date.")
+    if "passport_document_url" in data:
+         current_user.passport_document_url = data["passport_document_url"]
+    
+    if "cin_number" in data:
+        num = (data["cin_number"] or "").strip()
+        if num and not re.match(r"^\d{8}$", num):
+             raise HTTPException(status_code=422, detail="CIN must be exactly 8 digits.")
+        current_user.cin_number = num
+    if "cin_document_url" in data:
+         current_user.cin_document_url = data["cin_document_url"]
+    
+    if "date_of_birth" in data:
+        try:
+             current_user.date_of_birth = datetime.strptime(data["date_of_birth"], "%Y-%m-%d").date()
+        except ValueError:
+             pass
+    if "nationality" in data:
+         current_user.nationality = data["nationality"]
+    if "gender" in data:
+         current_user.gender = data["gender"]
+    if "full_name" in data:
+         current_user.full_name = data["full_name"]
 
     if "phone_number" in data:
         phone_norm = normalize_tunisian_phone(data["phone_number"])
         if not validate_tunisian_phone_digits(phone_norm):
             raise HTTPException(
                 status_code=422,
-                detail=(
-                    "Please enter a valid Tunisian phone number (e.g. +216 9X XXX XXX)"
-                ),
+                detail="Please enter a valid Tunisian phone number (e.g. +216 9X XXX XXX)",
             )
         current_user.phone_number = phone_norm
 
@@ -617,35 +588,6 @@ def patch_my_settings(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
         current_user.profile_photo_url = data["profile_photo_url"]
-
-    if "full_name" in data:
-        fn = (data["full_name"] or "").strip()
-        if not fn:
-            raise HTTPException(status_code=422, detail="Full name cannot be empty.")
-        current_user.full_name = fn
-
-    if "date_of_birth" in data:
-        dob_raw = data["date_of_birth"]
-        if dob_raw:
-            try:
-                dob = datetime.strptime(dob_raw, "%Y-%m-%d").date()
-                age = (date.today() - dob).days // 365
-                if age < 18:
-                    raise HTTPException(status_code=422, detail="Must be at least 18 years old")
-            except ValueError:
-                raise HTTPException(status_code=422, detail="date_of_birth must be YYYY-MM-DD")
-            current_user.date_of_birth = dob
-        else:
-            current_user.date_of_birth = None
-
-    if "gender" in data:
-        g = data["gender"]
-        if g is not None and g not in ("Male", "Female"):
-            raise HTTPException(status_code=422, detail="gender must be Male or Female.")
-        current_user.gender = g
-
-    if "nationality" in data:
-        current_user.nationality = (data["nationality"] or "").strip() or None
 
     if "residential_address" in data:
         current_user.residential_address = (data["residential_address"] or "").strip() or None
@@ -659,9 +601,7 @@ def patch_my_settings(
             if not validate_emergency_contact_phone(raw):
                 raise HTTPException(
                     status_code=422,
-                    detail=(
-                        "Emergency contact phone must match Tunisian (+216…) or international (+ and 7–15 digits)."
-                    ),
+                    detail="Emergency contact phone must be a valid Tunisian (+216…) or international (+…) number.",
                 )
             current_user.emergency_contact_phone = normalize_emergency_contact_phone(raw)
         else:
@@ -670,85 +610,25 @@ def patch_my_settings(
     if "emergency_contact_relationship" in data:
         current_user.emergency_contact_relationship = data["emergency_contact_relationship"]
 
-    if "cin_number" in data:
-        num = (data["cin_number"] or "").strip()
-        if num and not re.match(r"^\d{8}$", num):
-            raise HTTPException(status_code=422, detail="CIN must be exactly 8 digits")
-        current_user.cin_number = num or None
-
-    if "cin_document_url" in data:
-        try:
-            validate_id_document_data_url(data["cin_document_url"])
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-        current_user.cin_document_url = data["cin_document_url"]
+    if is_resubmit:
         current_user.id_document_status = "pending"
+        current_user.rejected_fields = None
         current_user.id_document_rejection_reason = None
-
-    if "passport_number" in data:
-        pnum = (data["passport_number"] or "").strip()
-        if pnum and not validate_passport_number(pnum):
-            raise HTTPException(
-                status_code=422,
-                detail="Passport number must be letters followed by digits (min. 6 characters).",
+        # Notify super admins
+        iata = current_user.airport_iata or ""
+        body = f"{current_user.full_name} has resubmitted their conditionally rejected profile fields."
+        try:
+            notify_all_super_admins(
+                db, kind="profile_resubmitted_review", body=body,
+                context={"action": "open_admin_review", "admin_id": current_user.id}
             )
-        current_user.passport_number = pnum.upper() if pnum else None
-
-    if "passport_expiry_date" in data:
-        raw = data["passport_expiry_date"]
-        if raw:
-            try:
-                pexp = datetime.strptime(raw, "%Y-%m-%d").date()
-            except ValueError:
-                raise HTTPException(status_code=422, detail="passport_expiry_date must be YYYY-MM-DD")
-            if not validate_passport_expiry_future(pexp):
-                raise HTTPException(
-                    status_code=422, detail="Passport expiry must be a future date.",
-                )
-            current_user.passport_expiry_date = pexp
-        else:
-            current_user.passport_expiry_date = None
-
-    if "passport_document_url" in data:
-        try:
-            validate_id_document_data_url(data["passport_document_url"])
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-        current_user.passport_document_url = data["passport_document_url"]
-        current_user.id_document_status = "pending"
-        current_user.id_document_rejection_reason = None
-
-    to_remove: list[str] = []
-    if "full_name" in data and "full_name" in unlock:
-        to_remove.append("full_name")
-    if "date_of_birth" in data and "date_of_birth" in unlock:
-        to_remove.append("date_of_birth")
-    if "gender" in data and "gender" in unlock:
-        to_remove.append("gender")
-    if "nationality" in data and "nationality" in unlock:
-        to_remove.append("nationality")
-    if "residential_address" in data and "residential_address" in unlock:
-        to_remove.append("residential_address")
-    if "emergency_contact" in unlock and any(
-        k in data
-        for k in (
-            "emergency_contact_name",
-            "emergency_contact_phone",
-            "emergency_contact_relationship",
-        )
-    ):
-        to_remove.append("emergency_contact")
-    if "cin" in unlock and "cin_document_url" in data:
-        to_remove.append("cin")
-    if "passport" in unlock and "passport_document_url" in data:
-        to_remove.append("passport")
+        except Exception:
+            pass
 
     current_user.updated_at = datetime.now(timezone.utc)
-    if to_remove:
-        _remove_unlock_keys(db, current_user, list(dict.fromkeys(to_remove)))
     db.commit()
 
-    return {"message": "Settings updated"}
+    return {"message": "Settings updated. Profile resubmitted for approval." if is_resubmit else "Settings updated"}
 
 
 @router.patch("/me/super-admin-profile", status_code=200)
@@ -852,378 +732,6 @@ def patch_super_admin_self_profile(
     return {"message": "Profile updated"}
 
 
-@router.post("/me/id-document", status_code=200)
-def reupload_id_document(
-    payload: IdDocumentReuploadRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Re-submit CIN and/or passport document after super admin rejection."""
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Not allowed.")
-    if current_user.id_document_status != "rejected":
-        raise HTTPException(
-            status_code=422,
-            detail="Re-upload is only available after your ID was rejected.",
-        )
-
-    cin_u = payload.cin_document_url
-    pass_u = payload.passport_document_url
-    if not cin_u and not pass_u:
-        raise HTTPException(
-            status_code=422,
-            detail="Provide at least one of cin_document_url or passport_document_url.",
-        )
-
-    if cin_u:
-        try:
-            validate_id_document_data_url(cin_u)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-        current_user.cin_document_url = cin_u
-    if pass_u:
-        try:
-            validate_id_document_data_url(pass_u)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-        current_user.passport_document_url = pass_u
-
-    current_user.id_document_status = "pending"
-    current_user.id_document_rejection_reason = None
-    current_user.updated_at = datetime.now(timezone.utc)
-    db.commit()
-
-    iata = current_user.airport_iata or ""
-    airport_label = AIRPORT_DISPLAY.get(iata, iata or "Unknown")
-    body = (
-        f"{current_user.full_name} assigned to {airport_label} has submitted identity documents for review."
-    )
-    try:
-        notify_all_super_admins(
-            db,
-            kind="id_submitted_review",
-            body=body,
-            context={
-                "action": "open_admin_review",
-                "admin_id": current_user.id,
-            },
-        )
-        db.commit()
-    except Exception as exc:
-        logger.error(f"In-app ID review notification error: {exc}")
-        db.rollback()
-
-    return {"message": "ID document submitted for review"}
-
-
-@router.post("/me/id-profile-resubmit", status_code=200)
-def resubmit_unlocked_id_profile(
-    payload: IdProfileResubmitRequest,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """After super admin unlocks CIN and/or passport, admin saves corrected ID data."""
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Not allowed.")
-    unlock = _unlock_set(current_user)
-    legacy = int(getattr(current_user, "id_fields_unlocked", 0) or 0)
-    need_cin = "cin" in unlock or (legacy and not unlock)
-    need_pass = "passport" in unlock or (legacy and not unlock)
-    if not need_cin and not need_pass:
-        raise HTTPException(
-            status_code=422,
-            detail="ID fields are not unlocked for correction.",
-        )
-
-    pexp = None
-    if need_cin:
-        if not payload.cin_number or not str(payload.cin_number).strip():
-            raise HTTPException(status_code=422, detail="CIN number is required.")
-        if not re.match(r"^\d{8}$", str(payload.cin_number).strip()):
-            raise HTTPException(status_code=422, detail="CIN must be exactly 8 digits")
-        if not payload.cin_document_url:
-            raise HTTPException(status_code=422, detail="CIN document is required.")
-        try:
-            validate_id_document_data_url(payload.cin_document_url)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-
-    if need_pass:
-        pnum = (payload.passport_number or "").strip()
-        if not validate_passport_number(pnum):
-            raise HTTPException(
-                status_code=422,
-                detail="Passport number must be letters followed by digits (min. 6 characters).",
-            )
-        if not payload.passport_expiry_date:
-            raise HTTPException(status_code=422, detail="Passport expiry is required.")
-        try:
-            pexp = datetime.strptime(payload.passport_expiry_date, "%Y-%m-%d").date()
-            if not validate_passport_expiry_future(pexp):
-                raise HTTPException(
-                    status_code=422, detail="Passport expiry must be a future date.",
-                )
-        except ValueError:
-            raise HTTPException(status_code=422, detail="passport_expiry_date must be YYYY-MM-DD")
-        if not payload.passport_document_url:
-            raise HTTPException(status_code=422, detail="Passport document is required.")
-        try:
-            validate_id_document_data_url(payload.passport_document_url)
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-
-    if need_cin:
-        current_user.cin_number = str(payload.cin_number).strip()
-        current_user.cin_document_url = payload.cin_document_url
-    if need_pass:
-        pnum = (payload.passport_number or "").strip()
-        current_user.passport_number = pnum.upper()
-        current_user.passport_document_url = payload.passport_document_url
-        current_user.passport_expiry_date = pexp
-
-    current_user.id_fields_unlocked = 0
-    current_user.id_document_status = "pending"
-    current_user.id_document_rejection_reason = None
-    current_user.updated_at = datetime.now(timezone.utc)
-
-    to_remove: list[str] = []
-    if need_cin and ("cin" in unlock or (legacy and not unlock)):
-        to_remove.append("cin")
-    if need_pass and ("passport" in unlock or (legacy and not unlock)):
-        to_remove.append("passport")
-    if to_remove:
-        _remove_unlock_keys(db, current_user, to_remove)
-    db.commit()
-
-    iata = current_user.airport_iata or ""
-    airport_label = AIRPORT_DISPLAY.get(iata, iata or "Unknown")
-    body = (
-        f"{current_user.full_name} assigned to {airport_label} has submitted identity documents for review."
-    )
-    try:
-        notify_all_super_admins(
-            db,
-            kind="id_resubmitted_review",
-            body=body,
-            context={
-                "action": "open_admin_review",
-                "admin_id": current_user.id,
-            },
-        )
-        db.commit()
-    except Exception as exc:
-        logger.error(f"In-app ID resubmit notification error: {exc}")
-        db.rollback()
-
-    return {"message": "ID information saved and submitted for review."}
-
-
-@router.post("/me/correction-request", status_code=200)
-def submit_my_correction_request(
-    payload: MeCorrectionRequestBody,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Not allowed.")
-    if not current_user.profile_complete:
-        raise HTTPException(status_code=422, detail="Complete your profile first.")
-    if _unlock_set(current_user):
-        raise HTTPException(
-            status_code=422,
-            detail="Finish saving your unlocked correction fields before requesting another change.",
-        )
-    if getattr(current_user, "id_fields_unlocked", 0):
-        raise HTTPException(
-            status_code=422,
-            detail="Use Save & Resubmit while your ID fields are unlocked.",
-        )
-    if current_user.id_document_status == "pending":
-        raise HTTPException(
-            status_code=422,
-            detail="Wait until your current ID submission is reviewed before requesting a correction.",
-        )
-    existing = (
-        db.query(CorrectionRequest)
-        .filter(
-            CorrectionRequest.admin_id == current_user.id,
-            CorrectionRequest.status == "pending",
-        )
-        .first()
-    )
-    if existing:
-        raise HTTPException(status_code=422, detail="A correction request is already pending.")
-
-    reason = (payload.reason or "").strip()
-    if not reason:
-        raise HTTPException(status_code=422, detail="Please describe what needs to be corrected.")
-
-    cr = CorrectionRequest(
-        id=str(uuid.uuid4()),
-        admin_id=current_user.id,
-        reason=reason,
-        requested_fields=list(payload.fields),
-        status="pending",
-    )
-    db.add(cr)
-    db.commit()
-
-    iata = current_user.airport_iata or ""
-    airport_label = AIRPORT_DISPLAY.get(iata, iata or "Unknown")
-    body = (
-        f"{current_user.full_name} assigned to {airport_label} is requesting a correction to their ID information. "
-        f"Reason: {reason}."
-    )
-    try:
-        notify_all_super_admins(
-            db,
-            kind="id_correction_request",
-            body=body,
-            context={
-                "action": "open_admin_review",
-                "admin_id": current_user.id,
-            },
-        )
-        db.commit()
-    except Exception as exc:
-        logger.error(f"In-app correction notification error: {exc}")
-        db.rollback()
-
-    return {
-        "message": "Your correction request has been submitted. Please wait for the Super Admin to review it.",
-    }
-
-
-@router.patch("/admins/{user_id}/profile", status_code=200)
-def patch_admin_profile_by_super(
-    user_id: int,
-    payload: SuperAdminAdminProfilePatch,
-    db: Session = Depends(get_db),
-    _super: User = Depends(require_super_admin),
-):
-    """Super admin: edit any field on an airport admin (including read-only fields for the admin)."""
-    user = db.query(User).filter(User.id == user_id, User.role == "admin").first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Admin not found.")
-    data = payload.model_dump(exclude_unset=True)
-    if not data:
-        raise HTTPException(status_code=422, detail="Nothing to update.")
-
-    if "full_name" in data:
-        fn = (data["full_name"] or "").strip()
-        if not fn:
-            raise HTTPException(status_code=422, detail="Full name cannot be empty.")
-        user.full_name = fn
-
-    if "personal_email" in data:
-        pe = (data["personal_email"] or "").strip()
-        if pe and "@" not in pe:
-            raise HTTPException(status_code=422, detail="Invalid personal email.")
-        user.personal_email = pe or None
-
-    if "phone_number" in data:
-        phone_norm = normalize_tunisian_phone(data["phone_number"])
-        if not validate_tunisian_phone_digits(phone_norm):
-            raise HTTPException(
-                status_code=422,
-                detail="Please enter a valid Tunisian phone number (e.g. +216 9X XXX XXX)",
-            )
-        user.phone_number = phone_norm
-
-    if "profile_photo_url" in data:
-        try:
-            validate_profile_photo_data_url(data["profile_photo_url"])
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-        user.profile_photo_url = data["profile_photo_url"]
-
-    if "date_of_birth" in data:
-        dob_raw = data["date_of_birth"]
-        if dob_raw:
-            try:
-                dob = datetime.strptime(dob_raw, "%Y-%m-%d").date()
-                age = (date.today() - dob).days // 365
-                if age < 18:
-                    raise HTTPException(status_code=422, detail="Must be at least 18 years old")
-            except ValueError:
-                raise HTTPException(status_code=422, detail="date_of_birth must be YYYY-MM-DD")
-            user.date_of_birth = dob
-        else:
-            user.date_of_birth = None
-
-    if "nationality" in data:
-        user.nationality = (data["nationality"] or "").strip() or None
-
-    if "gender" in data:
-        g = data["gender"]
-        if g is not None and g not in ("Male", "Female"):
-            raise HTTPException(status_code=422, detail="gender must be Male or Female.")
-        user.gender = g
-
-    if "residential_address" in data:
-        user.residential_address = (data["residential_address"] or "").strip() or None
-
-    if "emergency_contact_name" in data:
-        user.emergency_contact_name = (data["emergency_contact_name"] or "").strip() or None
-
-    if "emergency_contact_phone" in data:
-        raw = data["emergency_contact_phone"]
-        if raw is not None and str(raw).strip():
-            if not validate_emergency_contact_phone(raw):
-                raise HTTPException(
-                    status_code=422,
-                    detail="Emergency contact phone must be Tunisian (+216…) or international (+…).",
-                )
-            user.emergency_contact_phone = normalize_emergency_contact_phone(raw)
-        else:
-            user.emergency_contact_phone = None
-
-    if "emergency_contact_relationship" in data:
-        user.emergency_contact_relationship = data["emergency_contact_relationship"]
-
-    if "cin_number" in data:
-        num = (data["cin_number"] or "").strip()
-        if num and not re.match(r"^\d{8}$", num):
-            raise HTTPException(status_code=422, detail="CIN must be exactly 8 digits")
-        user.cin_number = num or None
-
-    if "passport_number" in data:
-        pnum = (data["passport_number"] or "").strip()
-        if pnum and not validate_passport_number(pnum):
-            raise HTTPException(
-                status_code=422,
-                detail="Passport number must be letters followed by digits (min. 6 characters).",
-            )
-        user.passport_number = pnum.upper() if pnum else None
-
-    if "passport_expiry_date" in data:
-        raw = data["passport_expiry_date"]
-        if raw:
-            try:
-                pexp = datetime.strptime(raw, "%Y-%m-%d").date()
-            except ValueError:
-                raise HTTPException(status_code=422, detail="passport_expiry_date must be YYYY-MM-DD")
-            user.passport_expiry_date = pexp
-        else:
-            user.passport_expiry_date = None
-
-    if "cin_document_url" in data:
-        try:
-            validate_id_document_data_url(data["cin_document_url"])
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-        user.cin_document_url = data["cin_document_url"]
-
-    if "passport_document_url" in data:
-        try:
-            validate_id_document_data_url(data["passport_document_url"])
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-        user.passport_document_url = data["passport_document_url"]
-
-    user.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    return {"message": "Admin profile updated"}
 
 
 @router.get("/admins/{user_id}/review", response_model=AdminReviewDetail)
@@ -1235,117 +743,12 @@ def get_admin_review_detail(
     user = db.query(User).filter(User.id == user_id, User.role == "admin").first()
     if not user:
         raise HTTPException(status_code=404, detail="Admin not found.")
-    base = AdminReviewDetail.model_validate(user)
-    cr = (
-        db.query(CorrectionRequest)
-        .filter(
-            CorrectionRequest.admin_id == user_id,
-            CorrectionRequest.status == "pending",
-        )
-        .first()
-    )
-    cr_out = None
-    if cr:
-        cr_out = CorrectionRequestOut(
-            id=cr.id,
-            reason=cr.reason,
-            status=str(cr.status),
-            super_admin_note=cr.super_admin_note,
-            created_at=cr.created_at,
-            requested_fields=_parse_json_list(cr.requested_fields),
-        )
-    return base.model_copy(
-        update={
-            "correction_request": cr_out,
-            "id_fields_unlocked": int(getattr(user, "id_fields_unlocked", 0) or 0),
-        }
-    )
+    return AdminReviewDetail.model_validate(user)
 
-
-@router.post("/admins/{user_id}/correction/unlock", status_code=200)
-def unlock_admin_id_correction(
-    user_id: int,
-    db: Session = Depends(get_db),
-    _super: User = Depends(require_super_admin),
-):
-    user = db.query(User).filter(User.id == user_id, User.role == "admin").first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Admin not found.")
-    cr = (
-        db.query(CorrectionRequest)
-        .filter(
-            CorrectionRequest.admin_id == user_id,
-            CorrectionRequest.status == "pending",
-        )
-        .first()
-    )
-    if not cr:
-        raise HTTPException(status_code=404, detail="No pending correction request.")
-    cr.status = "unlocked"
-    fields = _parse_json_list(cr.requested_fields)
-    if not fields:
-        fields = list(_LEGACY_FULL_CORRECTION_FIELDS)
-    user.correction_unlock_fields = fields
-    user.id_fields_unlocked = 1 if ({"cin", "passport"} & set(fields)) else 0
-    user.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    try:
-        notify_airport_admin(
-            db,
-            admin_id=user.id,
-            kind="id_unlocked",
-            body="Your ID information has been unlocked. Please log in and resubmit your correct details.",
-            context={"action": "open_settings"},
-        )
-        db.commit()
-    except Exception as exc:
-        logger.error(f"In-app unlock notification error: {exc}")
-        db.rollback()
-    return {"message": "ID fields unlocked for this admin."}
-
-
-@router.post("/admins/{user_id}/correction/dismiss", status_code=200)
-def dismiss_admin_correction_request(
-    user_id: int,
-    payload: CorrectionDismissBody,
-    db: Session = Depends(get_db),
-    _super: User = Depends(require_super_admin),
-):
-    user = db.query(User).filter(User.id == user_id, User.role == "admin").first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Admin not found.")
-    cr = (
-        db.query(CorrectionRequest)
-        .filter(
-            CorrectionRequest.admin_id == user_id,
-            CorrectionRequest.status == "pending",
-        )
-        .first()
-    )
-    if not cr:
-        raise HTTPException(status_code=404, detail="No pending correction request.")
-    cr.status = "dismissed"
-    note = (payload.note or "").strip()
-    cr.super_admin_note = note if note else None
-    db.commit()
-    reason_text = note if note else "No reason provided."
-    try:
-        notify_airport_admin(
-            db,
-            admin_id=user_id,
-            kind="id_correction_dismissed",
-            body=f"Your correction request was dismissed. Reason: {reason_text}",
-            context={"action": "open_settings"},
-        )
-        db.commit()
-    except Exception as exc:
-        logger.error(f"In-app dismiss notification error: {exc}")
-        db.rollback()
-    return {"message": "Correction request dismissed."}
 
 
 @router.post("/admins/{user_id}/id-review", status_code=200)
-def review_admin_id_document(
+def review_admin_profile(
     user_id: int,
     payload: IdReviewRequest,
     db: Session = Depends(get_db),
@@ -1358,34 +761,68 @@ def review_admin_id_document(
     if payload.action == "approve":
         user.id_document_status = "approved"
         user.id_document_rejection_reason = None
-    else:
-        reason = (payload.reason or "").strip()
-        if not reason:
-            raise HTTPException(
-                status_code=422, detail="Rejection reason is required.",
+        user.rejected_fields = None
+        user.updated_at = datetime.now(timezone.utc)
+        db.commit()
+
+        # In-app notification to the admin
+        try:
+            notify_airport_admin(
+                db,
+                admin_id=user.id,
+                kind="profile_approved",
+                body="Your profile has been approved! You can now access the dashboard.",
+                context={"action": "go_dashboard"},
             )
+            db.commit()
+        except Exception as exc:
+            logger.error(f"In-app approval notification error: {exc}")
+            db.rollback()
+
+        logger.info(f"Admin profile approved: {user.email}")
+        return {"message": "Admin profile approved. They now have dashboard access."}
+
+    else:
+        # Rejection Flow
+        rejected_fields = payload.rejected_fields or []
+        if not rejected_fields:
+            raise HTTPException(
+                status_code=422, detail="You must select at least one incorrect field to reject the profile."
+            )
+            
+        custom_reason = (payload.reason or "").strip()
+        
+        # Build dynamic reason message
+        fields_str = ", ".join(rejected_fields)
+        reason_msg = f"The following fields were rejected: {fields_str}"
+        if custom_reason:
+            reason_msg += f". Additional notes: {custom_reason}"
+
         user.id_document_status = "rejected"
-        user.id_document_rejection_reason = reason
-        personal = (user.personal_email or "").strip()
-        if personal:
-            first = user.full_name.split()[0] if user.full_name.strip() else "there"
-            try:
-                send_id_rejection_email(personal, first, reason)
-            except Exception as exc:
-                logger.error(f"ID rejection email error: {exc}")
+        user.id_document_rejection_reason = reason_msg
+        user.rejected_fields = rejected_fields
+        user.updated_at = datetime.now(timezone.utc)
+        db.commit()
 
-    user.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    label = "approved" if payload.action == "approve" else "rejected"
-    return {"message": f"ID marked as {label}"}
+        # In-app notification to the admin
+        try:
+            notify_airport_admin(
+                db,
+                admin_id=user.id,
+                kind="profile_rejected",
+                body=f"Your profile was rejected. {reason_msg}. Please update the required information.",
+                context={"action": "open_settings"},
+            )
+            db.commit()
+        except Exception as exc:
+            logger.error(f"In-app rejection notification error: {exc}")
+            db.rollback()
+
+        logger.info(f"Admin profile rejected (fields: {rejected_fields}): {user.email}")
+        return {"message": "Admin profile rejected successfully."}
 
 
-def _admin_verification_status(
-    u: User,
-    pending_correction_ids: set[int],
-) -> str:
-    if u.id in pending_correction_ids:
-        return "under_review"
+def _admin_verification_status(u: User) -> str:
     st = getattr(u, "id_document_status", None)
     if st == "rejected":
         return "rejected"
@@ -1420,16 +857,9 @@ def list_admins(
         .order_by(User.id.asc())
         .all()
     )
-    pending_correction_ids = {
-        int(r[0])
-        for r in db.query(CorrectionRequest.admin_id)
-        .filter(CorrectionRequest.status == "pending")
-        .all()
-    }
-
     rows: list[AdminListItem] = []
     for u in admins:
-        vs = _admin_verification_status(u, pending_correction_ids)
+        vs = _admin_verification_status(u)
         oa = _admin_onboarding_active(u)
         if status_filter == "active" and not oa:
             continue
@@ -1465,19 +895,67 @@ def list_admins(
 
 
 @router.delete("/admins/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def deactivate_admin(
+def delete_admin(
     user_id: int,
     db: Session = Depends(get_db),
-    _super: User = Depends(require_super_admin),
+    current_super_admin: User = Depends(require_super_admin),
 ):
-    """Soft-deactivate an admin account (sets is_active = 0)."""
+    """Permanently delete an airport admin and their dependent records."""
+    if current_super_admin.id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Super admin cannot delete their own account.",
+        )
+
     user = db.query(User).filter(User.id == user_id, User.role == "admin").first()
     if not user:
         raise HTTPException(status_code=404, detail="Admin not found.")
-    user.is_active = 0
-    user.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    logger.info(f"Admin deactivated: {user.email}")
+
+    try:
+        message_ids = [
+            message_id
+            for (message_id,) in db.query(Message.id).filter(
+                or_(Message.from_user_id == user.id, Message.to_user_id == user.id)
+            ).all()
+        ]
+        if message_ids:
+            db.query(MessageReply).filter(
+                MessageReply.message_id.in_(message_ids)
+            ).delete(synchronize_session=False)
+            db.query(Message).filter(Message.id.in_(message_ids)).delete(
+                synchronize_session=False
+            )
+
+        db.query(MessageReply).filter(MessageReply.author_id == user.id).delete(
+            synchronize_session=False
+        )
+        db.query(InAppNotification).filter(
+            InAppNotification.recipient_user_id == user.id
+        ).delete(synchronize_session=False)
+        db.query(PasswordResetToken).filter(
+            PasswordResetToken.admin_id == user.id
+        ).delete(synchronize_session=False)
+        db.query(AIAlert).filter(AIAlert.acted_by_admin_id == user.id).update(
+            {AIAlert.acted_by_admin_id: None},
+            synchronize_session=False,
+        )
+
+        deleted_email = user.email
+        db.delete(user)
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        logger.exception("Failed to delete admin %s due to database constraints", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Admin could not be deleted because related records still reference this account.",
+        ) from exc
+
+    logger.info(
+        "Admin deleted by super admin %s: %s",
+        current_super_admin.email,
+        deleted_email,
+    )
 
 
 @router.patch("/admins/{user_id}/activate", response_model=AdminListItem)

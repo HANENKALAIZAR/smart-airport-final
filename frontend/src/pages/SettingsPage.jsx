@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Settings, User, Bell, Globe, Shield, CheckCircle } from 'lucide-react';
+import CustomSelect from '../components/ui/CustomSelect';
 
 export default function SettingsPage() {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -70,12 +71,15 @@ export default function SettingsPage() {
 
                     <div className="form-group">
                         <label className="form-label">Role</label>
-                        <select className="form-select" value={profile.role}
-                            onChange={e => setProfile(p => ({ ...p, role: e.target.value }))}>
-                            <option value="passenger">Passenger</option>
-                            <option value="staff">Staff</option>
-                            <option value="admin">Admin</option>
-                        </select>
+                        <CustomSelect
+                            options={[
+                                { value: 'passenger', label: 'Passenger' },
+                                { value: 'staff', label: 'Staff' },
+                                { value: 'admin', label: 'Admin' },
+                            ]}
+                            value={profile.role}
+                            onChange={(val) => setProfile(p => ({ ...p, role: val }))}
+                        />
                     </div>
                 </div>
 
@@ -120,12 +124,11 @@ export default function SettingsPage() {
                     <div className="form-row form-row--2">
                         <div className="form-group">
                             <label className="form-label">Default Airport</label>
-                            <select className="form-select" value={preferences.defaultAirport}
-                                onChange={e => setPreferences(p => ({ ...p, defaultAirport: e.target.value }))}>
-                                {['CDG', 'JFK', 'LAX', 'LHR', 'DXB', 'ATL', 'ORD'].map(code => (
-                                    <option key={code} value={code}>{code}</option>
-                                ))}
-                            </select>
+                            <CustomSelect
+                                options={['CDG', 'JFK', 'LAX', 'LHR', 'DXB', 'ATL', 'ORD'].map(code => ({ value: code, label: code }))}
+                                value={preferences.defaultAirport}
+                                onChange={(val) => setPreferences(p => ({ ...p, defaultAirport: val }))}
+                            />
                         </div>
                         <div className="form-group">
                             <label className="form-label">Delay Alert Threshold ({preferences.delayThreshold} min)</label>

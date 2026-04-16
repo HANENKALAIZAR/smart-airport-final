@@ -456,8 +456,8 @@ const en = {
     searchFlights: 'Search flights...',
 
     /* ── Admin Login ─────────────────────────────────────────── */
-    admin_login_title: 'Smart Airport',
-    admin_login_subtitle: 'Operations Control Panel',
+    admin_login_title: 'Member Login',
+    admin_login_subtitle: 'sign in to your account',
     admin_login_role_label: 'Role',
     admin_login_airport_admin: 'Airport Admin',
     admin_login_super_admin: 'Super Admin',

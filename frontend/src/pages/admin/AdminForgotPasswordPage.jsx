@@ -38,7 +38,7 @@ export default function AdminForgotPasswordPage() {
                         <Plane size={32} />
                     </div>
                     <h1>Forgot password</h1>
-                    <p>Enter your work email (e.g. firstname.lastname@mir-airport.tn)</p>
+                    <p>Enter your work email and we'll send you a link to reset your password</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="admin-login__form">
@@ -83,7 +83,7 @@ export default function AdminForgotPasswordPage() {
                             className="admin-form-input"
                             value={workEmail}
                             onChange={(e) => setWorkEmail(e.target.value)}
-                            placeholder="hanen.kalaizar@mir-airport.tn"
+                            placeholder="firstname.lastname@mir-airport.tn"
                             autoComplete="email"
                             required
                         />

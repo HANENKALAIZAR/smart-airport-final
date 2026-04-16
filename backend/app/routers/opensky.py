@@ -19,10 +19,6 @@ AIRPORT_COORDS = {
     "DJE": (33.875, 10.775),   # Djerba–Zarzis
     "NBE": (36.076, 10.439),   # Enfidha–Hammamet
     "MIR": (35.758, 10.755),   # Monastir
-    "SFA": (34.718, 10.691),   # Sfax–Thyna
-    "TOE": (33.940, 8.110),    # Tozeur–Nefta
-    "TBJ": (36.978, 8.877),    # Tabarka
-    "GAF": (34.422, 8.822),    # Gafsa–Ksar
 }
 
 # ── Fallback mock aircraft generator ──────────────────────────

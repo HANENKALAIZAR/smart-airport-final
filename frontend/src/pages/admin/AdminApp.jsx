@@ -4,6 +4,7 @@ import { apiGetMe } from '../../services/adminApi';
 import AdminLogin from './AdminLogin';
 import ChangePasswordScreen from './ChangePasswordScreen';
 import ProfileCompletionScreen from './ProfileCompletionScreen';
+import PendingApprovalScreen from './PendingApprovalScreen';
 import IdDocumentReuploadScreen from './IdDocumentReuploadScreen';
 import AdminSidebar from '../../components/admin/AdminSidebar';
 import AdminHeader from '../../components/admin/AdminHeader';
@@ -45,6 +46,13 @@ export default function AdminApp() {
         if (storedRole === 'super_admin') return true;
         return localStorage.getItem('admin_profile_complete') === 'true';
     });
+    const [idDocStatus, setIdDocStatus] = useState(() => {
+        if (storedRole === 'super_admin') return 'approved';
+        try {
+            const u = JSON.parse(localStorage.getItem('admin_user') || 'null');
+            return u?.id_document_status || null;
+        } catch { return null; }
+    });
     const [currentUser, setCurrentUser] = useState(() => {
         try { return JSON.parse(localStorage.getItem('admin_user') || 'null'); } catch { return null; }
     });
@@ -59,6 +67,22 @@ export default function AdminApp() {
 
     const role = currentUser?.role || localStorage.getItem('admin_role') || 'admin';
 
+    const _applyMeData = (data) => {
+        localStorage.setItem('admin_user', JSON.stringify(data));
+        localStorage.setItem('admin_role', data.role);
+        if (data.airport_iata) localStorage.setItem('admin_airport_iata', data.airport_iata);
+        setCurrentUser(data);
+        const isSuper = data.role === 'super_admin';
+        const mc = isSuper ? false : !!data.must_change_password;
+        const pc = isSuper ? true : !!data.profile_complete;
+        const docStatus = isSuper ? 'approved' : (data.id_document_status || null);
+        localStorage.setItem('admin_must_change', String(mc));
+        localStorage.setItem('admin_profile_complete', String(pc));
+        setMustChangePassword(mc);
+        setProfileComplete(pc);
+        setIdDocStatus(docStatus);
+    };
+
     // Sync onboarding flags from server (middleware equivalent for SPA)
     useEffect(() => {
         if (!validToken) return;
@@ -66,20 +90,12 @@ export default function AdminApp() {
         (async () => {
             const { data, error } = await apiGetMe();
             if (cancelled || error || !data) return;
-            localStorage.setItem('admin_user', JSON.stringify(data));
-            localStorage.setItem('admin_role', data.role);
-            if (data.airport_iata) localStorage.setItem('admin_airport_iata', data.airport_iata);
-            setCurrentUser(data);
-            const isSuper = data.role === 'super_admin';
-            const mc = isSuper ? false : !!data.must_change_password;
-            const pc = isSuper ? true : !!data.profile_complete;
-            localStorage.setItem('admin_must_change', String(mc));
-            localStorage.setItem('admin_profile_complete', String(pc));
-            setMustChangePassword(mc);
-            setProfileComplete(pc);
+            _applyMeData(data);
         })();
         return () => { cancelled = true; };
     }, [validToken]);
+
+
 
     // ── All handler functions ──────────────────────────────────────────────
     function handlePasswordChanged() {
@@ -88,16 +104,21 @@ export default function AdminApp() {
     }
 
     function handleProfileComplete() {
+        // After profile submission the status is 'pending' — super admin must approve.
+        // We update profileComplete but do NOT skip the approval gate.
         setProfileComplete(true);
         localStorage.setItem('admin_profile_complete', 'true');
+        setIdDocStatus('pending');
     }
 
     async function handleIdReuploadComplete() {
         const { data } = await apiGetMe();
-        if (data) {
-            setCurrentUser(data);
-            localStorage.setItem('admin_user', JSON.stringify(data));
-        }
+        if (data) _applyMeData(data);
+    }
+
+    async function handleApprovalRefresh() {
+        const { data } = await apiGetMe();
+        if (data) _applyMeData(data);
     }
 
     function handleLogout() {
@@ -123,11 +144,21 @@ export default function AdminApp() {
         if (!profileComplete) {
             return <ProfileCompletionScreen user={currentUser} onComplete={handleProfileComplete} />;
         }
-        if (currentUser?.id_document_status === 'rejected') {
+        if (idDocStatus === 'rejected') {
             return (
                 <IdDocumentReuploadScreen
                     user={currentUser}
                     onComplete={handleIdReuploadComplete}
+                />
+            );
+        }
+        if (idDocStatus !== 'approved') {
+            // Covers 'pending' and null (profile just submitted but not yet approved)
+            return (
+                <PendingApprovalScreen
+                    user={currentUser}
+                    onLogout={handleLogout}
+                    onRefresh={handleApprovalRefresh}
                 />
             );
         }

@@ -10,7 +10,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
-from app.models.models import Flight, Airport, Airline, Prediction, FlightFeature
+from app.dependencies import require_approved_admin
+from app.models.models import Flight, Airport, Airline, Prediction, FlightFeature, User
 from app.schemas.schemas import FlightListOut, FlightDetailOut, PredictionOut, FlightFeaturesOut, FlightCreate, FlightUpdate
 
 router = APIRouter(prefix="/api/flights", tags=["Flights"])
@@ -73,7 +74,11 @@ def list_flights(
 
 
 @router.post("", response_model=FlightListOut, status_code=201)
-def create_flight(payload: FlightCreate, db: Session = Depends(get_db)):
+def create_flight(
+    payload: FlightCreate,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_approved_admin),
+):
     """Create a new flight."""
     # Resolve airline
     al = db.query(Airline).filter(Airline.iata_code == payload.airline_iata.upper()).first()
@@ -115,7 +120,12 @@ def create_flight(payload: FlightCreate, db: Session = Depends(get_db)):
 
 
 @router.put("/{flight_id}", response_model=FlightListOut)
-def update_flight(flight_id: int, payload: FlightUpdate, db: Session = Depends(get_db)):
+def update_flight(
+    flight_id: int,
+    payload: FlightUpdate,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_approved_admin),
+):
     """Update an existing flight's status, delay, or times."""
     flight = db.query(Flight).filter(Flight.id == flight_id).first()
     if not flight:
@@ -137,7 +147,11 @@ def update_flight(flight_id: int, payload: FlightUpdate, db: Session = Depends(g
 
 
 @router.delete("/{flight_id}", status_code=204)
-def delete_flight(flight_id: int, db: Session = Depends(get_db)):
+def delete_flight(
+    flight_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_approved_admin),
+):
     """Delete a flight."""
     flight = db.query(Flight).filter(Flight.id == flight_id).first()
     if not flight:
@@ -215,4 +229,3 @@ def get_flight_features(flight_id: int, db: Session = Depends(get_db)):
     if not features:
         raise HTTPException(status_code=404, detail="Flight features not found")
     return FlightFeaturesOut.model_validate(features)
-

@@ -30,6 +30,8 @@ import {
   ID_DOC_ACCEPT,
   PHOTO_ACCEPT,
 } from '../../utils/uploadValidation';
+import CustomSelect from '../../components/ui/CustomSelect';
+
 
 const MAX_DOB_STRING = (() => {
   const d = new Date();
@@ -414,8 +416,8 @@ export default function ProfileCompletionScreen({ user, onComplete }) {
         {success ? (
           <div style={{ padding: '3rem', textAlign: 'center', color: '#4ade80' }}>
             <CheckCircle size={48} style={{ marginBottom: 12 }} />
-            <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>Profile complete!</div>
-            <div style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: 6 }}>Redirecting to dashboard…</div>
+            <div style={{ fontWeight: 700, fontSize: '1.1rem' }}>Profile submitted!</div>
+            <div style={{ fontSize: '0.8rem', opacity: 0.6, marginTop: 6 }}>Awaiting super admin approval…</div>
           </div>
         ) : (
           <form onSubmit={handleSubmit} style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -472,15 +474,16 @@ export default function ProfileCompletionScreen({ user, onComplete }) {
 
             <div>
               <label style={labelStyle}>Gender *</label>
-              <select
-                className="admin-form-input"
-                style={{ marginTop: 8, colorScheme: 'dark' }}
-                value={form.gender}
-                onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value }))}
-              >
-                <option value="Male">Male</option>
-                <option value="Female">Female</option>
-              </select>
+              <div style={{ marginTop: 8 }}>
+                <CustomSelect
+                  options={[
+                    { value: 'Male', label: 'Male' },
+                    { value: 'Female', label: 'Female' },
+                  ]}
+                  value={form.gender}
+                  onChange={(val) => setForm((f) => ({ ...f, gender: val }))}
+                />
+              </div>
               {errors.gender && <ErrMsg msg={errors.gender} />}
             </div>
 
@@ -671,20 +674,12 @@ export default function ProfileCompletionScreen({ user, onComplete }) {
             </div>
             <div>
               <label style={labelStyle}>Relationship *</label>
-              <div style={{ marginTop: 8, position: 'relative' }}>
-                <Users size={16} style={iconStyle} />
-                <select
-                  className="admin-form-input"
-                  style={{ paddingLeft: 36, colorScheme: 'dark' }}
+              <div style={{ marginTop: 8 }}>
+                <CustomSelect
+                  options={['Parent', 'Spouse', 'Sibling', 'Friend', 'Other'].map((r) => ({ value: r, label: r }))}
                   value={form.emergencyRel}
-                  onChange={(e) => setForm((f) => ({ ...f, emergencyRel: e.target.value }))}
-                >
-                  {['Parent', 'Spouse', 'Sibling', 'Friend', 'Other'].map((r) => (
-                    <option key={r} value={r}>
-                      {r}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(val) => setForm((f) => ({ ...f, emergencyRel: val }))}
+                />
               </div>
               {errors.emergencyRel && <ErrMsg msg={errors.emergencyRel} />}
             </div>
@@ -708,7 +703,7 @@ export default function ProfileCompletionScreen({ user, onComplete }) {
                   <Loader size={18} style={{ animation: 'spin 1s linear infinite' }} /> Submitting…
                 </>
               ) : (
-                '✅ Complete Profile & Enter Dashboard'
+                '✅ Submit Profile for Approval'
               )}
             </button>
           </form>

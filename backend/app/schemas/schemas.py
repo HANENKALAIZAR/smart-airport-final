@@ -6,17 +6,7 @@ from datetime import datetime, date
 from pydantic import BaseModel, field_validator
 from typing import Optional, Literal
 
-# Keys for correction-request field selection (must match backend users router).
-CORRECTION_FIELD_KEYS = frozenset({
-    "full_name",
-    "date_of_birth",
-    "gender",
-    "nationality",
-    "cin",
-    "passport",
-    "residential_address",
-    "emergency_contact",
-})
+
 
 
 # ── Airport ──────────────────────────────────────────────────
@@ -199,6 +189,7 @@ class UserOut(BaseModel):
     airport_iata: Optional[str] = None
     must_change_password: int = 0
     profile_complete: int = 0
+    is_approved: bool = False
     personal_email: Optional[str] = None
     employee_id: Optional[str] = None
     phone_number: Optional[str] = None
@@ -217,9 +208,7 @@ class UserOut(BaseModel):
     profile_photo_url: Optional[str] = None
     id_document_status: Optional[str] = None
     id_document_rejection_reason: Optional[str] = None
-    id_fields_unlocked: int = 0
-    correction_request_pending: Optional[bool] = None
-    correction_unlock_fields: Optional[list[str]] = None
+    rejected_fields: Optional[list[str]] = None
 
     @field_validator("id_document_status", "gender", "emergency_contact_relationship", mode="before")
     @classmethod
@@ -242,6 +231,7 @@ class TokenOut(BaseModel):
     token_type: str = "bearer"
     must_change_password: bool = False
     profile_complete: bool = False
+    is_approved: bool = False
     user: UserOut
 
 
@@ -324,18 +314,6 @@ class IdDocumentReuploadRequest(BaseModel):
     passport_document_url: Optional[str] = None
 
 
-class CorrectionRequestOut(BaseModel):
-    id: str
-    reason: str
-    status: str
-    super_admin_note: Optional[str] = None
-    created_at: Optional[datetime] = None
-    requested_fields: list[str] = []
-
-    class Config:
-        from_attributes = True
-
-
 class AdminReviewDetail(BaseModel):
     id: int
     full_name: str
@@ -359,9 +337,8 @@ class AdminReviewDetail(BaseModel):
     profile_photo_url: Optional[str] = None
     id_document_status: Optional[str] = None
     id_document_rejection_reason: Optional[str] = None
+    rejected_fields: Optional[list[str]] = None
     profile_complete: int = 0
-    id_fields_unlocked: int = 0
-    correction_request: Optional[CorrectionRequestOut] = None
 
     @field_validator("id_document_status", "gender", "emergency_contact_relationship", mode="before")
     @classmethod
@@ -377,33 +354,7 @@ class AdminReviewDetail(BaseModel):
 class IdReviewRequest(BaseModel):
     action: Literal["approve", "reject"]
     reason: Optional[str] = None
-
-
-class MeCorrectionRequestBody(BaseModel):
-    reason: str
-    fields: list[str]
-
-    @field_validator("fields")
-    @classmethod
-    def _validate_fields(cls, v: list[str]) -> list[str]:
-        if not v:
-            raise ValueError("Select at least one field to correct.")
-        bad = [x for x in v if x not in CORRECTION_FIELD_KEYS]
-        if bad:
-            raise ValueError(f"Invalid field keys: {bad}")
-        return list(dict.fromkeys(v))
-
-
-class CorrectionDismissBody(BaseModel):
-    note: Optional[str] = None
-
-
-class IdProfileResubmitRequest(BaseModel):
-    cin_number: Optional[str] = None
-    cin_document_url: Optional[str] = None
-    passport_number: Optional[str] = None
-    passport_document_url: Optional[str] = None
-    passport_expiry_date: Optional[str] = None
+    rejected_fields: Optional[list[str]] = None
 
 
 class AiAlertGeneratedBody(BaseModel):
@@ -479,6 +430,7 @@ class MessageOut(BaseModel):
     subject: str
     body: str
     status: str
+    is_read: bool
     created_at: datetime
     updated_at: datetime
     replies: list[MessageReplyOut] = []

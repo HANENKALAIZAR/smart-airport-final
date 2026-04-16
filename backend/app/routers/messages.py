@@ -8,7 +8,8 @@ Handles communication between airport admins and the super admin.
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Literal
+from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func
@@ -42,6 +43,7 @@ def _serialize_message(msg: Message) -> dict:
         "subject": msg.subject,
         "body": msg.body,
         "status": msg.status,
+        "is_read": getattr(msg, "is_read", False),
         "created_at": msg.created_at,
         "updated_at": msg.updated_at,
         "replies": [
@@ -66,11 +68,14 @@ def get_unread_message_count(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Inbox threads still in 'open' status (not yet opened / in progress)."""
+    """Count inbox messages the current user has NOT yet read (is_read=False)."""
     if current_user.role == "super_admin":
         n = (
             db.query(func.count(Message.id))
-            .filter(Message.direction == "to_super", Message.status == "open")
+            .filter(
+                Message.direction == "to_super",
+                Message.is_read == False,  # noqa: E712
+            )
             .scalar()
         )
     else:
@@ -79,7 +84,7 @@ def get_unread_message_count(
             .filter(
                 Message.direction == "to_admin",
                 Message.to_user_id == current_user.id,
-                Message.status == "open",
+                Message.is_read == False,  # noqa: E712
             )
             .scalar()
         )
@@ -91,22 +96,30 @@ def mark_inbox_messages_read(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """When the user opens the Messages page, clear 'unread' (open → in_progress)."""
+    """
+    Mark inbox messages as read (is_read=True) when the user opens the Messages page.
+    
+    IMPORTANT: This does NOT change message status.
+    Status transitions are:
+      - 'open'       → first message sent, no replies yet
+      - 'in_progress'→ only when a reply is actually sent
+      - 'resolved'   → only when manually resolved
+    """
     now = datetime.now(timezone.utc)
     if current_user.role == "super_admin":
         q = db.query(Message).filter(
             Message.direction == "to_super",
-            Message.status == "open",
+            Message.is_read == False,  # noqa: E712
         )
     else:
         q = db.query(Message).filter(
             Message.direction == "to_admin",
             Message.to_user_id == current_user.id,
-            Message.status == "open",
+            Message.is_read == False,  # noqa: E712
         )
     count = 0
     for msg in q.all():
-        msg.status = "in_progress"
+        msg.is_read = True
         msg.updated_at = now
         count += 1
     db.commit()
@@ -270,9 +283,10 @@ def reply_to_message(
     )
     db.add(reply)
 
-    # Auto-advance status: open → in_progress on first reply
-    if msg.status == "open":
+    # Auto-advance status back to "in_progress" if the other participant replies
+    if msg.status == "open" and current_user.id != msg.from_user_id:
         msg.status = "in_progress"
+        
     msg.updated_at = datetime.now(timezone.utc)
 
     db.commit()
@@ -288,23 +302,30 @@ def reply_to_message(
         "created_at": reply.created_at,
     }
 
+class MessageStatusUpdate(BaseModel):
+    status: Literal["open", "in_progress", "resolved"]
 
-@router.patch("/{message_id}/resolve", status_code=200)
-def resolve_message(
+@router.patch("/{message_id}/status", status_code=200)
+def update_message_status(
     message_id: int,
+    payload: MessageStatusUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Mark a message as resolved. Only super admin or the recipient can resolve."""
+    """Manually update the status of a message. Only super admin or the recipient can update."""
     msg = db.query(Message).filter(Message.id == message_id).first()
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
 
-    if current_user.role != "super_admin" and msg.to_user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorised to resolve this message")
+    if current_user.role != "super_admin" and msg.to_user_id != current_user.id and msg.from_user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorised to update this message")
 
-    msg.status = "resolved"
+    if msg.status == "resolved" and payload.status != "resolved":
+        # Maybe we allow reopening? Yes.
+        pass
+
+    msg.status = payload.status
     msg.updated_at = datetime.now(timezone.utc)
     db.commit()
-    logger.info(f"Message {message_id} resolved by user {current_user.id}")
-    return {"status": "resolved"}
+    logger.info(f"Message {message_id} status updated to {payload.status} by user {current_user.id}")
+    return {"status": msg.status}

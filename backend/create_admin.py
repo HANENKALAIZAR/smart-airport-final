@@ -14,7 +14,7 @@ def create_user():
         new_user = User(
             email="admin@example.com",
             password_hash=hash_password("AdminPassword123!"),
-            full_name="Malek Admin",
+            full_name="super Admin",
             role="super_admin",
             is_active=1,
             must_change_password=0

@@ -74,64 +74,8 @@ const AIRPORT_DATA = {
             { code: 'BJ', name: 'Nouvelair', flag: '🇹🇳' }, { code: 'SV', name: 'Saudia', flag: '🇸🇦' },
         ],
     },
-    SFA: {
-        icao: 'DTTX', locationKey: 'about_sfa_location',
-        stats: [
-            { icon: <Plane size={28} />, value: '800+', labelKey: 'about_flights_year', color: '#3B82F6' },
-            { icon: <Users size={28} />, value: '320K', labelKey: 'about_passengers_year', color: '#8B5CF6' },
-            { icon: <Globe size={28} />, value: '8', labelKey: 'about_destinations', color: '#10B981' },
-            { icon: <BarChart3 size={28} />, value: '5', labelKey: 'about_airlines_served', color: '#F59E0B' },
-        ],
-        about: `Sfax–Thyna International Airport serves Tunisia's second largest city and its surrounding industrial region.`,
-        about2: `The airport is an important logistics hub for the phosphate and olive oil industries in southern Tunisia.`,
-        airlines: [
-            { code: 'TU', name: 'Tunisair', flag: '🇹🇳' }, { code: 'UG', name: 'Tunisair Express', flag: '🇹🇳' },
-            { code: 'AF', name: 'Air France', flag: '🇫🇷' },
-        ],
-    },
-    TOE: {
-        icao: 'DTTZ', locationKey: 'about_toe_location',
-        stats: [
-            { icon: <Plane size={28} />, value: '200+', labelKey: 'about_flights_year', color: '#3B82F6' },
-            { icon: <Users size={28} />, value: '50K', labelKey: 'about_passengers_year', color: '#8B5CF6' },
-            { icon: <Globe size={28} />, value: '4', labelKey: 'about_destinations', color: '#10B981' },
-            { icon: <BarChart3 size={28} />, value: '3', labelKey: 'about_airlines_served', color: '#F59E0B' },
-        ],
-        about: `Tozeur–Nefta International Airport serves the Saharan oasis towns of Tozeur and Nefta. Gateway for tourists visiting Star Wars filming locations.`,
-        about2: `The airport handles mostly seasonal charter flights from European destinations and domestic connections to Tunis.`,
-        airlines: [
-            { code: 'TU', name: 'Tunisair', flag: '🇹🇳' }, { code: 'UG', name: 'Tunisair Express', flag: '🇹🇳' },
-        ],
-    },
-    TBJ: {
-        icao: 'DTKA', locationKey: 'about_tbj_location',
-        stats: [
-            { icon: <Plane size={28} />, value: '150+', labelKey: 'about_flights_year', color: '#3B82F6' },
-            { icon: <Users size={28} />, value: '30K', labelKey: 'about_passengers_year', color: '#8B5CF6' },
-            { icon: <Globe size={28} />, value: '3', labelKey: 'about_destinations', color: '#10B981' },
-            { icon: <BarChart3 size={28} />, value: '2', labelKey: 'about_airlines_served', color: '#F59E0B' },
-        ],
-        about: `Tabarka–Aïn Draham International Airport serves the coral coast resort town of Tabarka and the forested hills of Aïn Draham.`,
-        about2: `The airport primarily handles seasonal European charter flights during the summer tourism season.`,
-        airlines: [
-            { code: 'TU', name: 'Tunisair', flag: '🇹🇳' }, { code: 'UG', name: 'Tunisair Express', flag: '🇹🇳' },
-        ],
-    },
-    GAF: {
-        icao: 'DTTF', locationKey: 'about_gaf_location',
-        stats: [
-            { icon: <Plane size={28} />, value: '100+', labelKey: 'about_flights_year', color: '#3B82F6' },
-            { icon: <Users size={28} />, value: '20K', labelKey: 'about_passengers_year', color: '#8B5CF6' },
-            { icon: <Globe size={28} />, value: '2', labelKey: 'about_destinations', color: '#10B981' },
-            { icon: <BarChart3 size={28} />, value: '2', labelKey: 'about_airlines_served', color: '#F59E0B' },
-        ],
-        about: `Gafsa–Ksar International Airport serves the mining city of Gafsa and surrounding region. It primarily handles domestic flights to Tunis.`,
-        about2: `The airport supports the phosphate mining industry and provides essential air links for the inland region.`,
-        airlines: [
-            { code: 'TU', name: 'Tunisair', flag: '🇹🇳' }, { code: 'UG', name: 'Tunisair Express', flag: '🇹🇳' },
-        ],
-    },
 };
+
 
 export default function AboutPage() {
     const { selectedAirport } = useAirport();

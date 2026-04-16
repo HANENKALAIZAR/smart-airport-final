@@ -14,12 +14,11 @@ import {
 import { useLanguage } from '../../context/LanguageContext';
 import { TUNISIAN_AIRPORTS } from '../../context/AirportContext';
 import {
-    apiListAdmins, apiCreateAdmin, apiDeactivateAdmin,
+    apiListAdmins, apiCreateAdmin, apiDeleteAdmin,
     apiCheckEmail, apiSuggestEmail, apiCheckDuplicate,
     apiGetAdminReview, apiPostIdReview,
-    apiUnlockAdminCorrection, apiDismissAdminCorrection,
-    apiPatchAdminProfile,
 } from '../../services/adminApi';
+import CustomSelect from '../../components/ui/CustomSelect';
 
 /* ── Small helpers ──────────────────────────────────────────── */
 function StatusBadge({ status }) {
@@ -55,6 +54,7 @@ function isValidPersonalEmail(s) {
 
 export default function SuperAdminUsers() {
     const { t } = useLanguage();
+    const isSuperAdmin = localStorage.getItem('admin_role') === 'super_admin';
     const [searchParams, setSearchParams] = useSearchParams();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -72,10 +72,8 @@ export default function SuperAdminUsers() {
     const [reviewDetail, setReviewDetail] = useState(null);
     const [reviewLoading, setReviewLoading] = useState(false);
     const [rejectReason, setRejectReason] = useState('');
+    const [rejectedFields, setRejectedFields] = useState([]);
     const [reviewSubmitting, setReviewSubmitting] = useState(false);
-    const [dismissNote, setDismissNote] = useState('');
-    const [reviewForm, setReviewForm] = useState(null);
-    const [profileSaveBusy, setProfileSaveBusy] = useState(false);
 
     // Work (login) email — auto-suggest + uniqueness
     const [workEmailStatus, setWorkEmailStatus] = useState(null);
@@ -120,7 +118,7 @@ export default function SuperAdminUsers() {
         setReviewAdmin(user);
         setReviewDetail(null);
         setRejectReason('');
-        setDismissNote('');
+        setRejectedFields([]);
         setReviewLoading(true);
         const { data, error } = await apiGetAdminReview(user.id);
         setReviewLoading(false);
@@ -291,6 +289,10 @@ export default function SuperAdminUsers() {
         if (!reviewAdmin) return;
         if (action === 'reject') {
             const r = rejectReason.trim();
+            if (!rejectedFields.length) {
+                showToast('error', 'Select at least one incorrect field.');
+                return;
+            }
             if (!r) {
                 showToast('error', 'Please enter a rejection reason.');
                 return;
@@ -301,6 +303,7 @@ export default function SuperAdminUsers() {
             reviewAdmin.id,
             action === 'approve' ? 'approve' : 'reject',
             action === 'reject' ? rejectReason.trim() : undefined,
+            action === 'reject' ? rejectedFields : [],
         );
         setReviewSubmitting(false);
         if (error) {
@@ -313,81 +316,13 @@ export default function SuperAdminUsers() {
         await fetchAdmins();
     }
 
-    async function submitUnlockCorrection() {
-        if (!reviewAdmin) return;
-        setReviewSubmitting(true);
-        const { error } = await apiUnlockAdminCorrection(reviewAdmin.id);
-        setReviewSubmitting(false);
-        if (error) {
-            showToast('error', error);
-            return;
-        }
-        showToast('success', 'ID fields unlocked. The admin has been notified.');
-        setReviewAdmin(null);
-        setReviewDetail(null);
-        setDismissNote('');
-        await fetchAdmins();
-    }
-
-    async function submitDismissCorrection() {
-        if (!reviewAdmin) return;
-        setReviewSubmitting(true);
-        const { error } = await apiDismissAdminCorrection(reviewAdmin.id, dismissNote.trim() || null);
-        setReviewSubmitting(false);
-        if (error) {
-            showToast('error', error);
-            return;
-        }
-        showToast('success', 'Correction request dismissed.');
-        setReviewAdmin(null);
-        setReviewDetail(null);
-        setDismissNote('');
-        await fetchAdmins();
-    }
-
-    useEffect(() => {
-        if (!reviewDetail) {
-            setReviewForm(null);
-            return;
-        }
-        setReviewForm({
-            full_name: reviewDetail.full_name || '',
-            personal_email: reviewDetail.personal_email || '',
-            phone_number: reviewDetail.phone_number || '',
-            nationality: reviewDetail.nationality || '',
-            gender: reviewDetail.gender || 'Male',
-            residential_address: reviewDetail.residential_address || '',
-            emergency_contact_name: reviewDetail.emergency_contact_name || '',
-            emergency_contact_phone: reviewDetail.emergency_contact_phone || '',
-            emergency_contact_relationship: reviewDetail.emergency_contact_relationship || 'Parent',
-            cin_number: reviewDetail.cin_number || '',
-            passport_number: reviewDetail.passport_number || '',
-            passport_expiry_date: reviewDetail.passport_expiry_date
-                ? String(reviewDetail.passport_expiry_date).slice(0, 10)
-                : '',
-            date_of_birth: reviewDetail.date_of_birth ? String(reviewDetail.date_of_birth).slice(0, 10) : '',
-        });
-    }, [reviewDetail]);
-
-    async function saveReviewProfile() {
-        if (!reviewAdmin || !reviewForm) return;
-        setProfileSaveBusy(true);
-        const { error } = await apiPatchAdminProfile(reviewAdmin.id, reviewForm);
-        setProfileSaveBusy(false);
-        if (error) {
-            showToast('error', error);
-            return;
-        }
-        showToast('success', 'Profile updated.');
-        const { data } = await apiGetAdminReview(reviewAdmin.id);
-        if (data) setReviewDetail(data);
-        await fetchAdmins();
-    }
-
     async function handleDelete(user) {
-        const { error } = await apiDeactivateAdmin(user.id);
-        if (error) showToast('error', `Failed to deactivate: ${error}`);
-        else { setUsers(prev => prev.filter(u => u.id !== user.id)); showToast('success', `Admin '${user.name}' deactivated.`); }
+        const { error } = await apiDeleteAdmin(user.id);
+        if (error) showToast('error', `Failed to delete admin: ${error}`);
+        else {
+            setUsers(prev => prev.filter(u => u.id !== user.id));
+            showToast('success', `Admin '${user.name}' deleted successfully.`);
+        }
         setDeleteConfirm(null);
     }
 
@@ -441,22 +376,31 @@ export default function SuperAdminUsers() {
                     <input className="users-filters__search-input" placeholder={t('admin_users_search_placeholder')} value={search} onChange={e => setSearch(e.target.value)} />
                 </div>
                 <div className="users-filters__selects">
-                    <select className="admin-filter-bar__select" value={airportFilter} onChange={e => setAirportFilter(e.target.value)}>
-                        <option value="all">All Airports</option>
-                        {TUNISIAN_AIRPORTS.map(a => <option key={a.iata} value={a.iata}>{a.name} ({a.iata})</option>)}
-                    </select>
-                    <select className="admin-filter-bar__select" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-                        <option value="all">{t('admin_users_all_statuses')}</option>
-                        <option value="active">{t('admin_users_status_active')}</option>
-                        <option value="inactive">{t('admin_users_status_inactive')}</option>
-                    </select>
-                    <select className="admin-filter-bar__select" value={verificationFilter} onChange={e => setVerificationFilter(e.target.value)}>
-                        <option value="all">All Verifications</option>
-                        <option value="approved">Approved</option>
-                        <option value="pending_review">Pending Review</option>
-                        <option value="under_review">Under Review</option>
-                        <option value="rejected">Rejected</option>
-                    </select>
+                    <CustomSelect
+                        options={[{ value: 'all', label: 'All Airports' }, ...TUNISIAN_AIRPORTS.map(a => ({ value: a.iata, label: `${a.name} (${a.iata})` }))]}
+                        value={airportFilter}
+                        onChange={setAirportFilter}
+                    />
+                    <CustomSelect
+                        options={[
+                            { value: 'all', label: t('admin_users_all_statuses') },
+                            { value: 'active', label: t('admin_users_status_active') },
+                            { value: 'inactive', label: t('admin_users_status_inactive') },
+                        ]}
+                        value={statusFilter}
+                        onChange={setStatusFilter}
+                    />
+                    <CustomSelect
+                        options={[
+                            { value: 'all', label: 'All Verifications' },
+                            { value: 'approved', label: 'Approved' },
+                            { value: 'pending_review', label: 'Pending Review' },
+                            { value: 'under_review', label: 'Under Review' },
+                            { value: 'rejected', label: 'Rejected' },
+                        ]}
+                        value={verificationFilter}
+                        onChange={setVerificationFilter}
+                    />
                 </div>
                 <span className="users-filters__count">{filtered.length} {t('admin_users_found')}</span>
             </div>
@@ -507,7 +451,15 @@ export default function SuperAdminUsers() {
                                                     Review
                                                 </button>
                                             ) : null}
-                                            <button className="users-action-btn users-action-btn--delete" onClick={() => setDeleteConfirm(user)} title="Deactivate"><Trash2 size={15} /></button>
+                                            {isSuperAdmin && (
+                                                <button
+                                                    className="users-action-btn users-action-btn--delete"
+                                                    onClick={() => setDeleteConfirm(user)}
+                                                    title="Delete admin"
+                                                >
+                                                    <Trash2 size={15} />
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
@@ -525,9 +477,6 @@ export default function SuperAdminUsers() {
                         <div className="admin-modal__header">
                             <div>
                                 <h2 style={{ margin: 0 }}>Create New Admin</h2>
-                                <p style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.4)', marginTop: 3 }}>
-                                    A secure password is generated server-side and emailed to the admin&apos;s personal address.
-                                </p>
                             </div>
                             <button className="admin-modal__close" onClick={closeModal}><X size={24} /></button>
                         </div>
@@ -592,25 +541,19 @@ export default function SuperAdminUsers() {
                                     {/* ── Assigned Airport ── */}
                                     <div className="admin-login__field">
                                         <label style={labelStyle}>Assigned Airport</label>
-                                        <select
-                                            className="admin-form-input"
-                                            style={{ marginTop: 6 }}
-                                            value={form.airport}
-                                            onChange={e => handleAirportChange(e.target.value)}
-                                            disabled={dupState === 'warning'}
-                                        >
-                                            {TUNISIAN_AIRPORTS.map(a => (
-                                                <option key={a.iata} value={a.iata}>{a.name} ({a.iata})</option>
-                                            ))}
-                                        </select>
+                                        <div style={{ marginTop: 6 }}>
+                                            <CustomSelect
+                                                options={TUNISIAN_AIRPORTS.map(a => ({ value: a.iata, label: `${a.name} (${a.iata})` }))}
+                                                value={form.airport}
+                                                onChange={(val) => handleAirportChange(val)}
+                                                disabled={dupState === 'warning'}
+                                            />
+                                        </div>
                                     </div>
 
                                     {/* ── Personal email: welcome + credentials only; no auto-suggest ── */}
                                     <div className="admin-login__field">
                                         <label style={labelStyle}>Personal email</label>
-                                        <p style={{ margin: '4px 0 0', fontSize: '0.72rem', color: 'rgba(255,255,255,0.38)', lineHeight: 1.45 }}>
-                                            The admin&apos;s real personal address (Gmail, Yahoo, etc.). Welcome email with credentials is sent here. No auto-suggestion — enter manually.
-                                        </p>
                                         <div style={{ marginTop: 8, position: 'relative' }}>
                                             <Mail size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.3)', pointerEvents: 'none' }} />
                                             <input
@@ -638,9 +581,6 @@ export default function SuperAdminUsers() {
                                         <label style={labelStyle}>
                                             Work email (auto-suggested)
                                         </label>
-                                        <p style={{ margin: '4px 0 0', fontSize: '0.72rem', color: 'rgba(255,255,255,0.38)', lineHeight: 1.45 }}>
-                                            Auto-suggested from full name + airport as <code style={{ fontSize: '0.7rem', color: 'rgba(147,197,253,0.9)' }}>firstname.lastname@[code]-airport.tn</code>. This is the login email; all uniqueness and fallback logic applies here only.
-                                        </p>
                                         <div style={{ marginTop: 8, position: 'relative' }}>
                                             <AtSign size={16} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.3)', pointerEvents: 'none' }} />
                                             <input
@@ -676,11 +616,7 @@ export default function SuperAdminUsers() {
                                         )}
                                     </div>
 
-                                    <div style={{ background: 'rgba(99,102,241,0.07)', border: '1px solid rgba(99,102,241,0.2)', borderRadius: 10, padding: '11px 14px' }}>
-                                        <p style={{ fontSize: '0.77rem', color: 'rgba(255,255,255,0.5)', lineHeight: 1.55, margin: 0 }}>
-                                            The welcome email lists the <strong style={{ color: 'rgba(255,255,255,0.65)' }}>work email</strong> (username) and temporary password. First login: change password, then complete profile.
-                                        </p>
-                                    </div>
+                                    
                                 </div>
                             </div>
 
@@ -724,75 +660,63 @@ export default function SuperAdminUsers() {
                                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: '0.82rem' }}>
                                         <div><span style={{ color: 'rgba(255,255,255,0.4)' }}>Verification</span><br /><VerificationBadge verificationStatus={verificationStatusFromReview(reviewDetail)} profileComplete={!!reviewDetail.profile_complete} /></div>
                                     </div>
-                                    {reviewForm && (
-                                        <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
-                                            <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: 10, color: '#93c5fd' }}>Edit profile (Super Admin)</div>
-                                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                                                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
-                                                    Full name
-                                                    <input className="admin-form-input" value={reviewForm.full_name} onChange={(e) => setReviewForm((f) => ({ ...f, full_name: e.target.value }))} />
-                                                </label>
-                                                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
-                                                    Personal email
-                                                    <input className="admin-form-input" value={reviewForm.personal_email} onChange={(e) => setReviewForm((f) => ({ ...f, personal_email: e.target.value }))} />
-                                                </label>
-                                                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
-                                                    Phone
-                                                    <input className="admin-form-input" value={reviewForm.phone_number} onChange={(e) => setReviewForm((f) => ({ ...f, phone_number: e.target.value }))} />
-                                                </label>
-                                                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
-                                                    DOB
-                                                    <input type="date" className="admin-form-input" value={reviewForm.date_of_birth} onChange={(e) => setReviewForm((f) => ({ ...f, date_of_birth: e.target.value }))} />
-                                                </label>
-                                                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
-                                                    Nationality
-                                                    <input className="admin-form-input" value={reviewForm.nationality} onChange={(e) => setReviewForm((f) => ({ ...f, nationality: e.target.value }))} />
-                                                </label>
-                                                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
-                                                    Gender
-                                                    <select className="admin-form-input" value={reviewForm.gender} onChange={(e) => setReviewForm((f) => ({ ...f, gender: e.target.value }))}>
-                                                        <option value="Male">Male</option>
-                                                        <option value="Female">Female</option>
-                                                    </select>
-                                                </label>
-                                                <label style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
-                                                    Residential address
-                                                    <textarea className="admin-form-input" style={{ minHeight: 56 }} value={reviewForm.residential_address} onChange={(e) => setReviewForm((f) => ({ ...f, residential_address: e.target.value }))} />
-                                                </label>
-                                                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
-                                                    Emergency name
-                                                    <input className="admin-form-input" value={reviewForm.emergency_contact_name} onChange={(e) => setReviewForm((f) => ({ ...f, emergency_contact_name: e.target.value }))} />
-                                                </label>
-                                                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
-                                                    Emergency phone
-                                                    <input className="admin-form-input" value={reviewForm.emergency_contact_phone} onChange={(e) => setReviewForm((f) => ({ ...f, emergency_contact_phone: e.target.value }))} />
-                                                </label>
-                                                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
-                                                    Emergency relationship
-                                                    <select className="admin-form-input" value={reviewForm.emergency_contact_relationship} onChange={(e) => setReviewForm((f) => ({ ...f, emergency_contact_relationship: e.target.value }))}>
-                                                        {['Parent', 'Spouse', 'Sibling', 'Friend', 'Other'].map((r) => (
-                                                            <option key={r} value={r}>{r}</option>
-                                                        ))}
-                                                    </select>
-                                                </label>
-                                                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
-                                                    CIN number
-                                                    <input className="admin-form-input" style={{ fontFamily: 'monospace' }} value={reviewForm.cin_number} onChange={(e) => setReviewForm((f) => ({ ...f, cin_number: e.target.value }))} />
-                                                </label>
-                                                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
-                                                    Passport number
-                                                    <input className="admin-form-input" style={{ fontFamily: 'monospace' }} value={reviewForm.passport_number} onChange={(e) => setReviewForm((f) => ({ ...f, passport_number: e.target.value }))} />
-                                                </label>
-                                                <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
-                                                    Passport expiry
-                                                    <input type="date" className="admin-form-input" value={reviewForm.passport_expiry_date} onChange={(e) => setReviewForm((f) => ({ ...f, passport_expiry_date: e.target.value }))} />
-                                                </label>
+                                    <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
+                                        <div style={{ fontWeight: 700, fontSize: '0.85rem', marginBottom: 10, color: '#93c5fd' }}>Admin Profile Information</div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
+                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Full name</span>
+                                                <span>{reviewDetail.full_name || '—'}</span>
                                             </div>
-                                            <button type="button" className="admin-btn admin-btn--primary" style={{ marginTop: 12 }} disabled={profileSaveBusy || reviewSubmitting} onClick={saveReviewProfile}>
-                                                {profileSaveBusy ? 'Saving…' : 'Save profile changes'}
-                                            </button>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
+                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Personal email</span>
+                                                <span>{reviewDetail.personal_email || '—'}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
+                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Phone</span>
+                                                <span>{reviewDetail.phone_number || '—'}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
+                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>DOB</span>
+                                                <span>{reviewDetail.date_of_birth ? String(reviewDetail.date_of_birth).slice(0, 10) : '—'}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
+                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Nationality</span>
+                                                <span>{reviewDetail.nationality || '—'}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
+                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Gender</span>
+                                                <span>{reviewDetail.gender || '—'}</span>
+                                            </div>
+                                            <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
+                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Residential address</span>
+                                                <span>{reviewDetail.residential_address || '—'}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
+                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Emergency name</span>
+                                                <span>{reviewDetail.emergency_contact_name || '—'}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
+                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Emergency phone</span>
+                                                <span>{reviewDetail.emergency_contact_phone || '—'}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
+                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Emergency relationship</span>
+                                                <span>{reviewDetail.emergency_contact_relationship || '—'}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
+                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>CIN number</span>
+                                                <span style={{ fontFamily: 'monospace' }}>{reviewDetail.cin_number || '—'}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
+                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Passport number</span>
+                                                <span style={{ fontFamily: 'monospace' }}>{reviewDetail.passport_number || '—'}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: '0.75rem' }}>
+                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>Passport expiry</span>
+                                                <span>{reviewDetail.passport_expiry_date ? String(reviewDetail.passport_expiry_date).slice(0, 10) : '—'}</span>
+                                            </div>
                                         </div>
-                                    )}
+                                    </div>
                                     {reviewDetail.profile_photo_url && (
                                         <div>
                                             <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', marginBottom: 6 }}>Profile photo</div>
@@ -823,58 +747,48 @@ export default function SuperAdminUsers() {
                                             <span style={{ color: 'rgba(255,255,255,0.35)' }}>No passport document on file.</span>
                                         )}
                                     </div>
-                                    {reviewDetail.correction_request && reviewDetail.correction_request.status === 'pending' && (
-                                        <div style={{
-                                            borderTop: '1px solid rgba(245, 158, 11, 0.35)',
-                                            borderBottom: '1px solid rgba(245, 158, 11, 0.2)',
-                                            padding: '14px 0',
-                                            margin: '4px 0',
-                                        }}>
-                                            <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#FCD34D', marginBottom: 8 }}>
-                                                🟡 ID correction request
-                                            </div>
-                                            <p style={{ margin: 0, fontSize: '0.84rem', lineHeight: 1.5, color: 'rgba(255,255,255,0.82)' }}>
-                                                {reviewDetail.correction_request.reason}
-                                            </p>
-                                            <label style={{ display: 'block', fontSize: '0.72rem', color: 'rgba(255,255,255,0.45)', marginTop: 12, marginBottom: 6 }}>
-                                                Optional note when dismissing
-                                            </label>
-                                            <textarea
-                                                className="admin-form-input"
-                                                style={{ minHeight: 56, width: '100%', resize: 'vertical', marginBottom: 10 }}
-                                                value={dismissNote}
-                                                onChange={(e) => setDismissNote(e.target.value)}
-                                                placeholder="Reason shown to the admin if you dismiss…"
-                                                disabled={reviewSubmitting}
-                                            />
-                                            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                                                <button
-                                                    type="button"
-                                                    className="admin-btn admin-btn--outline"
-                                                    disabled={reviewSubmitting}
-                                                    onClick={submitDismissCorrection}
-                                                >
-                                                    Dismiss
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className="admin-btn admin-btn--primary"
-                                                    disabled={reviewSubmitting}
-                                                    onClick={submitUnlockCorrection}
-                                                >
-                                                    Unlock for Edit
-                                                </button>
-                                            </div>
+                                    <div style={{
+                                        borderTop: '1px solid rgba(245, 158, 11, 0.35)',
+                                        borderBottom: '1px solid rgba(245, 158, 11, 0.2)',
+                                        padding: '14px 0',
+                                        margin: '4px 0',
+                                    }}>
+                                        <div style={{ fontWeight: 700, fontSize: '0.88rem', color: '#FCD34D', marginBottom: 8 }}>
+                                            Select Incorrect Fields (required if rejecting)
                                         </div>
-                                    )}
-                                    <div>
-                                        <label style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>Rejection reason (required if rejecting)</label>
+                                        <div style={{
+                                            display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14
+                                        }}>
+                                            {[
+                                                { key: 'full_name', label: 'Full Name' }, { key: 'date_of_birth', label: 'Date of Birth' },
+                                                { key: 'gender', label: 'Gender' }, { key: 'nationality', label: 'Nationality' },
+                                                { key: 'cin_number', label: 'CIN Number' }, { key: 'cin_document_url', label: 'CIN Document' },
+                                                { key: 'passport_number', label: 'Passport Number' }, { key: 'passport_expiry_date', label: 'Passport Expiry' },
+                                                { key: 'passport_document_url', label: 'Passport Document' }, { key: 'residential_address', label: 'Residential Address' },
+                                                { key: 'emergency_contact_name', label: 'Emergency Contact Name' }, { key: 'emergency_contact_phone', label: 'Emergency Contact Phone' },
+                                            ].map(opt => (
+                                                <label key={opt.key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.75rem', color: 'rgba(255,255,255,0.7)', cursor: 'pointer' }}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={rejectedFields.includes(opt.key)}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) setRejectedFields(prev => [...prev, opt.key]);
+                                                            else setRejectedFields(prev => prev.filter(k => k !== opt.key));
+                                                        }}
+                                                    />
+                                                    {opt.label}
+                                                </label>
+                                            ))}
+                                        </div>
+                                        <label style={{ display: 'block', fontSize: '0.75rem', color: 'rgba(255,255,255,0.45)', marginBottom: 6 }}>
+                                            Rejection notes (required if rejecting)
+                                        </label>
                                         <textarea
                                             className="admin-form-input"
                                             style={{ minHeight: 72, width: '100%', resize: 'vertical' }}
                                             value={rejectReason}
                                             onChange={e => setRejectReason(e.target.value)}
-                                            placeholder="Explain what is wrong with the ID scan…"
+                                            placeholder="Explain what is wrong with the selected fields…"
                                         />
                                     </div>
                                 </div>

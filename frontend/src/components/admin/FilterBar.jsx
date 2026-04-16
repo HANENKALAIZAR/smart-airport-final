@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
+import CustomSelect from '../ui/CustomSelect';
 
 export default function FilterBar({ onFilterChange }) {
     const { t } = useLanguage();
@@ -55,21 +56,15 @@ export default function FilterBar({ onFilterChange }) {
     return (
         <div className="admin-space-y-3">
             <div className="admin-filter-bar" role="toolbar" aria-label="Dashboard filters">
-                {/* Time Range (compact dropdown) */}
-                <select
-                    className="admin-filter-bar__select admin-filter-bar__select--time"
-                    onChange={(e) => {
-                        if (e.target.value) toggle('timeRange', e.target.value);
-                    }}
-                    value=""
-                >
-                    <option value="">{t('filter_select_time')}</option>
-                    {timeRanges.map(tr => (
-                        <option key={tr.id} value={tr.id}>
-                            {tr.label}
-                        </option>
-                    ))}
-                </select>
+                {/* Time Range (custom dropdown) */}
+                <div style={{ width: 180, flexShrink: 0 }}>
+                    <CustomSelect
+                        options={timeRanges.map(tr => ({ value: tr.id, label: tr.label }))}
+                        value={null}
+                        placeholder={t('filter_select_time')}
+                        onChange={(val) => { if (val) toggle('timeRange', val); }}
+                    />
+                </div>
 
                 {/* Risk Level (compact toggles) */}
                 <div className="admin-filter-toolbar__group">

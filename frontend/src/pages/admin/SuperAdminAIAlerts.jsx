@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Clock } from 'lucide-react';
 import { useAirport } from '../../context/AirportContext';
 import { apiGetAiAlerts } from '../../services/adminApi';
+import CustomSelect from '../../components/ui/CustomSelect';
 
 function riskBadgeStyle(riskPct) {
     const risk = Number(riskPct || 0);
@@ -64,17 +65,16 @@ export default function SuperAdminAIAlerts() {
             </div>
 
             <div style={{ padding: '0.75rem 1rem 0.5rem', display: 'flex', gap: 8, alignItems: 'center' }}>
-                <select
-                    className="admin-filter-bar__select"
-                    style={{ width: '100%' }}
+                <CustomSelect
+                    options={[
+                        { value: 'all', label: 'All' },
+                        { value: 'pending', label: 'Pending' },
+                        { value: 'approved', label: 'Approved' },
+                        { value: 'rejected', label: 'Rejected' },
+                    ]}
                     value={decisionFilter}
-                    onChange={(e) => setDecisionFilter(e.target.value)}
-                >
-                    <option value="all">All</option>
-                    <option value="pending">Pending</option>
-                    <option value="approved">Approved</option>
-                    <option value="rejected">Rejected</option>
-                </select>
+                    onChange={(val) => setDecisionFilter(val)}
+                />
             </div>
 
             <div className="ai-alerts-panel__list" style={{ paddingTop: 8 }}>

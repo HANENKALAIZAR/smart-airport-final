@@ -1,6 +1,9 @@
 """Tests for user management endpoints (super_admin only)."""
 
 import pytest
+from passlib.context import CryptContext
+
+from app.models.models import Message, MessageReply, User
 
 
 class TestUserManagement:
@@ -102,16 +105,14 @@ class TestUserManagement:
         )
         assert resp.status_code == 422
 
-    def test_deactivate_admin_requires_super_admin(self, client, admin_token, airport_admin_user):
+    def test_delete_admin_requires_super_admin(self, client, admin_token, airport_admin_user):
         resp = client.delete(
             f"/api/users/admins/{airport_admin_user.id}",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert resp.status_code == 403
 
-    def test_deactivate_admin_success(self, client, super_admin_token, db):
-        from app.models.models import User
-        from passlib.context import CryptContext
+    def test_delete_admin_success(self, client, super_admin_token, db):
         pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
         user = User(
             email="todeactivate@tunis-carthage.tn",
@@ -131,5 +132,58 @@ class TestUserManagement:
         )
         assert resp.status_code == 204
 
-        db.refresh(user)
-        assert user.is_active == 0
+        deleted = db.query(User).filter(User.id == user.id).first()
+        assert deleted is None
+
+    def test_delete_admin_removes_related_messages(self, client, super_admin_token, db, super_admin_user):
+        pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        admin = User(
+            email="thread.admin@tunis-carthage.tn",
+            password_hash=pwd.hash("Pass@123"),
+            full_name="Thread Admin",
+            role="admin",
+            airport_iata="TUN",
+            is_active=1,
+        )
+        db.add(admin)
+        db.commit()
+        db.refresh(admin)
+
+        message = Message(
+            direction="to_super",
+            from_user_id=admin.id,
+            to_user_id=super_admin_user.id,
+            category="general",
+            subject="Need help",
+            body="Please review this",
+            status="open",
+        )
+        db.add(message)
+        db.commit()
+        db.refresh(message)
+        message_id = message.id
+
+        reply = MessageReply(
+            message_id=message_id,
+            author_id=admin.id,
+            body="Following up",
+        )
+        db.add(reply)
+        db.commit()
+
+        resp = client.delete(
+            f"/api/users/admins/{admin.id}",
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+        )
+        assert resp.status_code == 204
+
+        assert db.query(Message).filter(Message.id == message_id).first() is None
+        assert db.query(MessageReply).filter(MessageReply.message_id == message_id).count() == 0
+
+    def test_super_admin_cannot_delete_self(self, client, super_admin_token, super_admin_user):
+        resp = client.delete(
+            f"/api/users/admins/{super_admin_user.id}",
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+        )
+        assert resp.status_code == 403
+        assert resp.json()["detail"] == "Super admin cannot delete their own account."

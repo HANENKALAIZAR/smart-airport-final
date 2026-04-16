@@ -6,10 +6,6 @@ export const TUNISIAN_AIRPORTS = [
     { id: 'DJE', iata: 'DJE', name: 'Djerba–Zarzis International', city: 'Djerba', region: 'South-Est' },
     { id: 'NBE', iata: 'NBE', name: 'Enfidha–Hammamet International', city: 'Enfidha', region: 'Sahel' },
     { id: 'MIR', iata: 'MIR', name: 'Monastir Habib Bourguiba', city: 'Monastir', region: 'Sahel' },
-    { id: 'SFA', iata: 'SFA', name: 'Sfax–Thyna International', city: 'Sfax', region: 'South' },
-    { id: 'TOE', iata: 'TOE', name: 'Tozeur–Nefta International', city: 'Tozeur', region: 'South-West' },
-    { id: 'TBJ', iata: 'TBJ', name: 'Tabarka–Aïn Draham', city: 'Tabarka', region: 'North-West' },
-    { id: 'GAF', iata: 'GAF', name: 'Gafsa–Ksar International', city: 'Gafsa', region: 'South-West' },
 ];
 
 export const DEFAULT_AIRPORT = TUNISIAN_AIRPORTS[0]; // TUN

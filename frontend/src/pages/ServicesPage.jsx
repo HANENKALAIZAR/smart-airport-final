@@ -52,23 +52,8 @@ const AIRPORT_SERVICES = {
         { name: 'Duty Free MIR', category: 'Shopping', icon: '🛍️', location: 'Terminal – After Security', hours: '06:00 – 21:00', description: 'Duty-free shopping with Tunisian specialties.' },
         { name: 'Taxi Stand', category: 'Transport', icon: '🚕', location: 'Exit', hours: '24/7', description: 'Taxis to Monastir center (~8 TND), Sousse (~25 TND).' },
     ],
-    SFA: [
-        { name: 'Airport Café', category: 'Food & Drink', icon: '☕', location: 'Terminal', hours: '06:00 – 20:00', description: 'Coffee and basic refreshments.' },
-        { name: 'Taxi Stand', category: 'Transport', icon: '🚕', location: 'Exit', hours: '24/7', description: 'Taxis to Sfax city center (~10 TND).' },
-    ],
-    TOE: [
-        { name: 'Oasis Café', category: 'Food & Drink', icon: '☕', location: 'Terminal', hours: '07:00 – 19:00', description: 'Refreshments and Saharan tea.' },
-        { name: 'Airport Taxi', category: 'Transport', icon: '🚕', location: 'Exit', hours: '06:00 – 20:00', description: 'Taxis to Tozeur center (~8 TND), Nefta (~15 TND).' },
-    ],
-    TBJ: [
-        { name: 'Coral Café', category: 'Food & Drink', icon: '☕', location: 'Terminal', hours: '07:00 – 19:00', description: 'Coffee and light meals.' },
-        { name: 'Airport Taxi', category: 'Transport', icon: '🚕', location: 'Exit', hours: '07:00 – 20:00', description: 'Taxis to Tabarka center (~8 TND).' },
-    ],
-    GAF: [
-        { name: 'Airport Café', category: 'Food & Drink', icon: '☕', location: 'Terminal', hours: '07:00 – 19:00', description: 'Basic refreshments.' },
-        { name: 'Airport Taxi', category: 'Transport', icon: '🚕', location: 'Exit', hours: '24/7', description: 'Taxis to Gafsa city (~5 TND).' },
-    ],
 };
+
 
 export default function ServicesPage() {
     const { selectedAirport } = useAirport();

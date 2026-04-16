@@ -28,9 +28,13 @@ joblib==1.4.2
 # ── Data ──
 numpy==1.26.4
 pandas==2.2.3
+hijri-converter==2.3.2.post1
 
 # ── Caching ──
 cachetools==5.5.0
+
+# ── Scheduler ──
+apscheduler==3.10.4
 
 # ── HTTP Client ──
 httpx==0.27.2

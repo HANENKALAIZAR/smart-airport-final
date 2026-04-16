@@ -5,8 +5,6 @@ import {
     apiChangePassword,
     apiGetMe,
     apiPatchSettings,
-    apiSubmitCorrectionRequest,
-    apiResubmitIdProfile,
 } from '../../services/adminApi';
 import {
     formatTunisiaPhoneInput,
@@ -15,6 +13,8 @@ import {
 } from '../../utils/tunisiaPhone';
 import { validateProfilePhotoFile, validateIdDocumentFile, PHOTO_ACCEPT, ID_DOC_ACCEPT } from '../../utils/uploadValidation';
 import SuperAdminProfileForm from './SuperAdminProfileForm';
+import CustomSelect from '../../components/ui/CustomSelect';
+
 
 function maskIdNumber(raw) {
     if (!raw) return '—';
@@ -52,16 +52,7 @@ function fileToDataUrl(file) {
     });
 }
 
-const CORRECTION_FIELD_OPTIONS = [
-    { key: 'full_name', label: 'Full Name' },
-    { key: 'date_of_birth', label: 'Date of Birth' },
-    { key: 'gender', label: 'Gender' },
-    { key: 'nationality', label: 'Nationality' },
-    { key: 'cin', label: 'CIN Number / CIN Document' },
-    { key: 'passport', label: 'Passport Number / Passport Document / Passport Expiry' },
-    { key: 'residential_address', label: 'Residential Address' },
-    { key: 'emergency_contact', label: 'Emergency Contact' },
-];
+
 
 export default function AdminSettings() {
     const { t } = useLanguage();
@@ -85,12 +76,6 @@ export default function AdminSettings() {
     const [photoErr, setPhotoErr] = useState('');
     const [photoSaving, setPhotoSaving] = useState(false);
 
-    const [correctionModalOpen, setCorrectionModalOpen] = useState(false);
-    const [correctionReason, setCorrectionReason] = useState('');
-    const [correctionFieldKeys, setCorrectionFieldKeys] = useState([]);
-    const [correctionErr, setCorrectionErr] = useState('');
-    const [correctionOk, setCorrectionOk] = useState('');
-    const [correctionBusy, setCorrectionBusy] = useState(false);
     const [correctionIdentityDraft, setCorrectionIdentityDraft] = useState({
         full_name: '',
         date_of_birth: '',
@@ -164,9 +149,11 @@ export default function AdminSettings() {
     ]);
 
     useEffect(() => {
-        const ul = profile?.correction_unlock_fields || [];
-        const legacy = !!profile?.id_fields_unlocked && ul.length === 0;
-        if (legacy || ul.includes('cin') || ul.includes('passport')) {
+        const isRejected = profile?.id_document_status === 'rejected';
+        const ul = isRejected ? (profile?.rejected_fields || []) : [];
+        const needCin = ul.includes('cin_number') || ul.includes('cin_document_url');
+        const needPass = ul.includes('passport_number') || ul.includes('passport_document_url') || ul.includes('passport_expiry_date');
+        if (needCin || needPass) {
             setUnlockCinNumber(profile.cin_number || '');
             setUnlockPassportNumber(profile.passport_number || '');
             setUnlockCinDocUrl(profile.cin_document_url || '');
@@ -177,8 +164,8 @@ export default function AdminSettings() {
             setUnlockFieldErr({});
         }
     }, [
-        profile?.correction_unlock_fields,
-        profile?.id_fields_unlocked,
+        profile?.id_document_status,
+        profile?.rejected_fields,
         profile?.cin_number,
         profile?.passport_number,
         profile?.cin_document_url,
@@ -202,38 +189,7 @@ export default function AdminSettings() {
         profile?.id,
     ]);
 
-    function toggleCorrectionField(key) {
-        setCorrectionFieldKeys((prev) =>
-            prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
-        );
-        setCorrectionErr('');
-    }
 
-    async function submitCorrectionRequest() {
-        setCorrectionErr('');
-        setCorrectionOk('');
-        const r = correctionReason.trim();
-        if (!correctionFieldKeys.length) {
-            setCorrectionErr('Select at least one field to correct.');
-            return;
-        }
-        if (!r) {
-            setCorrectionErr('Please describe what needs to be corrected.');
-            return;
-        }
-        setCorrectionBusy(true);
-        const { data, error } = await apiSubmitCorrectionRequest(r, correctionFieldKeys);
-        setCorrectionBusy(false);
-        if (error) {
-            setCorrectionErr(error);
-            return;
-        }
-        setCorrectionOk(data?.message || 'Your correction request has been submitted. Please wait for the Super Admin to review it.');
-        setCorrectionModalOpen(false);
-        setCorrectionReason('');
-        setCorrectionFieldKeys([]);
-        await refreshProfile();
-    }
 
     async function onUnlockCinDocPick(e) {
         const file = e.target.files?.[0];
@@ -263,10 +219,10 @@ export default function AdminSettings() {
 
     async function saveUnlockedIdProfile() {
         setUnlockFieldErr({});
-        const ul = profile?.correction_unlock_fields || [];
-        const legacy = !!profile?.id_fields_unlocked && ul.length === 0;
-        const needCin = legacy || ul.includes('cin');
-        const needPass = legacy || ul.includes('passport');
+        const isRejected = profile?.id_document_status === 'rejected';
+        const ul = isRejected ? (profile?.rejected_fields || []) : [];
+        const needCin = ul.includes('cin_number') || ul.includes('cin_document_url');
+        const needPass = ul.includes('passport_number') || ul.includes('passport_document_url') || ul.includes('passport_expiry_date');
         const errs = {};
         if (needCin) {
             if (!unlockCinDocUrl) errs.cinDoc = 'CIN document is required';
@@ -294,7 +250,7 @@ export default function AdminSettings() {
             body.passport_expiry_date = unlockPassportExpiry;
         }
         setUnlockSaving(true);
-        const { error } = await apiResubmitIdProfile(body);
+        const { error } = await apiPatchSettings(body);
         setUnlockSaving(false);
         if (error) {
             setUnlockFieldErr({ form: error });
@@ -304,7 +260,8 @@ export default function AdminSettings() {
     }
 
     async function saveCorrectionIdentity() {
-        const ul = profile?.correction_unlock_fields || [];
+        const isRejected = profile?.id_document_status === 'rejected';
+        const ul = isRejected ? (profile?.rejected_fields || []) : [];
         const payload = {};
         if (ul.includes('full_name')) payload.full_name = correctionIdentityDraft.full_name.trim();
         if (ul.includes('date_of_birth') && correctionIdentityDraft.date_of_birth) {
@@ -443,8 +400,9 @@ export default function AdminSettings() {
     }
 
     const tunisianAirportAdmin = profile?.role === 'admin';
-    const unlockFields = profile?.correction_unlock_fields || [];
-    const legacyIdUnlock = !!profile?.id_fields_unlocked && unlockFields.length === 0;
+    const isRejected = profile?.id_document_status === 'rejected';
+    const unlockFields = isRejected ? (profile?.rejected_fields || []) : [];
+    const legacyIdUnlock = false;
     const cinEditable =
         tunisianAirportAdmin && (legacyIdUnlock || unlockFields.includes('cin'));
     const passportEditable =
@@ -486,21 +444,7 @@ export default function AdminSettings() {
                         <SuperAdminProfileForm profile={profile} onSaved={refreshProfile} />
                     ) : (
                     <div>
-                        {correctionOk && (
-                            <div
-                                style={{
-                                    marginBottom: 16,
-                                    padding: 12,
-                                    borderRadius: 8,
-                                    background: 'rgba(34,197,94,0.12)',
-                                    border: '1px solid rgba(34,197,94,0.25)',
-                                    color: '#86EFAC',
-                                    fontSize: '0.88rem',
-                                }}
-                            >
-                                {correctionOk}
-                            </div>
-                        )}
+
                         {tunisianAirportAdmin &&
                             (unlockFields.length > 0 || !!profile.id_fields_unlocked) && (
                             <div
@@ -953,22 +897,16 @@ export default function AdminSettings() {
                                                 setEmergencyDraft((d) => ({ ...d, phone: e.target.value }))
                                             }
                                         />
-                                        <select
-                                            className="admin-form-input"
-                                            value={emergencyDraft.relationship}
-                                            onChange={(e) =>
+                                        <CustomSelect
+                                            options={['Parent', 'Spouse', 'Sibling', 'Friend', 'Other'].map(r => ({ value: r, label: r }))}
+                                            value={emergencyDraft.relationship || 'Parent'}
+                                            onChange={(val) =>
                                                 setEmergencyDraft((d) => ({
                                                     ...d,
-                                                    relationship: e.target.value,
+                                                    relationship: val,
                                                 }))
                                             }
-                                        >
-                                            {['Parent', 'Spouse', 'Sibling', 'Friend', 'Other'].map((r) => (
-                                                <option key={r} value={r}>
-                                                    {r}
-                                                </option>
-                                            ))}
-                                        </select>
+                                        />
                                         {emergencyErr && (
                                             <p style={{ fontSize: '0.75rem', color: '#f87171' }}>{emergencyErr}</p>
                                         )}
@@ -1122,19 +1060,19 @@ export default function AdminSettings() {
                                                 >
                                                     Gender
                                                 </label>
-                                                <select
-                                                    className="admin-form-input"
+                                                <CustomSelect
+                                                    options={[
+                                                        { value: 'Male', label: 'Male' },
+                                                        { value: 'Female', label: 'Female' },
+                                                    ]}
                                                     value={correctionIdentityDraft.gender}
-                                                    onChange={(e) =>
+                                                    onChange={(val) =>
                                                         setCorrectionIdentityDraft((d) => ({
                                                             ...d,
-                                                            gender: e.target.value,
+                                                            gender: val,
                                                         }))
                                                     }
-                                                >
-                                                    <option value="Male">Male</option>
-                                                    <option value="Female">Female</option>
-                                                </select>
+                                                />
                                             </div>
                                         )}
                                         {unlockFields.includes('nationality') && (
@@ -1578,51 +1516,21 @@ export default function AdminSettings() {
                                 )}
                             </div>
 
-                            {tunisianAirportAdmin && profile.profile_complete && (
+                            {tunisianAirportAdmin && profile.profile_complete && (cinEditable || passportEditable) && (
                                 <div style={{ gridColumn: '1 / -1' }}>
-                                    {profile.correction_request_pending ? (
-                                        <div
-                                            style={{
-                                                padding: '10px 14px',
-                                                borderRadius: 8,
-                                                background: 'rgba(245,158,11,0.1)',
-                                                border: '1px solid rgba(245,158,11,0.3)',
-                                                color: '#FCD34D',
-                                                fontSize: '0.88rem',
-                                            }}
-                                        >
-                                            🟡 Correction Pending
-                                        </div>
-                                    ) : cinEditable || passportEditable ? (
-                                        <>
-                                            {unlockFieldErr.form && (
-                                                <p style={{ color: '#f87171', fontSize: '0.85rem', marginBottom: 8 }}>
-                                                    {unlockFieldErr.form}
-                                                </p>
-                                            )}
-                                            <button
-                                                type="button"
-                                                className="admin-btn admin-btn--primary"
-                                                disabled={unlockSaving}
-                                                onClick={saveUnlockedIdProfile}
-                                            >
-                                                {unlockSaving ? 'Saving…' : 'Save & Resubmit'}
-                                            </button>
-                                        </>
-                                    ) : profile.id_document_status &&
-                                      profile.id_document_status !== 'pending' ? (
-                                        <button
-                                            type="button"
-                                            className="admin-btn admin-btn--outline"
-                                            onClick={() => {
-                                                setCorrectionModalOpen(true);
-                                                setCorrectionErr('');
-                                                setCorrectionFieldKeys([]);
-                                            }}
-                                        >
-                                            Request Correction
-                                        </button>
-                                    ) : null}
+                                    {unlockFieldErr.form && (
+                                        <p style={{ color: '#f87171', fontSize: '0.85rem', marginBottom: 8 }}>
+                                            {unlockFieldErr.form}
+                                        </p>
+                                    )}
+                                    <button
+                                        type="button"
+                                        className="admin-btn admin-btn--primary"
+                                        disabled={unlockSaving}
+                                        onClick={saveUnlockedIdProfile}
+                                    >
+                                        {unlockSaving ? 'Saving…' : 'Save & Resubmit'}
+                                    </button>
                                 </div>
                             )}
                         </div>
@@ -1635,103 +1543,6 @@ export default function AdminSettings() {
                 )}
             </div>
 
-            {correctionModalOpen && (
-                <div
-                    className="admin-modal-backdrop"
-                    onClick={() => !correctionBusy && setCorrectionModalOpen(false)}
-                    style={{ zIndex: 10000 }}
-                >
-                    <div
-                        className="admin-modal"
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ maxWidth: 440, width: '92vw' }}
-                    >
-                        <div className="admin-modal__header">
-                            <h2 style={{ margin: 0 }}>Request Correction</h2>
-                            <button
-                                type="button"
-                                className="admin-modal__close"
-                                disabled={correctionBusy}
-                                onClick={() => setCorrectionModalOpen(false)}
-                            >
-                                ×
-                            </button>
-                        </div>
-                        <div className="admin-modal__body">
-                            <p style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.55)', margin: '0 0 10px' }}>
-                                Select at least one field:
-                            </p>
-                            <div
-                                style={{
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: 8,
-                                    marginBottom: 14,
-                                    maxHeight: 220,
-                                    overflowY: 'auto',
-                                }}
-                            >
-                                {CORRECTION_FIELD_OPTIONS.map((opt) => (
-                                    <label
-                                        key={opt.key}
-                                        style={{
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: 10,
-                                            fontSize: '0.85rem',
-                                            cursor: 'pointer',
-                                            color: '#E2E8F0',
-                                        }}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={correctionFieldKeys.includes(opt.key)}
-                                            onChange={() => toggleCorrectionField(opt.key)}
-                                        />
-                                        {opt.label}
-                                    </label>
-                                ))}
-                            </div>
-                            <label style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.5)' }}>
-                                Reason *
-                            </label>
-                            <textarea
-                                className="admin-form-input"
-                                style={{ marginTop: 8, minHeight: 100, width: '100%' }}
-                                value={correctionReason}
-                                onChange={(e) => {
-                                    setCorrectionReason(e.target.value);
-                                    setCorrectionErr('');
-                                }}
-                                placeholder='e.g. "I entered the wrong CIN number"'
-                            />
-                            {correctionErr && (
-                                <p style={{ margin: '8px 0 0', fontSize: '0.8rem', color: '#f87171' }}>
-                                    {correctionErr}
-                                </p>
-                            )}
-                        </div>
-                        <div className="admin-modal__footer">
-                            <button
-                                type="button"
-                                className="admin-btn admin-btn--outline"
-                                disabled={correctionBusy}
-                                onClick={() => setCorrectionModalOpen(false)}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                className="admin-btn admin-btn--primary"
-                                disabled={correctionBusy}
-                                onClick={submitCorrectionRequest}
-                            >
-                                {correctionBusy ? 'Submitting…' : 'Submit Request'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {docModalUrl && (
                 <div
@@ -1958,25 +1769,11 @@ export default function AdminSettings() {
                                     />
                                 </button>
                             ) : (
-                                <select
+                                <CustomSelect
+                                    options={(options || []).map((o) => ({ value: o, label: o }))}
                                     value={settings[key]}
-                                    onChange={(e) => update(key, e.target.value)}
-                                    style={{
-                                        background: 'rgba(255,255,255,0.08)',
-                                        border: '1px solid rgba(255,255,255,0.1)',
-                                        color: '#E2E8F0',
-                                        borderRadius: 6,
-                                        padding: '4px 8px',
-                                        fontSize: '0.82rem',
-                                        outline: 'none',
-                                    }}
-                                >
-                                    {options.map((o) => (
-                                        <option key={o} value={o}>
-                                            {o}
-                                        </option>
-                                    ))}
-                                </select>
+                                    onChange={(val) => update(key, val)}
+                                />
                             )}
                         </div>
                     ))}

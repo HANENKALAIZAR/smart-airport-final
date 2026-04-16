@@ -10,8 +10,11 @@ Additions:
     and returns a full AI prediction alongside flight info.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
 from app.api_clients.aviationstack_client import fetch_flights, normalize_flight
+from app.database import get_db
 
 router = APIRouter(prefix="/api/aviationstack", tags=["aviationstack"])
 
@@ -21,10 +24,6 @@ AIRPORTS = {
     "DJE": "Djerba–Zarzis",
     "NBE": "Enfidha–Hammamet",
     "MIR": "Monastir",
-    "SFA": "Sfax–Thyna",
-    "TOE": "Tozeur–Nefta",
-    "TBJ": "Tabarka–Aïn Draham",
-    "GAF": "Gafsa–Ksar",
 }
 
 
@@ -83,15 +82,20 @@ async def get_airport_flights(iata: str, direction: str = "both"):
 
 
 @router.get("/predict/{flight_number}")
-async def predict_live_flight(flight_number: str):
+async def predict_live_flight(
+    flight_number: str,
+    db: Session = Depends(get_db),
+):
     """
     Real-time AI prediction for a specific flight number.
 
-    Flow:
-      1. Search all supported airports for the flight in AviationStack cache
-      2. Build ML feature vector from the live flight data
-      3. Run the XGBoost model (or rule-based fallback)
-      4. Return combined: flight info + prediction + SHAP explanation
+    Flow (v10):
+      1. Search all supported airports for the flight in AviationStack cache.
+      2. Build ML feature vector — uses real DB weather (weather_conditions table)
+         via the updated live_feature_builder.
+      3. Run the XGBoost model (or rule-based fallback).
+      4. Persist the prediction to the predictions table.
+      5. Return combined: flight info + features + enriched SHAP explanation.
 
     Args:
         flight_number: IATA flight number e.g. TU302, AF1234
@@ -122,15 +126,19 @@ async def predict_live_flight(flight_number: str):
             detail=f"Flight '{fn}' not found in current AviationStack data",
         )
 
-    # Build features from live flight data
+    # Build features using real DB weather where available
     from app.services.live_feature_builder import build_features
     from app.services.prediction_service import predict_from_dict
 
-    features = build_features(matched_flight)
-    prediction = predict_from_dict(features)
+    features   = build_features(matched_flight, db=db)
+    prediction = predict_from_dict(
+        features,
+        db=db,
+        flight_number=fn,   # persisted to predictions table (flight_id=NULL for live flights)
+    )
 
     return {
-        "flight": matched_flight,
+        "flight":        matched_flight,
         "features_used": features,
         "prediction": {
             "risk_score":          prediction.risk_score,
@@ -138,6 +146,7 @@ async def predict_live_flight(flight_number: str):
             "confidence":          prediction.confidence,
             "shap_explanation":    prediction.shap_explanation,
             "model_version":       prediction.model_version,
+            "predicted_at":        prediction.predicted_at.isoformat() if prediction.predicted_at else None,
         },
     }
 

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.models.models import Flight, Airport, Airline, Prediction, FlightFeature
-from app.schemas.schemas import FlightListOut, FlightDetailOut, PredictionOut, FlightFeaturesOut, FlightCreate, FlightUpdate
+from app.schemas.schemas import FlightListOut, FlightDetailOut, PredictionOut, FlightFeaturesOut
 
 router = APIRouter(prefix="/api/flights", tags=["Flights"])
 
@@ -70,81 +70,6 @@ def list_flights(
     query = query.order_by(Flight.scheduled_departure.desc())
     flights = query.offset(skip).limit(limit).all()
     return flights
-
-
-@router.post("", response_model=FlightListOut, status_code=201)
-def create_flight(payload: FlightCreate, db: Session = Depends(get_db)):
-    """Create a new flight."""
-    # Resolve airline
-    al = db.query(Airline).filter(Airline.iata_code == payload.airline_iata.upper()).first()
-    if not al:
-        raise HTTPException(status_code=404, detail=f"Airline '{payload.airline_iata}' not found")
-
-    # Resolve airports
-    origin = db.query(Airport).filter(Airport.iata_code == payload.origin_iata.upper()).first()
-    if not origin:
-        raise HTTPException(status_code=404, detail=f"Origin airport '{payload.origin_iata}' not found")
-
-    dest = db.query(Airport).filter(Airport.iata_code == payload.destination_iata.upper()).first()
-    if not dest:
-        raise HTTPException(status_code=404, detail=f"Destination airport '{payload.destination_iata}' not found")
-
-    flight = Flight(
-        flight_number=payload.flight_number,
-        airline_id=al.id,
-        origin_airport_id=origin.id,
-        dest_airport_id=dest.id,
-        scheduled_departure=payload.scheduled_departure,
-        scheduled_arrival=payload.scheduled_arrival,
-        status=payload.status,
-        delay_minutes=payload.delay_minutes,
-        distance_km=payload.distance_km,
-        aircraft_type=payload.aircraft_type,
-    )
-    db.add(flight)
-    db.commit()
-    db.refresh(flight)
-
-    # Re-query with relationships loaded
-    flight = db.query(Flight).options(
-        joinedload(Flight.airline),
-        joinedload(Flight.origin_airport),
-        joinedload(Flight.dest_airport),
-    ).filter(Flight.id == flight.id).first()
-    return flight
-
-
-@router.put("/{flight_id}", response_model=FlightListOut)
-def update_flight(flight_id: int, payload: FlightUpdate, db: Session = Depends(get_db)):
-    """Update an existing flight's status, delay, or times."""
-    flight = db.query(Flight).filter(Flight.id == flight_id).first()
-    if not flight:
-        raise HTTPException(status_code=404, detail="Flight not found")
-
-    update_data = payload.model_dump(exclude_unset=True)
-    for field, value in update_data.items():
-        setattr(flight, field, value)
-
-    db.commit()
-    db.refresh(flight)
-
-    flight = db.query(Flight).options(
-        joinedload(Flight.airline),
-        joinedload(Flight.origin_airport),
-        joinedload(Flight.dest_airport),
-    ).filter(Flight.id == flight.id).first()
-    return flight
-
-
-@router.delete("/{flight_id}", status_code=204)
-def delete_flight(flight_id: int, db: Session = Depends(get_db)):
-    """Delete a flight."""
-    flight = db.query(Flight).filter(Flight.id == flight_id).first()
-    if not flight:
-        raise HTTPException(status_code=404, detail="Flight not found")
-    db.delete(flight)
-    db.commit()
-    return None
 
 
 @router.get("/{flight_id}", response_model=FlightDetailOut)

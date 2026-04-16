@@ -1094,8 +1094,8 @@ async function fetchApi(endpoint, options = {}) {
     });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return await res.json();
-  } catch (err) {
-    console.warn(`API unavailable (${endpoint}), using mock data:`, err.message);
+  } catch {
+    console.warn(`API unavailable (${endpoint}), using mock data`);
     return null;
   }
 }
@@ -1153,7 +1153,7 @@ export async function login(email, password) {
     });
     if (!res.ok) throw new Error(`API error: ${res.status}`);
     return await res.json();
-  } catch (err) {
+  } catch {
     throw new Error('Backend unavailable');
   }
 }
@@ -1169,34 +1169,6 @@ export async function register(email, password, fullName) {
 
 // ── Flight CRUD ────────────────────────────────────────
 
-export async function createFlight(payload) {
-  const data = await fetchApi('/flights', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-  if (!data) throw new Error('Failed to create flight');
-  return data;
-}
-
-export async function updateFlight(id, payload) {
-  const data = await fetchApi(`/flights/${id}`, {
-    method: 'PUT',
-    body: JSON.stringify(payload),
-  });
-  if (!data) throw new Error('Failed to update flight');
-  return data;
-}
-
-export async function deleteFlight(id) {
-  try {
-    const res = await fetch(`${API_BASE}/flights/${id}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
-    return true;
-  } catch (err) {
-    console.warn('Delete flight error:', err.message);
-    throw err;
-  }
-}
 
 // ── Prediction ─────────────────────────────────────────
 

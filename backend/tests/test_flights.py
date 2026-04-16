@@ -10,26 +10,6 @@ class TestFlights:
         assert resp.status_code == 200
         assert isinstance(resp.json(), list)
 
-    def test_create_flight_requires_auth(self, client):
-        """Creating a flight requires a valid JWT."""
-        resp = client.post("/api/flights", json={
-            "flight_number": "TU999",
-            "airline_iata": "TU",
-            "origin_iata": "TUN",
-            "destination_iata": "CDG",
-            "scheduled_departure": "2026-06-01T08:00:00",
-            "scheduled_arrival": "2026-06-01T10:30:00",
-        })
-        assert resp.status_code == 401
-
-    def test_update_flight_requires_auth(self, client):
-        resp = client.put("/api/flights/1", json={"status": "delayed"})
-        assert resp.status_code == 401
-
-    def test_delete_flight_requires_auth(self, client):
-        resp = client.delete("/api/flights/1")
-        assert resp.status_code == 401
-
     def test_predict_requires_auth(self, client):
         resp = client.post("/api/predictions", json={
             "weather_severity": 0.3,

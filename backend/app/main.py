@@ -11,25 +11,7 @@ import logging
 import logging.config
 from contextlib import asynccontextmanager
 
-import bcrypt
 
-if not hasattr(bcrypt, "__about__"):
-    bcrypt.__about__ = type("about", (object,), {"__version__": bcrypt.__version__})
-
-_original_hashpw = bcrypt.hashpw
-
-
-def _patched_hashpw(password, salt):
-    if isinstance(password, str):
-        p_bytes = password.encode("utf-8")
-    else:
-        p_bytes = password
-    if len(p_bytes) > 72:
-        p_bytes = p_bytes[:72]
-    return _original_hashpw(p_bytes, salt)
-
-
-bcrypt.hashpw = _patched_hashpw
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -151,15 +133,16 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(SlowAPIMiddleware)
 
 for mod in _optional_routers:
     app.include_router(mod.router)

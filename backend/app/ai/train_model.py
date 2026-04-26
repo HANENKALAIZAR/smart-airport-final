@@ -28,6 +28,8 @@ from sklearn.metrics import (
 import xgboost as xgb
 import shap
 
+from app.ai.ml_config import CLASSIFIER_PARAMS, REGRESSOR_PARAMS
+
 # ── Paths ────────────────────────────────────────────────────
 
 DATA_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "flights_dataset.csv"
@@ -68,18 +70,8 @@ def train_classifier(X_train, X_test, y_train, y_test) -> xgb.XGBClassifier:
     print("\n🤖 Training Delay Classifier...")
 
     model = xgb.XGBClassifier(
-        n_estimators=200,
-        max_depth=6,
-        learning_rate=0.1,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        min_child_weight=3,
-        gamma=0.1,
-        reg_alpha=0.1,
-        reg_lambda=1.0,
+        **CLASSIFIER_PARAMS,
         scale_pos_weight=(len(y_train) - sum(y_train)) / max(sum(y_train), 1),
-        random_state=42,
-        eval_metric="logloss",
         use_label_encoder=False,
     )
 
@@ -126,14 +118,7 @@ def train_regressor(X_train, X_test, y_train, y_test) -> xgb.XGBRegressor:
         print("   ⚠️  No delayed flights in training set!")
         return None
 
-    model = xgb.XGBRegressor(
-        n_estimators=150,
-        max_depth=5,
-        learning_rate=0.1,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        random_state=42,
-    )
+    model = xgb.XGBRegressor(**REGRESSOR_PARAMS)
 
     model.fit(
         X_train[mask_train], y_train[mask_train],

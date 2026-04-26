@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Plane, Clock, TrendingUp, AlertTriangle, RefreshCw, ArrowDown, ArrowUp } from 'lucide-react';
 import KPICard from '../../components/admin/KPICard';
 import FlightDetailsModal from '../../components/admin/FlightDetailsModal';
@@ -96,7 +96,7 @@ export default function AdminDashboard({ selectedDate }) {
         return () => clearInterval(t);
     }, []);
 
-    async function fetchFlights() {
+    const fetchFlights = useCallback(async () => {
         try {
             setLoading(true);
             setError(null);
@@ -120,13 +120,13 @@ export default function AdminDashboard({ selectedDate }) {
         } finally {
             setLoading(false);
         }
-    }
+    }, [selectedAirport.iata]);
 
     useEffect(() => {
         fetchFlights();
         const iv = setInterval(fetchFlights, 300000);
         return () => clearInterval(iv);
-    }, [selectedAirport.iata]);
+    }, [fetchFlights]);
 
     // KPIs
     const kpi = useMemo(() => {
@@ -154,8 +154,14 @@ export default function AdminDashboard({ selectedDate }) {
     });
 
     // Pagination
-    useEffect(() => { setCurrentPage(1); }, [filters, flights, direction]);
-    const start = (currentPage - 1) * PAGE_SIZE;
+    // Safe reset if current page exceeds total pages
+    const totalFilteredPages = Math.ceil(filtered.length / PAGE_SIZE) || 1;
+    const safeCurrentPage = currentPage > totalFilteredPages ? 1 : currentPage;
+    if (currentPage > totalFilteredPages && currentPage !== 1) {
+        // Enqueue state update gracefully
+        setTimeout(() => setCurrentPage(1), 0);
+    }
+    const start = (safeCurrentPage - 1) * PAGE_SIZE;
     const paginated = filtered.slice(start, start + PAGE_SIZE);
 
     const dateLabel = `${selectedDate.getDate()} ${monthNames[selectedDate.getMonth()]} ${selectedDate.getFullYear()}`;
@@ -305,7 +311,7 @@ export default function AdminDashboard({ selectedDate }) {
                             </table>
                         </div>
                         <Pagination
-                            currentPage={currentPage}
+                            currentPage={safeCurrentPage}
                             totalItems={filtered.length}
                             pageSize={PAGE_SIZE}
                             onPageChange={setCurrentPage}

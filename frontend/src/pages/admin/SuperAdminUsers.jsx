@@ -131,31 +131,31 @@ export default function SuperAdminUsers() {
     }, [showToast]);
 
     /* ── Load admins ── */
+    /* ── Load admins ── */
     useEffect(() => {
-        let cancelled = false;
-        queueMicrotask(() => {
-            if (!cancelled) fetchAdmins();
-        });
-        return () => { cancelled = true; };
+        fetchAdmins();
     }, [fetchAdmins]);
 
     /* ── Deep link: ?review=adminId (from notification bell) ── */
+    /* ── Deep link: ?review=adminId (from notification bell) ── */
     useEffect(() => {
         const rid = searchParams.get('review');
-        if (!rid) return;
-        if (loading) return;
+        if (!rid || loading) return;
+
         const uid = parseInt(rid, 10);
         if (Number.isNaN(uid)) {
-            setSearchParams({}, { replace: true });
+            // Delay removing query params to avoid sync update during render
+            setTimeout(() => setSearchParams({}, { replace: true }), 0);
             return;
         }
+
         const u = users.find((x) => x.id === uid);
-        setSearchParams({}, { replace: true });
-        let cancelled = false;
-        queueMicrotask(() => {
-            if (!cancelled && u) openReview(u);
-        });
-        return () => { cancelled = true; };
+        if (u) {
+            setTimeout(() => {
+                setSearchParams({}, { replace: true });
+                openReview(u);
+            }, 0);
+        }
     }, [searchParams, users, loading, openReview, setSearchParams]);
 
     /* ── Filtered / stats ── */

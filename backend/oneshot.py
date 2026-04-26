@@ -11,7 +11,11 @@ from app.scheduler import AIRPORTS
 from sqlalchemy import func
 from app.models.models import Flight, FlightFeature, WeatherCondition
 
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(
+    level=logging.WARNING,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
 
 async def main():
     db = SessionLocal()

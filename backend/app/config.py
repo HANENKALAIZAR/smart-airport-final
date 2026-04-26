@@ -53,10 +53,12 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:5173"
 
     CORS_ORIGINS: list[str] = [
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-    ]
+    "http://localhost:5173",
+    "http://localhost:8081",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:8081",
+]
 
     model_config = SettingsConfigDict(
         env_file=None
@@ -70,7 +72,7 @@ class Settings(BaseSettings):
 settings = Settings()
 
 if not settings.SECRET_KEY:
-    logging.warning(
-        "SECRET_KEY is not set in .env - JWT authentication will fail. "
-        "Generate one: python -c \"import secrets; print(secrets.token_hex(32))\""
+    raise RuntimeError(
+        "FATAL: SECRET_KEY is not set in .env — the application cannot start securely. "
+        "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
     )

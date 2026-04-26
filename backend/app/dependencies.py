@@ -99,3 +99,26 @@ def require_approved_admin(user: User = Depends(get_current_user)) -> User:
                 detail="Profile approval pending. Please wait for super admin approval.",
             )
     return user
+
+
+def require_correction_or_approved_admin(user: User = Depends(get_current_user)) -> User:
+    """
+    Allow airport admins whose profile is 'approved' OR 'rejected'.
+    Used for endpoints that rejected admins must still reach (e.g. /me/settings).
+    'pending' and null statuses are still blocked — those admins haven't been
+    reviewed at all yet and belong on the PendingApprovalScreen.
+    """
+    if user.role not in ("admin", "super_admin"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    if user.role == "admin":
+        doc_status = str(getattr(user, "id_document_status", None) or "")
+        if doc_status not in ("approved", "rejected"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Profile approval pending. Please wait for super admin approval.",
+            )
+    return user
+

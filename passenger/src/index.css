@@ -1,0 +1,257 @@
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Smart Airport — Aviation Editorial design system.
+   All colors HSL. Semantic tokens only. */
+
+@layer base {
+  :root {
+    /* Light — terminal-bright, editorial */
+    --background: 36 30% 97%;
+    --foreground: 222 35% 11%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 35% 11%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 35% 11%;
+
+    /* Runway amber — signature accent */
+    --primary: 36 92% 52%;
+    --primary-foreground: 222 47% 9%;
+    --primary-glow: 38 100% 64%;
+
+    --secondary: 222 22% 95%;
+    --secondary-foreground: 222 35% 11%;
+
+    --muted: 36 15% 93%;
+    --muted-foreground: 222 12% 42%;
+
+    --accent: 36 92% 52%;
+    --accent-foreground: 222 47% 9%;
+
+    --destructive: 0 78% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 62% 40%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 36 92% 52%;
+    --warning-foreground: 222 47% 9%;
+
+    --info: 210 92% 55%;
+    --info-foreground: 0 0% 100%;
+
+    --border: 222 14% 88%;
+    --input: 222 14% 88%;
+    --ring: 36 92% 52%;
+
+    --radius: 0.875rem;
+
+    /* Surfaces */
+    --surface: 0 0% 100%;
+    --surface-elevated: 36 30% 99%;
+    --surface-sunken: 36 20% 95%;
+
+    /* Gradients */
+    --gradient-amber: linear-gradient(135deg, hsl(36 92% 52%), hsl(28 95% 60%));
+    --gradient-sky: linear-gradient(180deg, hsl(210 60% 96%) 0%, hsl(36 30% 97%) 100%);
+    --gradient-arc: linear-gradient(90deg, hsl(36 92% 52% / 0) 0%, hsl(36 92% 52%) 50%, hsl(36 92% 52% / 0) 100%);
+    --gradient-card: linear-gradient(160deg, hsl(0 0% 100%) 0%, hsl(36 30% 99%) 100%);
+
+    /* Shadows */
+    --shadow-sm: 0 1px 2px hsl(222 30% 12% / 0.04);
+    --shadow-md: 0 4px 14px hsl(222 30% 12% / 0.06), 0 1px 2px hsl(222 30% 12% / 0.04);
+    --shadow-lg: 0 20px 50px -20px hsl(222 30% 12% / 0.18), 0 8px 20px -10px hsl(222 30% 12% / 0.08);
+    --shadow-amber: 0 14px 40px -10px hsl(36 92% 52% / 0.45);
+
+    /* Sidebar */
+    --sidebar-background: 222 32% 9%;
+    --sidebar-foreground: 36 20% 90%;
+    --sidebar-primary: 36 92% 52%;
+    --sidebar-primary-foreground: 222 47% 9%;
+    --sidebar-accent: 222 25% 14%;
+    --sidebar-accent-foreground: 36 20% 95%;
+    --sidebar-border: 222 25% 16%;
+    --sidebar-ring: 36 92% 52%;
+  }
+
+  .dark {
+    /* Dark — midnight cockpit */
+    --background: 222 38% 6%;
+    --foreground: 36 20% 94%;
+
+    --card: 222 32% 9%;
+    --card-foreground: 36 20% 94%;
+
+    --popover: 222 32% 9%;
+    --popover-foreground: 36 20% 94%;
+
+    --primary: 36 95% 58%;
+    --primary-foreground: 222 47% 7%;
+    --primary-glow: 38 100% 68%;
+
+    --secondary: 222 25% 14%;
+    --secondary-foreground: 36 20% 94%;
+
+    --muted: 222 25% 12%;
+    --muted-foreground: 222 12% 62%;
+
+    --accent: 36 95% 58%;
+    --accent-foreground: 222 47% 7%;
+
+    --destructive: 0 72% 56%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 60% 48%;
+    --success-foreground: 222 47% 7%;
+
+    --warning: 36 95% 58%;
+    --warning-foreground: 222 47% 7%;
+
+    --info: 210 95% 62%;
+    --info-foreground: 222 47% 7%;
+
+    --border: 222 25% 16%;
+    --input: 222 25% 16%;
+    --ring: 36 95% 58%;
+
+    --surface: 222 32% 9%;
+    --surface-elevated: 222 28% 12%;
+    --surface-sunken: 222 38% 5%;
+
+    --gradient-amber: linear-gradient(135deg, hsl(36 95% 58%), hsl(28 98% 64%));
+    --gradient-sky: linear-gradient(180deg, hsl(222 40% 8%) 0%, hsl(222 38% 6%) 100%);
+    --gradient-arc: linear-gradient(90deg, hsl(36 95% 58% / 0) 0%, hsl(36 95% 58%) 50%, hsl(36 95% 58% / 0) 100%);
+    --gradient-card: linear-gradient(160deg, hsl(222 32% 10%) 0%, hsl(222 38% 7%) 100%);
+
+    --shadow-sm: 0 1px 2px hsl(0 0% 0% / 0.3);
+    --shadow-md: 0 4px 14px hsl(0 0% 0% / 0.35), 0 1px 2px hsl(0 0% 0% / 0.25);
+    --shadow-lg: 0 24px 60px -20px hsl(0 0% 0% / 0.6), 0 10px 24px -10px hsl(0 0% 0% / 0.4);
+    --shadow-amber: 0 18px 50px -10px hsl(36 95% 58% / 0.35);
+
+    --sidebar-background: 222 40% 5%;
+    --sidebar-foreground: 36 20% 88%;
+    --sidebar-primary: 36 95% 58%;
+    --sidebar-primary-foreground: 222 47% 7%;
+    --sidebar-accent: 222 32% 11%;
+    --sidebar-accent-foreground: 36 20% 94%;
+    --sidebar-border: 222 28% 13%;
+    --sidebar-ring: 36 95% 58%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    font-feature-settings: "ss01", "cv11";
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+    background-image:
+      radial-gradient(1200px 600px at 80% -10%, hsl(var(--primary) / 0.06), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, hsl(var(--info) / 0.05), transparent 60%);
+    background-attachment: fixed;
+  }
+
+  /* Arabic font + RTL */
+  html[lang="ar"] body {
+    font-family: 'Noto Naskh Arabic', 'Inter', system-ui, sans-serif;
+  }
+
+  /* Tabular numerals for flight data */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
+  }
+
+  .font-display {
+    font-family: 'Instrument Serif', Georgia, serif;
+    letter-spacing: -0.01em;
+  }
+
+  .font-mono-data {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .glass {
+    background: hsl(var(--card) / 0.7);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid hsl(var(--border) / 0.6);
+  }
+
+  .surface-card {
+    background: var(--gradient-card);
+    border: 1px solid hsl(var(--border));
+    box-shadow: var(--shadow-md);
+  }
+
+  .pulse-dot {
+    position: relative;
+  }
+  .pulse-dot::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 9999px;
+    background: currentColor;
+    opacity: 0.4;
+    animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  @keyframes pulse-ring {
+    0% { transform: scale(0.6); opacity: 0.6; }
+    80%, 100% { transform: scale(1.6); opacity: 0; }
+  }
+
+  @keyframes plane-trail {
+    0% { stroke-dashoffset: 1000; }
+    100% { stroke-dashoffset: 0; }
+  }
+
+  .animate-trail {
+    stroke-dasharray: 1000;
+    animation: plane-trail 3s ease-out forwards;
+  }
+
+  @keyframes float-plane {
+    0%, 100% { transform: translateY(0) rotate(-8deg); }
+    50% { transform: translateY(-6px) rotate(-6deg); }
+  }
+
+  .animate-float-plane {
+    animation: float-plane 4s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  .shimmer-text {
+    background: linear-gradient(90deg, hsl(var(--foreground)) 0%, hsl(var(--primary)) 50%, hsl(var(--foreground)) 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: shimmer 4s linear infinite;
+  }
+}
+
+/* RTL flips for directional icons */
+[dir="rtl"] .rtl-flip {
+  transform: scaleX(-1);
+}

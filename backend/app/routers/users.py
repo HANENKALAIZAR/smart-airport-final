@@ -30,7 +30,7 @@ from app.models.models import (
     MessageReply,
     PasswordResetToken,
 )
-from app.dependencies import require_super_admin, get_current_user
+from app.dependencies import require_super_admin, get_current_user, require_correction_or_approved_admin
 from app.services.email_service import (
     send_welcome_email,
     AIRPORT_DISPLAY,
@@ -501,7 +501,7 @@ def complete_my_profile(
 def patch_my_settings(
     payload: PatchMySettingsRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_correction_or_approved_admin),
 ):
     """
     Update editable profile fields for airport admins.
@@ -611,24 +611,55 @@ def patch_my_settings(
         current_user.emergency_contact_relationship = data["emergency_contact_relationship"]
 
     if is_resubmit:
-        current_user.id_document_status = "pending"
-        current_user.rejected_fields = None
-        current_user.id_document_rejection_reason = None
-        # Notify super admins
-        iata = current_user.airport_iata or ""
-        body = f"{current_user.full_name} has resubmitted their conditionally rejected profile fields."
-        try:
-            notify_all_super_admins(
-                db, kind="profile_resubmitted_review", body=body,
-                context={"action": "open_admin_review", "admin_id": current_user.id}
+        # Remove ONLY the fields that were just corrected from the rejected list.
+        # Do NOT wipe all rejected_fields at once — admin may fix them in multiple saves.
+        remaining_rejected = list(current_user.rejected_fields or [])
+        for key in data.keys():
+            if key in remaining_rejected:
+                remaining_rejected.remove(key)
+
+        if remaining_rejected:
+            # Some fields still need correction — keep status as rejected, update remaining list
+            current_user.rejected_fields = remaining_rejected
+            fields_str = ", ".join(remaining_rejected)
+            current_user.id_document_rejection_reason = (
+                f"The following fields still need correction: {fields_str}"
             )
-        except Exception:
-            pass
+            logger.info(
+                f"Admin {current_user.email} corrected some fields; "
+                f"still pending: {remaining_rejected}"
+            )
+        else:
+            # All rejected fields have been corrected — resubmit for super admin review
+            current_user.id_document_status = "pending"
+            current_user.rejected_fields = None
+            current_user.id_document_rejection_reason = None
+            iata = current_user.airport_iata or ""
+            body = (
+                f"{current_user.full_name} ({iata}) has corrected all rejected fields "
+                f"and resubmitted their profile for review."
+            )
+            try:
+                notify_all_super_admins(
+                    db,
+                    kind="profile_resubmitted_review",
+                    body=body,
+                    context={"action": "open_admin_review", "admin_id": current_user.id},
+                )
+            except Exception:
+                pass
+            logger.info(f"Admin profile fully resubmitted: {current_user.email}")
 
     current_user.updated_at = datetime.now(timezone.utc)
     db.commit()
 
-    return {"message": "Settings updated. Profile resubmitted for approval." if is_resubmit else "Settings updated"}
+    if is_resubmit:
+        remaining = current_user.rejected_fields or []
+        if remaining:
+            return {"message": f"Field(s) saved. {len(remaining)} field(s) still require correction."}
+        return {"message": "All corrections submitted. Your profile is pending super admin review."}
+    return {"message": "Settings updated"}
+
 
 
 @router.patch("/me/super-admin-profile", status_code=200)

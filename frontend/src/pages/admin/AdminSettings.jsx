@@ -76,6 +76,13 @@ export default function AdminSettings() {
     const [photoErr, setPhotoErr] = useState('');
     const [photoSaving, setPhotoSaving] = useState(false);
 
+    // Toast for save feedback
+    const [saveToast, setSaveToast] = useState(null); // { type: 'success'|'error', msg }
+    function showSaveToast(type, msg) {
+        setSaveToast({ type, msg });
+        setTimeout(() => setSaveToast(null), 4500);
+    }
+
     const [correctionIdentityDraft, setCorrectionIdentityDraft] = useState({
         full_name: '',
         date_of_birth: '',
@@ -219,72 +226,80 @@ export default function AdminSettings() {
 
     async function saveUnlockedIdProfile() {
         setUnlockFieldErr({});
-        const isRejected = profile?.id_document_status === 'rejected';
-        const ul = isRejected ? (profile?.rejected_fields || []) : [];
-        const needCin = ul.includes('cin_number') || ul.includes('cin_document_url');
-        const needPass = ul.includes('passport_number') || ul.includes('passport_document_url') || ul.includes('passport_expiry_date');
         const errs = {};
-        if (needCin) {
-            if (!unlockCinDocUrl) errs.cinDoc = 'CIN document is required';
+
+        // Validate ONLY the fields that were explicitly rejected
+        if (unlockFields.includes('cin_number')) {
             if (!/^\d{8}$/.test(unlockCinNumber || '')) errs.cin = 'CIN must be exactly 8 digits';
         }
-        if (needPass) {
+        if (unlockFields.includes('cin_document_url')) {
+            if (!unlockCinDocUrl) errs.cinDoc = 'CIN document is required';
+        }
+        if (unlockFields.includes('passport_number')) {
             const pe = passportNumberErr(unlockPassportNumber);
             if (pe) errs.passport = pe;
+        }
+        if (unlockFields.includes('passport_expiry_date')) {
             if (!unlockPassportExpiry) errs.expiry = 'Passport expiry is required';
             else if (new Date(unlockPassportExpiry) <= new Date()) errs.expiry = 'Must be a future date';
+        }
+        if (unlockFields.includes('passport_document_url')) {
             if (!unlockPassportDocUrl) errs.passportDoc = 'Passport document is required';
         }
+
         if (Object.keys(errs).length) {
             setUnlockFieldErr(errs);
             return;
         }
+
+        // Build body with ONLY the explicitly rejected fields
         const body = {};
-        if (needCin) {
-            body.cin_number = unlockCinNumber;
-            body.cin_document_url = unlockCinDocUrl;
-        }
-        if (needPass) {
-            body.passport_number = unlockPassportNumber.trim().toUpperCase();
-            body.passport_document_url = unlockPassportDocUrl;
-            body.passport_expiry_date = unlockPassportExpiry;
-        }
+        if (unlockFields.includes('cin_number')) body.cin_number = unlockCinNumber;
+        if (unlockFields.includes('cin_document_url')) body.cin_document_url = unlockCinDocUrl;
+        if (unlockFields.includes('passport_number')) body.passport_number = unlockPassportNumber.trim().toUpperCase();
+        if (unlockFields.includes('passport_expiry_date')) body.passport_expiry_date = unlockPassportExpiry;
+        if (unlockFields.includes('passport_document_url')) body.passport_document_url = unlockPassportDocUrl;
+
+        if (!Object.keys(body).length) return;
         setUnlockSaving(true);
-        const { error } = await apiPatchSettings(body);
+        const { data: respData, error } = await apiPatchSettings(body);
         setUnlockSaving(false);
         if (error) {
             setUnlockFieldErr({ form: error });
             return;
         }
+        showSaveToast('success', respData?.message || 'Saved.');
         await refreshProfile();
     }
 
+
     async function saveCorrectionIdentity() {
-        const isRejected = profile?.id_document_status === 'rejected';
-        const ul = isRejected ? (profile?.rejected_fields || []) : [];
         const payload = {};
-        if (ul.includes('full_name')) payload.full_name = correctionIdentityDraft.full_name.trim();
-        if (ul.includes('date_of_birth') && correctionIdentityDraft.date_of_birth) {
+        if (unlockFields.includes('full_name')) payload.full_name = correctionIdentityDraft.full_name.trim();
+        if (unlockFields.includes('date_of_birth') && correctionIdentityDraft.date_of_birth) {
             payload.date_of_birth = correctionIdentityDraft.date_of_birth;
         }
-        if (ul.includes('gender')) payload.gender = correctionIdentityDraft.gender;
-        if (ul.includes('nationality')) payload.nationality = correctionIdentityDraft.nationality.trim();
+        if (unlockFields.includes('gender')) payload.gender = correctionIdentityDraft.gender;
+        if (unlockFields.includes('nationality')) payload.nationality = correctionIdentityDraft.nationality.trim();
         if (!Object.keys(payload).length) return;
-        const { error } = await apiPatchSettings(payload);
-        if (error) return;
+        const { data: respData, error } = await apiPatchSettings(payload);
+        if (error) { showSaveToast('error', error); return; }
+        showSaveToast('success', respData?.message || 'Saved.');
         await refreshProfile();
     }
+
 
     async function saveAddress() {
         setAddrErr('');
         setAddrSaving(true);
-        const { error } = await apiPatchSettings({ residential_address: addrDraft.trim() });
+        const { data: respData, error } = await apiPatchSettings({ residential_address: addrDraft.trim() });
         setAddrSaving(false);
         if (error) {
             setAddrErr(error);
             return;
         }
         setAddrEdit(false);
+        if (respData?.message) showSaveToast('success', respData.message);
         await refreshProfile();
     }
 
@@ -296,7 +311,7 @@ export default function AdminSettings() {
             return;
         }
         setEmergencySaving(true);
-        const { error } = await apiPatchSettings({
+        const { data: respData, error } = await apiPatchSettings({
             emergency_contact_name: emergencyDraft.name.trim(),
             emergency_contact_phone: emergencyDraft.phone.replace(/[^\d+]/g, ''),
             emergency_contact_relationship: emergencyDraft.relationship,
@@ -307,6 +322,7 @@ export default function AdminSettings() {
             return;
         }
         setEmergencyEdit(false);
+        if (respData?.message) showSaveToast('success', respData.message);
         await refreshProfile();
     }
 
@@ -402,13 +418,21 @@ export default function AdminSettings() {
     const tunisianAirportAdmin = profile?.role === 'admin';
     const isRejected = profile?.id_document_status === 'rejected';
     const unlockFields = isRejected ? (profile?.rejected_fields || []) : [];
-    const legacyIdUnlock = false;
-    const cinEditable =
-        tunisianAirportAdmin && (legacyIdUnlock || unlockFields.includes('cin'));
-    const passportEditable =
-        tunisianAirportAdmin && (legacyIdUnlock || unlockFields.includes('passport'));
+
+    // A field group is editable only if ANY of its specific sub-fields were rejected
+    const cinNumberEditable = tunisianAirportAdmin && unlockFields.includes('cin_number');
+    const cinDocEditable = tunisianAirportAdmin && unlockFields.includes('cin_document_url');
+    const cinEditable = cinNumberEditable || cinDocEditable;
+    const passportNumberEditable = tunisianAirportAdmin && (unlockFields.includes('passport_number') || unlockFields.includes('passport_expiry_date'));
+    const passportDocEditable = tunisianAirportAdmin && unlockFields.includes('passport_document_url');
+    const passportEditable = passportNumberEditable || passportDocEditable;
+
     const canEditAddress = tunisianAirportAdmin && unlockFields.includes('residential_address');
-    const canEditEmergency = tunisianAirportAdmin && unlockFields.includes('emergency_contact');
+    const canEditEmergency = tunisianAirportAdmin && (
+        unlockFields.includes('emergency_contact_name') ||
+        unlockFields.includes('emergency_contact_phone') ||
+        unlockFields.includes('emergency_contact_relationship')
+    );
     const hasIdentityUnlock =
         unlockFields.some((k) =>
             ['full_name', 'date_of_birth', 'gender', 'nationality'].includes(k),
@@ -420,10 +444,81 @@ export default function AdminSettings() {
 
     return (
         <div className="admin-space-y-6">
+            {/* ── Save Toast ── */}
+            {saveToast && (
+                <div style={{
+                    position: 'fixed', top: 20, right: 20, zIndex: 9999,
+                    padding: '12px 20px', borderRadius: 10, fontWeight: 600, fontSize: '0.85rem',
+                    background: saveToast.type === 'success' ? '#064E3B' : '#7F1D1D',
+                    color: saveToast.type === 'success' ? '#6EE7B7' : '#FCA5A5',
+                    border: `1px solid ${saveToast.type === 'success' ? '#065F46' : '#991B1B'}`,
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                    maxWidth: 400,
+                    lineHeight: 1.5,
+                }}>
+                    {saveToast.msg}
+                </div>
+            )}
+
             <div className="admin-page-header">
                 <h1>{t('admin_settings_title')}</h1>
                 <p>{t('admin_settings_subtitle')}</p>
             </div>
+            {/* ── Rejection Alert Banner ── */}
+            {tunisianAirportAdmin && isRejected && unlockFields.length > 0 && (
+                <div style={{
+                    padding: '16px 20px',
+                    borderRadius: 12,
+                    background: 'rgba(239,68,68,0.08)',
+                    border: '1px solid rgba(239,68,68,0.35)',
+                    marginBottom: 4,
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        <AlertCircle size={18} style={{ color: '#f87171', flexShrink: 0 }} />
+                        <span style={{ fontWeight: 700, color: '#f87171', fontSize: '0.95rem' }}>
+                            Profile Correction Required
+                        </span>
+                    </div>
+                    <p style={{ margin: '0 0 10px', fontSize: '0.84rem', color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>
+                        {profile?.id_document_rejection_reason || 'Some fields in your profile were rejected by the super admin.'}
+                    </p>
+                    <div style={{ fontSize: '0.8rem', color: 'rgba(255,255,255,0.55)', marginBottom: 6 }}>
+                        Fields requiring correction:
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                        {unlockFields.map(f => (
+                            <span key={f} style={{
+                                padding: '3px 10px',
+                                borderRadius: 20,
+                                background: 'rgba(239,68,68,0.15)',
+                                border: '1px solid rgba(239,68,68,0.4)',
+                                color: '#fca5a5',
+                                fontSize: '0.75rem',
+                                fontWeight: 600,
+                            }}>
+                                {({
+                                    full_name: 'Full Name',
+                                    date_of_birth: 'Date of Birth',
+                                    gender: 'Gender',
+                                    nationality: 'Nationality',
+                                    cin_number: 'CIN Number',
+                                    cin_document_url: 'CIN Document Photo',
+                                    passport_number: 'Passport Number',
+                                    passport_expiry_date: 'Passport Expiry',
+                                    passport_document_url: 'Passport Document Photo',
+                                    residential_address: 'Residential Address',
+                                    emergency_contact_name: 'Emergency Contact Name',
+                                    emergency_contact_phone: 'Emergency Contact Phone',
+                                    emergency_contact_relationship: 'Emergency Relationship',
+                                })[f] || f}
+                            </span>
+                        ))}
+                    </div>
+                    <p style={{ margin: '10px 0 0', fontSize: '0.78rem', color: 'rgba(255,255,255,0.4)' }}>
+                        All other fields are locked and preserved. Only the highlighted fields above are editable.
+                    </p>
+                </div>
+            )}
 
             {/* ── Account Info ── */}
             <div className="admin-card">
@@ -445,21 +540,23 @@ export default function AdminSettings() {
                     ) : (
                     <div>
 
-                        {tunisianAirportAdmin &&
-                            (unlockFields.length > 0 || !!profile.id_fields_unlocked) && (
+                        {tunisianAirportAdmin && unlockFields.length > 0 && (
                             <div
                                 style={{
                                     marginBottom: 16,
-                                    padding: 12,
+                                    padding: '10px 14px',
                                     borderRadius: 8,
-                                    background: 'rgba(30,144,255,0.12)',
-                                    border: '1px solid rgba(30,144,255,0.25)',
-                                    color: '#93c5fd',
-                                    fontSize: '0.88rem',
+                                    background: 'rgba(239,68,68,0.08)',
+                                    border: '1px solid rgba(239,68,68,0.25)',
+                                    color: '#fca5a5',
+                                    fontSize: '0.82rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 8,
                                 }}
                             >
-                                Selected fields have been unlocked for correction. Save your changes; fields lock
-                                again after you submit.
+                                <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                                Correct the highlighted fields below, then click Save. Approved fields are locked.
                             </div>
                         )}
                         <div
@@ -1529,10 +1626,14 @@ export default function AdminSettings() {
                                         disabled={unlockSaving}
                                         onClick={saveUnlockedIdProfile}
                                     >
-                                        {unlockSaving ? 'Saving…' : 'Save & Resubmit'}
+                                        {unlockSaving ? 'Saving…' : 'Save Correction'}
                                     </button>
+                                    <p style={{ marginTop: 8, fontSize: '0.75rem', color: 'rgba(255,255,255,0.35)', lineHeight: 1.5 }}>
+                                        Only corrected fields are updated. Your profile is resubmitted for super admin review once all rejected fields are resolved.
+                                    </p>
                                 </div>
                             )}
+
                         </div>
                     </div>
                     )

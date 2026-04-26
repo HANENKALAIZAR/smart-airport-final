@@ -37,13 +37,19 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
 def hash_password(password: str) -> str:
     """Hash a plain-text password using bcrypt."""
-    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    p_bytes = password.encode("utf-8")
+    if len(p_bytes) > 72:
+        p_bytes = p_bytes[:72]
+    return bcrypt.hashpw(p_bytes, bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
     """Verify a plain-text password against a bcrypt hash."""
     try:
-        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+        p_bytes = plain.encode("utf-8")
+        if len(p_bytes) > 72:
+            p_bytes = p_bytes[:72]
+        return bcrypt.checkpw(p_bytes, hashed.encode("utf-8"))
     except Exception:
         return False
 

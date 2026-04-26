@@ -107,12 +107,13 @@ def load_model():
         try:
             import xgboost as xgb
             import joblib
+            from app.ai.ml_config import CLASSIFIER_PARAMS, REGRESSOR_PARAMS
 
-            _model = xgb.XGBClassifier()
+            _model = xgb.XGBClassifier(**CLASSIFIER_PARAMS)
             _model.load_model(str(_CLASSIFIER_PATH))
 
             if _REGRESSOR_PATH.exists():
-                _regressor = xgb.XGBRegressor()
+                _regressor = xgb.XGBRegressor(**REGRESSOR_PARAMS)
                 _regressor.load_model(str(_REGRESSOR_PATH))
 
             if _EXPLAINER_PATH.exists():
@@ -131,7 +132,7 @@ def load_model():
                 f"regressor={'yes' if _regressor else 'no'} | "
                 f"SHAP={'yes' if _explainer else 'no'}"
             )
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError, ImportError) as e:
             logger.warning(f"Model loading failed: {e} — using rule-based fallback")
             _model = None
 
@@ -225,7 +226,7 @@ def _ml_prediction(features: np.ndarray, cols: list) -> tuple[float, int, dict]:
                     "shap":  round(float(sv[i]), 4),
                     "value": round(raw, 4) if raw is not None else None,
                 }
-        except Exception as e:
+        except (ValueError, IndexError, RuntimeError, TypeError) as e:
             logger.warning(f"SHAP explanation failed: {e}")
     else:
         # Fallback: use feature importances × feature values as proxy
@@ -275,11 +276,14 @@ def _persist_prediction(
         )
         db.add(row)
         db.commit()
-    except Exception as e:
+    except Exception as e: # SQLAlchemy exceptions imported locally
+        from sqlalchemy.exc import SQLAlchemyError
+        if not isinstance(e, SQLAlchemyError):
+            raise
         logger.warning(f"Prediction persistence failed: {e}")
         try:
             db.rollback()
-        except Exception:
+        except SQLAlchemyError:
             pass
 
 
@@ -384,7 +388,7 @@ def run_batch_predictions(db) -> int:
         try:
             predict_flight(feat, db=db, flight_id=flight.id)
             count += 1
-        except Exception as e:
+        except (ValueError, TypeError, RuntimeError) as e:
             logger.warning(f"Batch prediction failed for flight {flight.id}: {e}")
 
     logger.info(f"Batch predictions complete: {count} generated")

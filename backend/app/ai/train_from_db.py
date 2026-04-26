@@ -48,27 +48,7 @@ REGRESSOR_PATH   = MODEL_DIR / "delay_regressor.json"
 EXPLAINER_PATH   = MODEL_DIR / "shap_explainer.pkl"
 FEAT_COLS_PATH   = MODEL_DIR / "feature_columns.json"
 
-# ── Features used by the new pipeline ─────────────────────────────────────
-FEATURE_COLUMNS = [
-    "weather_severity",
-    "origin_weather_severity",
-    "dest_weather_severity",
-    "temperature_c",
-    "wind_speed_kmh",
-    "visibility_km",
-    "precipitation_mm",
-    "hour_of_day",
-    "day_of_week",
-    "month",
-    "is_weekend",
-    "is_holiday",
-    "congestion_level",
-    "origin_congestion",
-    "dest_congestion",
-    "airline_reliability",
-    "distance_km",
-    "historical_delay_rate",
-]
+from app.ai.ml_config import FEATURE_COLUMNS, CLASSIFIER_PARAMS, REGRESSOR_PARAMS
 
 TARGET_CLASS = "is_delayed"
 TARGET_REG   = "delay_minutes"
@@ -117,18 +97,8 @@ def _train_classifier(X_train, X_val, y_train, y_val):
     scale = max(neg / max(pos, 1), 1)
 
     model = xgb.XGBClassifier(
-        n_estimators=200,
-        max_depth=6,
-        learning_rate=0.1,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        min_child_weight=3,
-        gamma=0.1,
-        reg_alpha=0.1,
-        reg_lambda=1.0,
+        **CLASSIFIER_PARAMS,
         scale_pos_weight=scale,
-        random_state=42,
-        eval_metric="logloss",
         use_label_encoder=False,
         enable_categorical=False,
     )
@@ -147,14 +117,7 @@ def _train_regressor(X_train, X_val, y_train, y_val):
         logger.warning("Not enough delayed flights for regressor training — skipping")
         return None
 
-    model = xgb.XGBRegressor(
-        n_estimators=150,
-        max_depth=5,
-        learning_rate=0.1,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        random_state=42,
-    )
+    model = xgb.XGBRegressor(**REGRESSOR_PARAMS)
     model.fit(
         X_train[mask_tr], y_train[mask_tr],
         eval_set=[(X_val[mask_va], y_val[mask_va])] if mask_va.sum() > 0 else None,
@@ -373,7 +336,7 @@ if __name__ == "__main__":
     import sys
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
 
     from app.database import SessionLocal
     _db = SessionLocal()

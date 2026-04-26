@@ -2,17 +2,28 @@
 Flights API router.
 """
 
-from datetime import datetime, date
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import require_approved_admin
-from app.models.models import Flight, Airport, Airline, Prediction, FlightFeature, User
-from app.schemas.schemas import FlightListOut, FlightDetailOut, PredictionOut, FlightFeaturesOut, FlightCreate, FlightUpdate
+from app.models.models import User
+from app.repositories.flight_repository import (
+    list_flights as repo_list_flights,
+    get_flight_by_id,
+    get_flight_detail,
+    get_latest_prediction,
+    get_flight_features,
+    resolve_airline,
+    resolve_airport,
+)
+from app.schemas.schemas import (
+    FlightListOut, FlightDetailOut, PredictionOut,
+    FlightFeaturesOut, FlightCreate, FlightUpdate,
+)
 
 router = APIRouter(prefix="/api/flights", tags=["Flights"])
 
@@ -30,47 +41,32 @@ def list_flights(
     db: Session = Depends(get_db),
 ):
     """List flights with optional filters."""
-    query = db.query(Flight).options(
-        joinedload(Flight.airline),
-        joinedload(Flight.origin_airport),
-        joinedload(Flight.dest_airport),
-    )
-
-    if status:
-        query = query.filter(Flight.status == status)
-
-    if airport:
-        origin = db.query(Airport).filter(Airport.iata_code == airport.upper()).first()
-        if origin:
-            query = query.filter(
-                (Flight.origin_airport_id == origin.id) | (Flight.dest_airport_id == origin.id)
-            )
-
-    if airline:
-        al = db.query(Airline).filter(Airline.iata_code == airline.upper()).first()
-        if al:
-            query = query.filter(Flight.airline_id == al.id)
+    parsed_from: Optional[datetime] = None
+    parsed_to: Optional[datetime] = None
 
     if date_from:
         try:
-            d = datetime.strptime(date_from, "%Y-%m-%d")
-            query = query.filter(Flight.scheduled_departure >= d)
+            parsed_from = datetime.strptime(date_from, "%Y-%m-%d")
         except ValueError:
             pass
 
     if date_to:
         try:
-            d = datetime.strptime(date_to, "%Y-%m-%d")
-            query = query.filter(Flight.scheduled_departure <= d.replace(hour=23, minute=59))
+            parsed_to = datetime.strptime(date_to, "%Y-%m-%d")
         except ValueError:
             pass
 
-    if search:
-        query = query.filter(Flight.flight_number.ilike(f"%{search}%"))
-
-    query = query.order_by(Flight.scheduled_departure.desc())
-    flights = query.offset(skip).limit(limit).all()
-    return flights
+    return repo_list_flights(
+        db,
+        status=status,
+        airport_iata=airport,
+        airline_iata=airline,
+        date_from=parsed_from,
+        date_to=parsed_to,
+        search=search,
+        skip=skip,
+        limit=limit,
+    )
 
 
 @router.post("", response_model=FlightListOut, status_code=201)
@@ -80,17 +76,17 @@ def create_flight(
     _user: User = Depends(require_approved_admin),
 ):
     """Create a new flight."""
-    # Resolve airline
-    al = db.query(Airline).filter(Airline.iata_code == payload.airline_iata.upper()).first()
+    from app.models.models import Flight
+
+    al = resolve_airline(db, payload.airline_iata)
     if not al:
         raise HTTPException(status_code=404, detail=f"Airline '{payload.airline_iata}' not found")
 
-    # Resolve airports
-    origin = db.query(Airport).filter(Airport.iata_code == payload.origin_iata.upper()).first()
+    origin = resolve_airport(db, payload.origin_iata)
     if not origin:
         raise HTTPException(status_code=404, detail=f"Origin airport '{payload.origin_iata}' not found")
 
-    dest = db.query(Airport).filter(Airport.iata_code == payload.destination_iata.upper()).first()
+    dest = resolve_airport(db, payload.destination_iata)
     if not dest:
         raise HTTPException(status_code=404, detail=f"Destination airport '{payload.destination_iata}' not found")
 
@@ -110,13 +106,7 @@ def create_flight(
     db.commit()
     db.refresh(flight)
 
-    # Re-query with relationships loaded
-    flight = db.query(Flight).options(
-        joinedload(Flight.airline),
-        joinedload(Flight.origin_airport),
-        joinedload(Flight.dest_airport),
-    ).filter(Flight.id == flight.id).first()
-    return flight
+    return get_flight_by_id(db, flight.id)
 
 
 @router.put("/{flight_id}", response_model=FlightListOut)
@@ -127,7 +117,9 @@ def update_flight(
     _user: User = Depends(require_approved_admin),
 ):
     """Update an existing flight's status, delay, or times."""
-    flight = db.query(Flight).filter(Flight.id == flight_id).first()
+    from app.models.models import Flight as FlightModel
+
+    flight = db.query(FlightModel).filter(FlightModel.id == flight_id).first()
     if not flight:
         raise HTTPException(status_code=404, detail="Flight not found")
 
@@ -138,12 +130,7 @@ def update_flight(
     db.commit()
     db.refresh(flight)
 
-    flight = db.query(Flight).options(
-        joinedload(Flight.airline),
-        joinedload(Flight.origin_airport),
-        joinedload(Flight.dest_airport),
-    ).filter(Flight.id == flight.id).first()
-    return flight
+    return get_flight_by_id(db, flight.id)
 
 
 @router.delete("/{flight_id}", status_code=204)
@@ -153,7 +140,9 @@ def delete_flight(
     _user: User = Depends(require_approved_admin),
 ):
     """Delete a flight."""
-    flight = db.query(Flight).filter(Flight.id == flight_id).first()
+    from app.models.models import Flight as FlightModel
+
+    flight = db.query(FlightModel).filter(FlightModel.id == flight_id).first()
     if not flight:
         raise HTTPException(status_code=404, detail="Flight not found")
     db.delete(flight)
@@ -164,26 +153,18 @@ def delete_flight(
 @router.get("/{flight_id}", response_model=FlightDetailOut)
 def get_flight(flight_id: int, db: Session = Depends(get_db)):
     """Get detailed flight info with prediction and passenger rights."""
-    flight = (
-        db.query(Flight)
-        .options(
-            joinedload(Flight.airline),
-            joinedload(Flight.origin_airport),
-            joinedload(Flight.dest_airport),
-            joinedload(Flight.predictions),
-        )
-        .filter(Flight.id == flight_id)
-        .first()
-    )
+    flight = get_flight_detail(db, flight_id)
     if not flight:
         raise HTTPException(status_code=404, detail="Flight not found")
 
-    # Get latest prediction
     prediction = None
     if flight.predictions:
-        prediction = sorted(flight.predictions, key=lambda p: p.predicted_at or datetime.min, reverse=True)[0]
+        prediction = sorted(
+            flight.predictions,
+            key=lambda p: p.predicted_at or datetime.min,
+            reverse=True,
+        )[0]
 
-    # Get passenger rights based on region and delay
     from app.services.passenger_rights import get_applicable_rights
     rights = get_applicable_rights(db, flight)
 
@@ -197,35 +178,28 @@ def get_flight(flight_id: int, db: Session = Depends(get_db)):
 @router.get("/{flight_id}/prediction", response_model=PredictionOut)
 def get_flight_prediction(flight_id: int, db: Session = Depends(get_db)):
     """Get AI prediction for a specific flight."""
-    flight = db.query(Flight).filter(Flight.id == flight_id).first()
+    from app.models.models import Flight as FlightModel
+
+    flight = db.query(FlightModel).filter(FlightModel.id == flight_id).first()
     if not flight:
         raise HTTPException(status_code=404, detail="Flight not found")
 
-    # Check for existing prediction
-    prediction = (
-        db.query(Prediction)
-        .filter(Prediction.flight_id == flight_id)
-        .order_by(Prediction.predicted_at.desc())
-        .first()
-    )
-
+    prediction = get_latest_prediction(db, flight_id)
     if prediction:
         return PredictionOut.model_validate(prediction)
 
-    # Generate on-the-fly prediction
-    features = db.query(FlightFeature).filter(FlightFeature.flight_id == flight_id).first()
+    features = get_flight_features(db, flight_id)
     if not features:
         raise HTTPException(status_code=404, detail="Flight features not found for prediction")
 
     from app.services.prediction_service import predict_flight
-    result = predict_flight(features)
-    return result
+    return predict_flight(features)
 
 
 @router.get("/{flight_id}/features", response_model=FlightFeaturesOut)
-def get_flight_features(flight_id: int, db: Session = Depends(get_db)):
+def get_flight_features_endpoint(flight_id: int, db: Session = Depends(get_db)):
     """Get computed ML features for a flight."""
-    features = db.query(FlightFeature).filter(FlightFeature.flight_id == flight_id).first()
+    features = get_flight_features(db, flight_id)
     if not features:
         raise HTTPException(status_code=404, detail="Flight features not found")
     return FlightFeaturesOut.model_validate(features)

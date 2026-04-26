@@ -9,7 +9,7 @@ import { useAirport } from '../../context/AirportContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { apiGetMessageUnreadCount } from '../../services/adminApi';
 
-export default function AdminSidebar({ activeTab, onTabChange, onLogout }) {
+export default function AdminSidebar({ activeTab, onTabChange, onLogout, isRejected }) {
     const { selectedAirport, role } = useAirport();
     const { t } = useLanguage();
     const location = useLocation();
@@ -44,7 +44,7 @@ export default function AdminSidebar({ activeTab, onTabChange, onLogout }) {
         if (location.pathname.includes('/dashboard/messages')) refreshMsgUnread();
     }, [location.pathname, refreshMsgUnread]);
 
-    const menuItems = [
+    let menuItems = [
         { to: '/dashboard', icon: LayoutDashboard, label: t('dashboard') },
         { to: '/dashboard/flights', icon: Plane, label: t('flights') },
         { to: '/dashboard/analytics', icon: TrendingUp, label: t('analytics') },
@@ -57,6 +57,10 @@ export default function AdminSidebar({ activeTab, onTabChange, onLogout }) {
             { to: '/dashboard/users', icon: Users, label: t('admin_users_nav'), superOnly: true },
         ] : []),
     ];
+
+    if (isRejected) {
+        menuItems = [{ to: '/dashboard/settings', icon: Settings, label: t('settings') }];
+    }
 
     // User initial for avatar
     const userInitial = role === 'super_admin' ? 'S' : 'A';

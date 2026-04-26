@@ -77,16 +77,8 @@ def get_at_risk_flights(
         .subquery()
     )
 
-    flights = (
-        db.query(Flight)
-        .options(
-            joinedload(Flight.airline),
-            joinedload(Flight.origin_airport),
-            joinedload(Flight.dest_airport),
-        )
-        .filter(Flight.id.in_(high_risk_flight_ids.select()))
-        .all()
-    )
+    from app.repositories.flight_repository import get_flights_by_ids
+    flights = get_flights_by_ids(db, high_risk_flight_ids.select())
     return flights
 
 

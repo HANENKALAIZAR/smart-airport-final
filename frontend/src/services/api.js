@@ -962,9 +962,19 @@ async function fetchApi(endpoint, options = {}) {
       },
       ...options,
     });
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
+    if (!res.ok) {
+      let message = `API error: ${res.status}`;
+      try {
+        const errData = await res.json();
+        if (errData.detail) message = typeof errData.detail === 'string' ? errData.detail : JSON.stringify(errData.detail);
+      } catch (e) {}
+      const error = new Error(message);
+      error.status = res.status;
+      throw error;
+    }
     return await res.json();
   } catch (err) {
+    if (err.status) throw err; // propagate actual backend HTTP errors
     console.warn(`API unavailable (${endpoint}), using mock data:`, err.message);
     return null;
   }
@@ -1015,17 +1025,22 @@ export async function getAirlinesPerformance() {
 
 export async function login(email, password) {
   // Login must NOT send Authorization header — no token exists yet
-  try {
-    const res = await fetch(`${API_BASE}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    if (!res.ok) throw new Error(`API error: ${res.status}`);
-    return await res.json();
-  } catch (err) {
-    throw new Error('Backend unavailable');
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    let message = `API error: ${res.status}`;
+    try {
+      const errData = await res.json();
+      if (errData.detail) message = typeof errData.detail === 'string' ? errData.detail : JSON.stringify(errData.detail);
+    } catch (e) {}
+    const error = new Error(message);
+    error.status = res.status;
+    throw error;
   }
+  return await res.json();
 }
 
 export async function register(email, password, fullName) {
@@ -1058,14 +1073,18 @@ export async function updateFlight(id, payload) {
 }
 
 export async function deleteFlight(id) {
-  try {
-    const res = await fetch(`${API_BASE}/flights/${id}`, { method: 'DELETE' });
-    if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
-    return true;
-  } catch (err) {
-    console.warn('Delete flight error:', err.message);
-    throw err;
+  const res = await fetch(`${API_BASE}/flights/${id}`, { method: 'DELETE', headers: _getAuthHeader() });
+  if (!res.ok) {
+    let message = `Delete failed: ${res.status}`;
+    try {
+      const errData = await res.json();
+      if (errData.detail) message = typeof errData.detail === 'string' ? errData.detail : JSON.stringify(errData.detail);
+    } catch (e) {}
+    const error = new Error(message);
+    error.status = res.status;
+    throw error;
   }
+  return true;
 }
 
 // ── Prediction ─────────────────────────────────────────

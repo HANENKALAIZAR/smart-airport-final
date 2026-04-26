@@ -5,7 +5,6 @@ import AdminLogin from './AdminLogin';
 import ChangePasswordScreen from './ChangePasswordScreen';
 import ProfileCompletionScreen from './ProfileCompletionScreen';
 import PendingApprovalScreen from './PendingApprovalScreen';
-import IdDocumentReuploadScreen from './IdDocumentReuploadScreen';
 import AdminSidebar from '../../components/admin/AdminSidebar';
 import AdminHeader from '../../components/admin/AdminHeader';
 import AdminDashboard from './AdminDashboard';
@@ -50,7 +49,7 @@ export default function AdminApp() {
         if (storedRole === 'super_admin') return 'approved';
         try {
             const u = JSON.parse(localStorage.getItem('admin_user') || 'null');
-            return u?.id_document_status || null;
+            return u?.status || u?.id_document_status || null;
         } catch { return null; }
     });
     const [currentUser, setCurrentUser] = useState(() => {
@@ -68,7 +67,19 @@ export default function AdminApp() {
     const role = currentUser?.role || localStorage.getItem('admin_role') || 'admin';
 
     const _applyMeData = (data) => {
-        localStorage.setItem('admin_user', JSON.stringify(data));
+        const minimalUser = {
+            id: data.id,
+            email: data.email,
+            role: data.role,
+            status: data.id_document_status,
+            token: localStorage.getItem('admin_token')
+        };
+        localStorage.removeItem('admin_user');
+        try {
+            localStorage.setItem('admin_user', JSON.stringify(minimalUser));
+        } catch (e) {
+            console.error("Failed to store user in localStorage:", e);
+        }
         localStorage.setItem('admin_role', data.role);
         if (data.airport_iata) localStorage.setItem('admin_airport_iata', data.airport_iata);
         setCurrentUser(data);
@@ -111,7 +122,7 @@ export default function AdminApp() {
         setIdDocStatus('pending');
     }
 
-    async function handleIdReuploadComplete() {
+    async function handleIdRejectionFixed() {
         const { data } = await apiGetMe();
         if (data) _applyMeData(data);
     }
@@ -145,14 +156,36 @@ export default function AdminApp() {
             return <ProfileCompletionScreen user={currentUser} onComplete={handleProfileComplete} />;
         }
         if (idDocStatus === 'rejected') {
+            // Render a locked-down layout specifically for correction mode
             return (
-                <IdDocumentReuploadScreen
-                    user={currentUser}
-                    onComplete={handleIdReuploadComplete}
-                />
+                <AdminAirportProvider airport={selectedAirport} setAirport={handleAirportChange} role={role}>
+                    <div className="admin-layout">
+                        <AdminSidebar
+                            activeTab="settings"
+                            onTabChange={setActiveTab}
+                            onLogout={handleLogout}
+                            isRejected={true}
+                        />
+
+                        <div className="admin-main">
+                            <AdminHeader
+                                selectedDate={selectedDate}
+                                onDateClick={() => setIsCalendarOpen(true)}
+                            />
+
+                            <div className="admin-content">
+                                <div className="admin-content__inner">
+                                    <Routes>
+                                        <Route path="settings" element={<AdminSettings />} />
+                                        <Route path="*" element={<Navigate to="/dashboard/settings" replace />} />
+                                    </Routes>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </AdminAirportProvider>
             );
-        }
-        if (idDocStatus !== 'approved') {
+        } else if (idDocStatus !== 'approved') {
             // Covers 'pending' and null (profile just submitted but not yet approved)
             return (
                 <PendingApprovalScreen

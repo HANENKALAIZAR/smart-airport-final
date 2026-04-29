@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { X } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
-import CustomSelect from '../ui/CustomSelect';
+import CustomSelect from './ui/CustomSelect';
 
 export default function FilterBar({ onFilterChange }) {
     const { t } = useLanguage();

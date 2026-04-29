@@ -434,10 +434,8 @@ const en = {
     filter_reset: 'Reset',
     filter_risk_suffix: 'Risk',
 
-    /* ── Admin Sidebar / Header (shared keys) ────────────────── */
-    smartAirport: 'Smart Airport',
+    /* ── Admin Sidebar / Header ──────────────────────────────── */
     dashboard: 'Dashboard',
-    flights: 'Flights',
     departures: 'Departures',
     arrivals: 'Arrivals',
     globalOps: 'Global Ops',
@@ -446,14 +444,7 @@ const en = {
     aiExplanations: 'AI Explanations',
     settings: 'Settings',
     logout: 'Logout',
-    notifications: 'Notifications',
-    markAllRead: 'Mark all as read',
-    viewAll: 'View All',
-    switchAirport: 'Switch Airport',
-    operations: 'Operations',
-    superAdmin: 'Super Admin',
-    admin: 'Admin',
-    searchFlights: 'Search flights...',
+
 
     /* ── Admin Login ─────────────────────────────────────────── */
     admin_login_title: 'Member Login',
@@ -662,24 +653,7 @@ const en = {
     table_risk: 'Risk',
     table_status: 'Status',
 
-    /* ── Filter Bar ──────────────────────────────────────────── */
-    filter_time_range: 'Time Range',
-    filter_select_time: 'Select time range',
-    filter_morning: 'Morning (00:00–12:00)',
-    filter_afternoon: 'Afternoon (12:00–18:00)',
-    filter_evening: 'Evening (18:00–23:59)',
-    filter_risk_level: 'Risk Level',
-    filter_low_risk: 'Low Risk',
-    filter_medium_risk: 'Medium Risk',
-    filter_high_risk: 'High Risk',
-    filter_risk_suffix: 'Risk',
-    filter_status: 'Status',
-    filter_on_time: 'On-Time',
-    filter_delayed: 'Delayed',
-    filter_boarding: 'Boarding',
-    filter_departed: 'Departed',
-    filter_apply: 'Apply Filters',
-    filter_reset: 'Reset',
+
 
     /* ── Modal Explanation Text ──────────────────────────────── */
     modal_explanation_text_1: 'The AI model predicts a',

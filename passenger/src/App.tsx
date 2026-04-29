@@ -9,7 +9,6 @@ import "@/i18n/config";
 import Landing from "./pages/Landing.tsx";
 import PassengerRights from "./pages/PassengerRights.tsx";
 import Assistant from "./pages/Assistant.tsx";
-import Index from "./pages/Index.tsx";
 import Flights from "./pages/Flights.tsx";
 import FlightDetail from "./pages/FlightDetail.tsx";
 import Services from "./pages/Services.tsx";
@@ -29,15 +28,14 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Routes>
             {/* Public landing */}
             <Route path="/" element={<Landing />} />
             <Route path="/passenger-rights" element={<PassengerRights />} />
-            <Route path="/app/assistant" element={<Assistant />} />
+            <Route path="/assistant" element={<Assistant />} />
 
             {/* Public pages */}
-            <Route path="/app" element={<Index />} />
             <Route path="/flights" element={<Flights />} />
             <Route path="/flights/:id" element={<FlightDetail />} />
             <Route path="/services" element={<Services />} />

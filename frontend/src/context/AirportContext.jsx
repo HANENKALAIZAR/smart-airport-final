@@ -1,14 +1,10 @@
-import { createContext, useContext, useState } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext } from 'react';
 
-/* ── All Tunisian airports ──────────────────────────── */
-export const TUNISIAN_AIRPORTS = [
-    { id: 'TUN', iata: 'TUN', name: 'Tunis–Carthage International', city: 'Tunis', region: 'Grand Tunis' },
-    { id: 'DJE', iata: 'DJE', name: 'Djerba–Zarzis International', city: 'Djerba', region: 'South-Est' },
-    { id: 'NBE', iata: 'NBE', name: 'Enfidha–Hammamet International', city: 'Enfidha', region: 'Sahel' },
-    { id: 'MIR', iata: 'MIR', name: 'Monastir Habib Bourguiba', city: 'Monastir', region: 'Sahel' },
-];
 
-export const DEFAULT_AIRPORT = TUNISIAN_AIRPORTS[0]; // TUN
+// ── Airport data: single source of truth via shared-core package ──────────
+export { TUNISIAN_AIRPORTS, DEFAULT_AIRPORT } from '@smart-airport/shared-core/constants/airports.js';
+
 
 /* ── Context ────────────────────────────────────────── */
 const AirportContext = createContext(null);
@@ -19,16 +15,6 @@ export function useAirport() {
     return ctx;
 }
 
-/* ── Passenger Provider (any airport, no role) ──────── */
-export function PassengerAirportProvider({ children }) {
-    const [selectedAirport, setSelectedAirport] = useState(DEFAULT_AIRPORT);
-
-    return (
-        <AirportContext.Provider value={{ selectedAirport, setSelectedAirport, role: 'passenger' }}>
-            {children}
-        </AirportContext.Provider>
-    );
-}
 
 /* ── Admin Provider (role-aware) ────────────────────── */
 export function AdminAirportProvider({ airport, setAirport, role, children }) {

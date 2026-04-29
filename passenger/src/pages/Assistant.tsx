@@ -5,13 +5,12 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Sparkles, Send, Plane, Luggage, Clock, MapPin, Bot, User, Scale, Hotel, PlaneTakeoff, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
+const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:3001";
 type Msg = { role: "user" | "assistant"; content: string };
 
 const SUGGESTIONS = [
   { icon: Plane, label: "Track flight AF1234" },
   { icon: Clock, label: "Will my flight be delayed?" },
-  { icon: MapPin, label: "Best lounge in Terminal 2" },
   { icon: Luggage, label: "Lost baggage — what do I do?" },
   { icon: Scale, label: "What are my rights?" },
   { icon: Hotel, label: "Hotels near the airport" },
@@ -25,8 +24,6 @@ const MOCK_REPLIES: Record<string, string> = {
     "Flight **AF1234** is currently **on time**, departing from **Gate B12** at **18:45**. Boarding starts at 18:10. I'll alert you the moment anything changes.",
   delay:
     "Based on weather, ATC and historical patterns, your flight has a **12% probability of delay**. Conditions look favorable — no action needed.",
-  lounge:
-    "The top-rated lounge in Terminal 2 is the **Skyview Premium Lounge** (Level 3, near Gate B14): hot food, showers, runway view. ~6 min walk from your gate.",
   baggage:
     "If your bag is missing: 1) File a **PIR** at the airline desk before leaving the airport. 2) Keep your tag & boarding pass. 3) Save receipts for essentials — you may be reimbursed up to ~€1,800 under the Montreal Convention.",
   rights:
@@ -43,7 +40,6 @@ function pickMockReply(input: string): string {
   if (/hotel|stay|overnight|accommodation/.test(q)) return MOCK_REPLIES.hotels;
   if (/alternative|rebook|another flight|other flight|reroute/.test(q)) return MOCK_REPLIES.alternative;
   if (/bag|luggage|lost|missing|suitcase/.test(q)) return MOCK_REPLIES.baggage;
-  if (/lounge|relax|shower|food|eat|dining/.test(q)) return MOCK_REPLIES.lounge;
   if (/delay|late|on.?time|weather/.test(q)) return MOCK_REPLIES.delay;
   if (/flight|af\d|track|gate/.test(q)) return MOCK_REPLIES.flight;
   return MOCK_REPLIES.default;
@@ -68,23 +64,65 @@ export default function Assistant() {
     setInput("");
     setIsTyping(true);
 
-    // Simulate token-by-token streaming
-    const reply = pickMockReply(trimmed);
-    await new Promise((r) => setTimeout(r, 400));
-    setIsTyping(false);
-
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
-    const tokens = reply.split(/(\s+)/);
-    for (let i = 0; i < tokens.length; i++) {
-      await new Promise((r) => setTimeout(r, 25));
-      setMessages((prev) => {
-        const copy = [...prev];
-        const last = copy[copy.length - 1];
-        if (last?.role === "assistant") {
-          copy[copy.length - 1] = { ...last, content: last.content + tokens[i] };
-        }
-        return copy;
+    try {
+      const res = await fetch(`${AI_URL}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: trimmed,
+          conversationId: "passenger-session",
+        }),
       });
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+      const parsed = typeof data.reply === "string" ? JSON.parse(data.reply) : data.reply;
+
+      // Build a readable reply from the structured JSON your backend returns
+      let reply = parsed.message || "I'm here to help!";
+
+      if (parsed.rights?.length) {
+        reply += "\n\n" + parsed.rights.map((r: { title: string; detail: string }) => `• **${r.title}**: ${r.detail}`).join("\n");
+      }
+      if (parsed.flights?.length) {
+        reply += "\n\n" + parsed.flights.map((f: { flightNumber: string; airline: string; departure: string; status: string }) =>
+          `• **${f.flightNumber}** (${f.airline}) — departs ${f.departure} — ${f.status}`
+        ).join("\n");
+      }
+      if (parsed.hotels?.length) {
+        reply += "\n\n" + parsed.hotels.slice(0, 3).map((h: { name: string; stars: number; pricePerNight: number }) =>
+          `• **${h.name}** ${"★".repeat(h.stars)} — ${h.pricePerNight} TND/night`
+        ).join("\n");
+      }
+      if (parsed.suggestion) {
+        reply += `\n\n${parsed.suggestion}`;
+      }
+
+      setIsTyping(false);
+
+      // Animate the reply token by token
+      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+      const tokens = reply.split(/(\s+)/);
+      for (let i = 0; i < tokens.length; i++) {
+        await new Promise((r) => setTimeout(r, 25));
+        setMessages((prev) => {
+          const copy = [...prev];
+          const last = copy[copy.length - 1];
+          if (last?.role === "assistant") {
+            copy[copy.length - 1] = { ...last, content: last.content + tokens[i] };
+          }
+          return copy;
+        });
+      }
+
+    } catch (err) {
+      console.error("AI error:", err);
+      setIsTyping(false);
+      setMessages((prev) => [...prev, {
+        role: "assistant",
+        content: "Sorry, I couldn't connect to the AI backend. Make sure it's running on port 3001.",
+      }]);
     }
   };
 
@@ -108,9 +146,6 @@ export default function Assistant() {
               <h1 className="font-display text-xl text-foreground leading-tight truncate">
                 AI Assistant
               </h1>
-              <p className="text-xs text-muted-foreground truncate">
-                Demo mode · Flights, lounges, baggage & passenger rights
-              </p>
             </div>
             <div className="flex items-center gap-1 shrink-0">
               <Button
@@ -188,6 +223,8 @@ export default function Assistant() {
           <Card className="p-2 bg-card border-border shadow-lg">
             <form onSubmit={onSubmit} className="flex items-center gap-2">
               <Input
+                id="chat-input"
+                name="message"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask the assistant anything…"
@@ -203,9 +240,6 @@ export default function Assistant() {
               </Button>
             </form>
           </Card>
-          <p className="text-[11px] text-muted-foreground text-center mt-2">
-            Demo responses. Enable Lovable Cloud to power live AI replies.
-          </p>
         </div>
       </main>
     </div>

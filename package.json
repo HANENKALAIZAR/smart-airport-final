@@ -1,0 +1,22 @@
+{
+  "name": "smart-airport",
+  "version": "1.0.0",
+  "description": "Smart Airport Operations — Monorepo",
+  "private": true,
+  "workspaces": [
+    "shared-core",
+    "frontend",
+    "passenger"
+  ],
+  "scripts": {
+    "dev:admin":     "npm run dev --workspace=frontend",
+    "dev:passenger": "npm run dev --workspace=passenger",
+    "build:admin":   "npm run build --workspace=frontend",
+    "build:passenger":"npm run build --workspace=passenger",
+    "build":         "npm run build:admin && npm run build:passenger",
+    "lint":          "npm run lint --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

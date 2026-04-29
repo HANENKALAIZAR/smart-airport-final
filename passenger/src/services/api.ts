@@ -1,4 +1,11 @@
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+import { getAirportCoords as getCoords } from '@smart-airport/shared-core/constants/airports.js';
+
+// Base URL is set via VITE_API_URL in .env — no hardcoded fallback allowed
+const API_BASE = import.meta.env.VITE_API_URL as string;
+if (!API_BASE && import.meta.env.VITE_APP_ENV !== 'test') {
+  console.error('[API] VITE_API_URL is not set. Check your .env file.');
+}
+
 
 // ── Types Backend (format FastAPI) ────────────────────────────────────────
 
@@ -23,7 +30,7 @@ export interface ApiFlightList {
   flight_number: string;
   scheduled_departure: string;
   scheduled_arrival: string;
-  status: 'scheduled' | 'on_time' | 'delayed' | 'cancelled' | 'boarding';
+  status: 'scheduled' | 'on_time' | 'delayed' | 'cancelled' | 'boarding' | 'landed' | 'departed';
   delay_minutes: number;
   distance_km: number;
   aircraft_type: string | null;
@@ -100,7 +107,7 @@ export interface Flight {
   durationMin: number;
   distanceKm: number;
   progress: number;
-  delayMin: number;
+  delayMin: number | null;
   onTimeHistory: number;
   prediction?: FlightPrediction | null;
   passengerRights?: PassengerRight[] | null;
@@ -130,25 +137,7 @@ export interface PassengerRight {
   compensation: string | null;
 }
 
-// ── Coordonnées géographiques approximatives des aéroports ───────────────
-
-const AIRPORT_COORDS: Record<string, { x: number; y: number }> = {
-  TUN: { x: 0.53, y: 0.42 }, CDG: { x: 0.50, y: 0.28 }, ORY: { x: 0.50, y: 0.29 },
-  IST: { x: 0.57, y: 0.34 }, FCO: { x: 0.52, y: 0.36 }, FRA: { x: 0.52, y: 0.27 },
-  LHR: { x: 0.47, y: 0.26 }, MRS: { x: 0.50, y: 0.32 }, LYS: { x: 0.51, y: 0.31 },
-  DJE: { x: 0.54, y: 0.44 }, ALG: { x: 0.50, y: 0.42 }, JED: { x: 0.60, y: 0.48 },
-  MXP: { x: 0.51, y: 0.33 }, BRU: { x: 0.50, y: 0.27 }, CAI: { x: 0.57, y: 0.44 },
-  MIR: { x: 0.53, y: 0.43 }, DOH: { x: 0.62, y: 0.47 }, DXB: { x: 0.63, y: 0.47 },
-  AMM: { x: 0.58, y: 0.42 }, CMN: { x: 0.46, y: 0.43 }, NBE: { x: 0.53, y: 0.42 },
-  GVA: { x: 0.51, y: 0.30 }, MAD: { x: 0.46, y: 0.34 }, VIE: { x: 0.54, y: 0.28 },
-  MUC: { x: 0.53, y: 0.28 }, DUS: { x: 0.51, y: 0.27 }, NCE: { x: 0.51, y: 0.31 },
-  TLS: { x: 0.49, y: 0.31 }, MLA: { x: 0.53, y: 0.38 }, CTA: { x: 0.53, y: 0.37 },
-  YUL: { x: 0.22, y: 0.28 }, ABJ: { x: 0.47, y: 0.53 }, DSS: { x: 0.43, y: 0.51 },
-};
-
-function getCoords(iata: string): { x: number; y: number } {
-  return AIRPORT_COORDS[iata] ?? { x: 0.5, y: 0.4 };
-}
+// getCoords() is imported from @smart-airport/shared-core at the top of this file.
 
 // ── Adaptateur: API → Nouveau UI ──────────────────────────────────────────
 
@@ -164,11 +153,13 @@ function adaptAirport(a: ApiAirport): Airport {
   };
 }
 
-function adaptStatus(apiStatus: string, delayMin: number): FlightStatus {
-  if (apiStatus === 'on_time') return delayMin > 0 ? 'delayed' : 'scheduled';
+function adaptStatus(apiStatus: string, delayMin: number | null): FlightStatus {
+  if (apiStatus === 'on_time') return (delayMin && delayMin > 0) ? 'delayed' : 'scheduled';
   if (apiStatus === 'delayed') return 'delayed';
   if (apiStatus === 'cancelled') return 'cancelled';
   if (apiStatus === 'boarding') return 'boarding';
+  if (apiStatus === 'landed') return 'landed';
+  if (apiStatus === 'departed') return 'in_air';
   return 'scheduled';
 }
 
@@ -272,17 +263,45 @@ function adaptFlight(f: ApiFlightList | ApiFlightDetail): Flight {
   };
 }
 
-// ── Fetch helper ──────────────────────────────────────────────────────────
+// ── Fetch helpers ─────────────────────────────────────────────────────────
 
-async function fetchApi<T>(endpoint: string): Promise<T | null> {
+const TIMEOUT_MS = 10_000;
+const MAX_RETRIES = 2;
+
+async function fetchWithTimeout(url: string, opts: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const res = await fetch(`${API_BASE}${endpoint}`, {
+    return await fetch(url, { ...opts, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchApi<T>(endpoint: string, _retry = 0): Promise<T | null> {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}${endpoint}`, {
       headers: { 'Content-Type': 'application/json' },
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    // Retry on 5xx or 429
+    if ((res.status >= 500 || res.status === 429) && _retry < MAX_RETRIES) {
+      await new Promise(r => setTimeout(r, 500 * (_retry + 1)));
+      return fetchApi<T>(endpoint, _retry + 1);
+    }
+
+    if (!res.ok) {
+      console.warn(`[API] ${endpoint} → HTTP ${res.status}`);
+      return null;
+    }
     return (await res.json()) as T;
-  } catch (err) {
-    console.warn(`[API] ${endpoint} failed:`, err);
+  } catch (err: unknown) {
+    const isTimeout = (err as { name?: string })?.name === 'AbortError';
+    if (!isTimeout && _retry < MAX_RETRIES) {
+      await new Promise(r => setTimeout(r, 500 * (_retry + 1)));
+      return fetchApi<T>(endpoint, _retry + 1);
+    }
+    console.warn(`[API] ${endpoint} failed${isTimeout ? ' (timeout)' : ''}:`, err);
     return null;
   }
 }
@@ -434,7 +453,7 @@ function adaptAvStackFlight(f: AvStackFlight): Flight {
     durationMin,
     distanceKm: 0,
     progress,
-    delayMin: f.delay_minutes ?? 0,
+    delayMin: f.delay_minutes ?? null,
     onTimeHistory: 85,
     prediction: null,
     passengerRights: null,
@@ -449,4 +468,90 @@ export async function getAviationStackFlights(iata: string): Promise<Flight[]> {
   return data.flights
     .filter(f => f.flight_number && f.flight_number !== '—')
     .map(adaptAvStackFlight);
+}
+// ── Types OpenSky Airport ─────────────────────────────────────────────────
+
+export interface OpenSkyAircraft {
+  icao24: string;
+  callsign: string;
+  origin_country: string;
+  lon: number;
+  lat: number;
+  alt: number | null;
+  on_ground: boolean;
+  velocity: number;
+  heading: number;
+  vertical_rate: number | null;
+  last_contact: number;
+  direction: 'arriving' | 'departing' | 'overflying' | 'ground';
+}
+
+export interface OpenSkyAirportResponse {
+  airport: string;
+  aircraft: OpenSkyAircraft[];
+}
+
+/** Adapte un avion OpenSky en Flight pour affichage dans le tableau */
+function adaptOpenSkyFlight(a: OpenSkyAircraft, airportIata: string): Flight {
+  const callsign = a.callsign?.trim() ?? 'UNKNOWN';
+  const isArrival = a.direction === 'arriving';
+  const isGround = a.direction === 'ground' || a.on_ground;
+  const airportCoords = getCoords(airportIata);
+  const lastSeen = new Date(a.last_contact * 1000).toISOString();
+
+
+  const status: FlightStatus =
+    isGround ? 'landed' :
+      a.direction === 'arriving' ? 'in_air' :
+        a.direction === 'departing' ? 'in_air' : 'scheduled';
+
+  return {
+    id: a.icao24,
+    flightNumber: callsign,
+    airline: a.origin_country,
+    airlineCode: callsign.substring(0, 2).toUpperCase(),
+    airlineReliability: 0.85,
+    from: isArrival
+      ? { code: '???', city: a.origin_country, name: a.origin_country, country: a.origin_country, x: 0.5, y: 0.3 }
+      : { code: airportIata, city: airportIata, name: airportIata, country: 'Tunisia', x: airportCoords.x, y: airportCoords.y },
+    to: isArrival
+      ? { code: airportIata, city: airportIata, name: airportIata, country: 'Tunisia', x: airportCoords.x, y: airportCoords.y }
+      : { code: '???', city: 'Destination', name: 'Destination', country: '', x: 0.5, y: 0.3 },
+    departureTime: lastSeen,
+    arrivalTime: lastSeen,
+    scheduledDeparture: lastSeen,
+    scheduledArrival: lastSeen,
+    status,
+    gate: undefined,
+    terminal: undefined,
+    aircraft: 'Unknown',
+    durationMin: 0,
+    distanceKm: 0,
+    progress: isGround ? 1 : 0.5,
+    delayMin: null,
+    onTimeHistory: 85,
+    prediction: null,
+    passengerRights: null,
+    delayCause: null,
+  };
+}
+
+/** Vols temps réel OpenSky pour un aéroport — arrivals + departures */
+export async function getOpenSkyAirportFlights(
+  iata: string,
+  direction: 'departures' | 'arrivals' | 'all' = 'all',
+  radius = 80
+): Promise<Flight[]> {
+  const data = await fetchApi<OpenSkyAirportResponse>(
+    `/opensky/airport-flights/${iata}?radius=${radius}`
+  );
+  if (!data) return [];
+
+  return data.aircraft
+    .filter(a => {
+      if (direction === 'departures') return a.direction === 'departing' || (a.on_ground && a.direction === 'ground');
+      if (direction === 'arrivals') return a.direction === 'arriving' || (a.on_ground && a.direction === 'ground');
+      return a.direction !== 'overflying';
+    })
+    .map(a => adaptOpenSkyFlight(a, iata));
 }

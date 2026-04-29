@@ -22,7 +22,8 @@ import {
 import { formatTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import flightsHero from "@/assets/flights-hero.jpg";
-import { getAviationStackFlights, type Flight, type FlightStatus } from "@/services/api";
+import { getOpenSkyAirportFlights, type Flight, type FlightStatus } from "@/services/api";
+import { TUNISIAN_AIRPORTS } from "@smart-airport/shared-core/constants/airports.js";
 
 type SortKey = "flightNumber" | "airline" | "from" | "to" | "scheduled" | "estimated" | "status";
 type SortDir = "asc" | "desc";
@@ -40,16 +41,13 @@ const STATUS_OPTIONS: { value: FlightStatus | "all"; label: string }[] = [
   { value: "cancelled", label: "Cancelled" },
 ];
 
-const TUNISIAN_AIRPORTS = [
-  { code: "TUN", city: "Tunis", name: "Tunis–Carthage International" },
-  { code: "MIR", city: "Monastir", name: "Monastir Habib Bourguiba" },
-  { code: "NBE", city: "Enfidha", name: "Enfidha–Hammamet International" },
-  { code: "DJE", city: "Djerba", name: "Djerba–Zarzis International" },
-];
 
 type TnCode = "TUN" | "MIR" | "NBE" | "DJE";
 
+import { useTranslation } from "react-i18next";
+
 const Flights = () => {
+  const { t } = useTranslation();
   const [allFlights, setAllFlights] = useState<Flight[]>([]);
   const [loading, setLoading] = useState(true);
   const [airportCode, setAirportCode] = useState<TnCode>("TUN");
@@ -66,7 +64,7 @@ const Flights = () => {
     let cancelled = false;
     const load = async () => {
       setLoading(true);
-      const data = await getAviationStackFlights(airportCode);
+      const data = await getOpenSkyAirportFlights(airportCode, direction);
       if (!cancelled) { setAllFlights(data); setLoading(false); }
     };
     load();
@@ -165,16 +163,20 @@ const Flights = () => {
                 Live · Updated every 30s
               </div>
               <h1 className="font-display text-5xl sm:text-6xl md:text-7xl text-white leading-[0.98] drop-shadow-lg">
-                Track flights in <span className="italic text-primary">real time</span>
+                {t("explore_flights")}
               </h1>
               <p className="mt-6 max-w-xl mx-auto text-base md:text-lg text-white/85 leading-relaxed">
-                Pick a Tunisian airport and switch between departures and arrivals. Live status, gates and terminals — refreshed continuously.
+                {t("explore_flights_desc")}
               </p>
               <div className="mt-10 max-w-xl mx-auto">
                 <div className="relative">
                   <Search className="absolute start-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                  <Input value={query} onChange={e => setQuery(e.target.value)}
-                    placeholder="Search flight number, route or airline…"
+                  <Input
+                    id="global-flight-search"
+                    name="query"
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    placeholder={t("explore_flights_placeholder", "Search flight number, city or airline…")}
                     className="ps-12 h-14 rounded-full bg-white/95 dark:bg-background/95 backdrop-blur-md border-white/30 text-base shadow-2xl focus-visible:ring-primary" />
                 </div>
               </div>
@@ -236,7 +238,7 @@ const Flights = () => {
                   className={cn("inline-flex h-9 items-center gap-2 rounded-full px-5 text-sm font-medium transition-all",
                     direction === d ? "bg-primary text-primary-foreground shadow" : "text-muted-foreground hover:text-foreground")}>
                   {d === "departures" ? <PlaneTakeoff className="h-4 w-4" /> : <PlaneLanding className="h-4 w-4" />}
-                  {d === "departures" ? "Departures" : "Arrivals"}
+                  {d === "departures" ? t("common.departure") : t("common.arrival")}
                   <span className={cn("ms-1 rounded-full px-2 py-0.5 text-[10px] font-mono",
                     direction === d ? "bg-primary-foreground/20 text-primary-foreground" : "bg-secondary text-muted-foreground")}>
                     {d === "departures" ? departuresCount : arrivalsCount}
@@ -276,11 +278,18 @@ const Flights = () => {
             <div className="grid gap-3 md:grid-cols-12">
               <div className="relative md:col-span-8">
                 <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search flight number, city or airline…" className="ps-9" />
+                <Input
+                  id="filter-flight-query"
+                  name="query"
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder={t("common.search")}
+                  className="ps-9"
+                />
               </div>
               <div className="md:col-span-4">
-                <Select value={status} onValueChange={v => setStatus(v as FlightStatus | "all")}>
-                  <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
+                <Select name="status" value={status} onValueChange={v => setStatus(v as FlightStatus | "all")}>
+                  <SelectTrigger id="filter-flight-status"><SelectValue placeholder="Status" /></SelectTrigger>
                   <SelectContent>
                     {STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                   </SelectContent>
@@ -294,22 +303,22 @@ const Flights = () => {
             {loading ? (
               <div className="py-24 flex flex-col items-center gap-3 text-muted-foreground">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                <span className="text-sm">Loading live flights…</span>
+                <span className="text-sm">{t("common.loading", "Loading...")}</span>
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow className="bg-secondary/40 hover:bg-secondary/40">
-                    <Th col="flightNumber" label="Flight" />
-                    <Th col="airline" label="Airline" />
-                    <Th col="from" label="From" />
-                    <Th col="to" label="To" />
-                    <Th col="scheduled" label="Scheduled" />
-                    <Th col="estimated" label="Estimated" />
-                    <TableHead className="text-xs uppercase tracking-wider">Gate</TableHead>
-                    <TableHead className="text-xs uppercase tracking-wider">Term.</TableHead>
-                    <Th col="status" label="Status" />
-                    <TableHead className="text-right text-xs uppercase tracking-wider">Action</TableHead>
+                    <Th col="flightNumber" label={t("common.flightNumber")} />
+                    <Th col="airline" label={t("common.airline", "Airline")} />
+                    <Th col="from" label={t("common.departure")} />
+                    <Th col="to" label={t("common.arrival")} />
+                    <Th col="scheduled" label={t("common.scheduled")} />
+                    <Th col="estimated" label={t("common.estimated", "Estimated")} />
+                    <TableHead className="text-xs uppercase tracking-wider">{t("common.gate")}</TableHead>
+                    <TableHead className="text-xs uppercase tracking-wider">{t("common.terminal")}</TableHead>
+                    <Th col="status" label={t("common.status", "Status")} />
+                    <TableHead className="text-right text-xs uppercase tracking-wider">{t("common.viewDetails", "Action")}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -317,7 +326,7 @@ const Flights = () => {
                     <TableRow>
                       <TableCell colSpan={10} className="py-16 text-center text-muted-foreground">
                         <Plane className="h-8 w-8 mx-auto mb-3 opacity-40" />
-                        No {direction} match these filters.
+                        {t("flights_no_results", "No flights match these filters.")}
                       </TableCell>
                     </TableRow>
                   ) : pageRows.map(f => <FlightRow key={f.id} flight={f} />)}
@@ -369,10 +378,7 @@ const Flights = () => {
 };
 
 function FlightRow({ flight: f }: { flight: Flight }) {
-  const sched = new Date(f.scheduledDeparture).getTime();
-  const est = new Date(f.departureTime).getTime();
-  const delayMin = Math.round((est - sched) / 60_000);
-  const isDelayed = delayMin > 0 || f.status === "delayed";
+  const isDelayed = (f.delayMin !== null && f.delayMin > 0) || f.status === "delayed";
   const isHighlight = f.status === "boarding" || isDelayed;
 
   return (
@@ -394,15 +400,17 @@ function FlightRow({ flight: f }: { flight: Flight }) {
       </TableCell>
       <TableCell className="font-mono text-sm">{formatTime(f.scheduledDeparture)}</TableCell>
       <TableCell>
-        <span className={cn("font-mono text-sm", isDelayed && "text-destructive font-semibold")}>{formatTime(f.departureTime)}</span>
-        {delayMin > 0 && <span className="ms-2 text-[10px] uppercase tracking-wider text-destructive">+{delayMin}m</span>}
+        <span className={cn("font-mono text-sm", isDelayed && "text-destructive font-semibold")}>
+          {f.delayMin === null ? "—" : formatTime(f.departureTime)}
+        </span>
+        {f.delayMin !== null && f.delayMin > 0 && <span className="ms-2 text-[10px] uppercase tracking-wider text-destructive">+{f.delayMin}m</span>}
       </TableCell>
       <TableCell className="text-sm">{f.gate ?? <span className="text-muted-foreground">—</span>}</TableCell>
       <TableCell className="text-sm">{f.terminal ?? <span className="text-muted-foreground">—</span>}</TableCell>
       <TableCell><StatusBadge status={f.status} /></TableCell>
       <TableCell className="text-right">
         <Button asChild variant="ghost" size="sm" className="opacity-70 group-hover:opacity-100">
-          <Link to={`/flights/${f.id}`}>Details</Link>
+          <Link to={`/flights/${f.id}`} state={{ flight: f }}>Details</Link>
         </Button>
       </TableCell>
     </TableRow>

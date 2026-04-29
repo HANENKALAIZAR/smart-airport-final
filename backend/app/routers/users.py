@@ -391,6 +391,8 @@ def complete_my_profile(
     Admin completes their onboarding profile after changing password.
     Sets profile_complete=1.
     """
+    if current_user.role == "super_admin":
+        raise HTTPException(status_code=403, detail="Super admin profile cannot be modified")
     if not re.match(r"^\d{8}$", payload.cin_number.strip()):
         raise HTTPException(status_code=422, detail="CIN must be exactly 8 digits")
 
@@ -508,6 +510,8 @@ def patch_my_settings(
     Always allowed: phone_number, profile_photo_url, residential_address, emergency contact.
     All other profile fields are read-only (managed by super admin).
     """
+    if current_user.role == "super_admin":
+        raise HTTPException(status_code=403, detail="Super admin profile cannot be modified")
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only airport admins can update these fields here.")
     data = payload.model_dump(exclude_unset=True)
@@ -662,105 +666,7 @@ def patch_my_settings(
 
 
 
-@router.patch("/me/super-admin-profile", status_code=200)
-def patch_super_admin_self_profile(
-    payload: SuperAdminSelfProfilePatch,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Super admin: full edit of own profile (no ID review workflow)."""
-    if current_user.role != "super_admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only super administrators can use this endpoint.",
-        )
-    data = payload.model_dump(exclude_unset=True)
-    if not data:
-        raise HTTPException(status_code=422, detail="Nothing to update.")
 
-    if "full_name" in data:
-        fn = (data["full_name"] or "").strip()
-        if not fn:
-            raise HTTPException(status_code=422, detail="Full name cannot be empty.")
-        current_user.full_name = fn
-
-    if "phone_number" in data:
-        phone_norm = normalize_tunisian_phone(data["phone_number"])
-        if not validate_tunisian_phone_digits(phone_norm):
-            raise HTTPException(
-                status_code=422,
-                detail="Please enter a valid Tunisian phone number (e.g. +216 9X XXX XXX)",
-            )
-        current_user.phone_number = phone_norm
-
-    if "profile_photo_url" in data:
-        try:
-            validate_profile_photo_data_url(data["profile_photo_url"])
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-        current_user.profile_photo_url = data["profile_photo_url"]
-
-    if "date_of_birth" in data:
-        dob_raw = data["date_of_birth"]
-        if dob_raw:
-            try:
-                dob = datetime.strptime(dob_raw, "%Y-%m-%d").date()
-                age = (date.today() - dob).days // 365
-                if age < 18:
-                    raise HTTPException(status_code=422, detail="Must be at least 18 years old")
-            except ValueError:
-                raise HTTPException(status_code=422, detail="date_of_birth must be YYYY-MM-DD")
-            current_user.date_of_birth = dob
-        else:
-            current_user.date_of_birth = None
-
-    if "cin_number" in data:
-        num = (data["cin_number"] or "").strip()
-        if num and not re.match(r"^\d{8}$", num):
-            raise HTTPException(status_code=422, detail="CIN must be exactly 8 digits")
-        current_user.cin_number = num or None
-
-    if "passport_number" in data:
-        pnum = (data["passport_number"] or "").strip()
-        if pnum and not validate_passport_number(pnum):
-            raise HTTPException(
-                status_code=422,
-                detail="Passport number must be letters followed by digits (min. 6 characters).",
-            )
-        current_user.passport_number = pnum.upper() if pnum else None
-
-    if "passport_expiry_date" in data:
-        raw = data["passport_expiry_date"]
-        if raw:
-            try:
-                pexp = datetime.strptime(raw, "%Y-%m-%d").date()
-            except ValueError:
-                raise HTTPException(status_code=422, detail="passport_expiry_date must be YYYY-MM-DD")
-            current_user.passport_expiry_date = pexp
-        else:
-            current_user.passport_expiry_date = None
-
-    if "cin_document_url" in data:
-        try:
-            validate_id_document_data_url(data["cin_document_url"])
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-        current_user.cin_document_url = data["cin_document_url"]
-        current_user.id_document_status = "approved"
-        current_user.id_document_rejection_reason = None
-
-    if "passport_document_url" in data:
-        try:
-            validate_id_document_data_url(data["passport_document_url"])
-        except ValueError as exc:
-            raise HTTPException(status_code=422, detail=str(exc))
-        current_user.passport_document_url = data["passport_document_url"]
-        current_user.id_document_status = "approved"
-        current_user.id_document_rejection_reason = None
-
-    current_user.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    return {"message": "Profile updated"}
 
 
 

@@ -103,29 +103,30 @@ const AIRPORTS = {
       { name: "Yasmine Hammamet marina", distance: "25 min", description: "Modern resort area with restaurants & shops" },
       { name: "Pupput Roman site", distance: "22 min", description: "Ancient Roman archaeological site" },
     ],
+  },
 };
 
 
 // EU member state airport codes (partial list covering routes from Tunisia)
 const EU_AIRPORTS = [
-  "CDG","ORY","NCE","LYS","MRS","TLS","BOD", // France
-  "FCO","MXP","LIN","VCE","NAP","BGY",        // Italy
-  "MAD","BCN","AGP","PMI","ALC","VLC",         // Spain
-  "FRA","MUC","TXL","BER","DUS","HAM","STR",  // Germany
-  "AMS","RTM","EIN",                           // Netherlands
-  "BRU","CRL","LGG",                           // Belgium
-  "LHR","LGW","MAN","STN","LTN","BHX",        // UK (post-Brexit: no longer EU261 on UK-departing)
-  "VIE","SZG","GRZ",                           // Austria
-  "ZRH","GVA","BSL",                           // Switzerland (not EU but applies EC261 equivalent)
-  "ATH","SKG",                                  // Greece
-  "LIS","OPO","FAO",                           // Portugal
-  "WAW","KRK",                                  // Poland
+  "CDG", "ORY", "NCE", "LYS", "MRS", "TLS", "BOD", // France
+  "FCO", "MXP", "LIN", "VCE", "NAP", "BGY",        // Italy
+  "MAD", "BCN", "AGP", "PMI", "ALC", "VLC",         // Spain
+  "FRA", "MUC", "TXL", "BER", "DUS", "HAM", "STR",  // Germany
+  "AMS", "RTM", "EIN",                           // Netherlands
+  "BRU", "CRL", "LGG",                           // Belgium
+  "LHR", "LGW", "MAN", "STN", "LTN", "BHX",        // UK (post-Brexit: no longer EU261 on UK-departing)
+  "VIE", "SZG", "GRZ",                           // Austria
+  "ZRH", "GVA", "BSL",                           // Switzerland (not EU but applies EC261 equivalent)
+  "ATH", "SKG",                                  // Greece
+  "LIS", "OPO", "FAO",                           // Portugal
+  "WAW", "KRK",                                  // Poland
   "PRG",                                        // Czech Republic
   "BUD",                                        // Hungary
-  "ARN","GOT","MMX",                           // Sweden
-  "CPH","AAL","BLL",                           // Denmark
-  "HEL","TMP",                                  // Finland
-  "OSL","BGO",                                  // Norway (EEA — EC261 applies)
+  "ARN", "GOT", "MMX",                           // Sweden
+  "CPH", "AAL", "BLL",                           // Denmark
+  "HEL", "TMP",                                  // Finland
+  "OSL", "BGO",                                  // Norway (EEA — EC261 applies)
 ];
 
 // Tunisian airport codes

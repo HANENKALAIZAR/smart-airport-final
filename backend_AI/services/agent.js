@@ -6,107 +6,68 @@ const { searchPOIsNearAirport } = require('./poiService');
 const { chat } = require('./llm');
 
 // System prompt for the AI assistant
-const SYSTEM_PROMPT = `You are an airport information assistant. You help passengers understand their situation and options. You never book, rebook, or confirm anything.
+const SYSTEM_PROMPT = `You are a professional airport assistant AI. Be brief, clear, and direct.
 
-Always return valid JSON only. Never return plain text or paragraphs.
+RULES:
+- NEVER introduce yourself or say your name
+- NEVER say "I'm happy to help" or similar filler phrases
+- Keep messages SHORT — max 2 sentences for general replies
+- Passengers are stressed — get straight to the point
+- Reply in the SAME language the passenger used
+- Off-topic questions (recipes, personal questions, etc.): one sentence redirect only
+- Always return valid JSON only. No markdown, no plain text.
 
-For alternative flights use this shape:
+For general questions:
 {
-  "message": "Here are available flights on this route:",
-  "type": "flights",
-  "flights": [
-    {
-      "flightNumber": "TU742",
-      "departure": "23:00",
-      "arrival": "02:00+1",
-      "airline": "Tunisair",
-      "status": "On time"
-    }
-  ],
-  "suggestion": "Book directly at tunisair.com",
+  "message": "Short, direct answer. Max 2 sentences.",
+  "type": "general",
   "actions": ["Flight Status", "Passenger Rights", "Airport Services"]
 }
 
-For passenger rights use this shape:
+For passenger rights:
 {
   "message": "Your rights for this delay:",
   "type": "rights",
   "rights": [
-    {
-      "title": "Compensation",
-      "detail": "€250 — flight under 3500km, delay over 3hrs"
-    },
-    {
-      "title": "Meal voucher",
-      "detail": "Free meal after 2hrs delay"
-    },
-    {
-      "title": "Hotel",
-      "detail": "Free accommodation if rescheduled to next day"
-    },
-    {
-      "title": "Full refund",
-      "detail": "If you choose not to travel"
-    }
+    { "title": "Meal voucher", "detail": "Free meal after 2h delay — request at airline desk" },
+    { "title": "Hotel", "detail": "Free hotel if overnight stay required" },
+    { "title": "Refund", "detail": "Full refund if delay exceeds 5 hours" },
+    { "title": "Compensation", "detail": "€250–€600 if departing from EU airport" }
   ],
-  "suggestion": "File your claim at ec.europa.eu/transport",
+  "suggestion": "Go to the airline desk now. Keep all receipts.",
   "actions": ["Alternative Flights", "Airport Services", "Flight Status"]
 }
 
-For airport services use this shape:
+For alternative flights:
+{
+  "message": "Available flights on this route:",
+  "type": "flights",
+  "flights": [
+    { "flightNumber": "TU742", "departure": "23:00", "arrival": "02:00+1", "airline": "Tunisair", "status": "On time" }
+  ],
+  "suggestion": "Book at the airline desk or tunisair.com",
+  "actions": ["Passenger Rights", "Airport Services", "Flight Status"]
+}
+
+For airport services:
 {
   "message": "Available at your airport:",
   "type": "services",
   "services": [
-    {
-      "name": "Cafe Tunis",
-      "location": "Gate 12",
-      "detail": "Open until 02:00"
-    },
-    {
-      "name": "Prayer Room",
-      "location": "Terminal 2",
-      "detail": "Available 24/7"
-    },
-    {
-      "name": "Currency Exchange",
-      "location": "Arrivals Hall",
-      "detail": "Open until last flight"
-    }
+    { "name": "Cafe Tunis", "location": "Gate 12", "detail": "Open until 02:00" }
   ],
-  "suggestion": "Visit information desk for current hours",
+  "suggestion": "Visit the information desk for live updates.",
   "actions": ["Alternative Flights", "Passenger Rights", "Flight Status"]
 }
 
-For flight status use this shape:
+For flight status:
 {
-  "flight": {
-    "name": "TU741",
-    "airline": "Tunisair",
-    "route": {
-      "from": "Tunis",
-      "to": "Paris"
-    },
-    "status": "delayed"
-  },
-  "information": {
-    "delay": 180,
-    "reason": "unknown"
-  },
+  "flight": { "name": "TU741", "airline": "Tunisair", "route": { "from": "Tunis", "to": "Paris" }, "status": "delayed" },
+  "information": { "delay": 180, "reason": "unknown" },
   "isFollowUp": false
 }
 
-CRITICAL: Always use double quotes in JSON. Never use single quotes.
-
-IMPORTANT: The actions array must NEVER be empty when passenger has a delayed flight. Minimum required actions for any delay response: ["Passenger Rights", "Alternative Flights", "Airport Services"]
-
-For general questions:
-{
-  "message": "your short answer here",
-  "type": "general",
-  "actions": []
-}`;
-
+CRITICAL: JSON only. Double quotes. Actions never empty for delayed/cancelled flights. Never invent data.`;
 // Tool definitions for the LLM
 const TOOLS = [
   {
@@ -167,16 +128,16 @@ const sessions = new Map(); // Map<conversationId, sessionState>
 // Intent detection function
 function detectIntent(message) {
   const msg = message.toLowerCase();
-  if (msg.includes('alternative') || msg.includes('other flight') 
-      || msg.includes('rebook')) return 'alternative_flights';
-  if (msg.includes('right') || msg.includes('compensation') 
-      || msg.includes('refund')) return 'passenger_rights';
-  if (msg.includes('hotel') || msg.includes('accommodation') 
-      || msg.includes('sleep')) return 'hotels';
-  if (msg.includes('service') || msg.includes('lounge') 
-      || msg.includes('food')) return 'airport_services';
-  if (msg.match(/[A-Z]{2}\d{3,4}/i) || msg.includes('flight') 
-      || msg.includes('delay') || msg.includes('status')) return 'flight_status';
+  if (msg.includes('alternative') || msg.includes('other flight')
+    || msg.includes('rebook')) return 'alternative_flights';
+  if (msg.includes('right') || msg.includes('compensation')
+    || msg.includes('refund')) return 'passenger_rights';
+  if (msg.includes('hotel') || msg.includes('accommodation')
+    || msg.includes('sleep')) return 'hotels';
+  if (msg.includes('service') || msg.includes('lounge')
+    || msg.includes('food')) return 'airport_services';
+  if (msg.match(/[A-Z]{2}\d{3,4}/i) || msg.includes('flight')
+    || msg.includes('delay') || msg.includes('status')) return 'flight_status';
   return 'general';
 }
 
@@ -191,16 +152,16 @@ const tools = {
   async getFlightStatus(flightNumber, session) {
     console.log("TOOL CALLED: getFlightStatus");
     console.log(`🔧 [TOOL] getFlightStatus called with:`, flightNumber);
-    
+
     const flightData = await getFlightData(flightNumber);
     if (flightData.found) {
       console.log(`✅ [TOOL] getFlightStatus success:`, flightData.flight_number);
-      
+
       // Use mock data normally (demo mode)
       if (flightData.source === "mock") {
         console.log(`📦 [TOOL] Using mock data for ${flightData.flight_number}`);
       }
-      
+
       // Update session state with route info and airline
       if (session) {
         session.flightNumber = flightData.flight_number;
@@ -210,7 +171,7 @@ const tools = {
         session.delayMinutes = flightData.departure.delay || 0;
         session.status = flightData.status;
       }
-      
+
       return {
         flightNumber: flightData.flight_number,
         airline: flightData.airline.name,
@@ -221,7 +182,7 @@ const tools = {
         scheduledArrival: flightData.arrival.scheduled
       };
     }
-    
+
     // If AviationStack returns empty data, return honest message immediately
     console.log(`❌ [TOOL] AviationStack returned empty for ${flightNumber}`);
     return {
@@ -272,8 +233,8 @@ const tools = {
     const lawNote = routeType === 'eu_to_tunisia'
       ? 'EU Regulation 261/2004 applies — file at ec.europa.eu/transport'
       : routeType === 'domestic'
-      ? 'OACA rules apply — contact airline desk'
-      : 'Montreal Convention applies — ask airline for voluntary compensation';
+        ? 'OACA rules apply — contact airline desk'
+        : 'Montreal Convention applies — ask airline for voluntary compensation';
 
     console.log(`✅ [TOOL] getPassengerRights: ${rights.length} rights for ${routeType}`);
 
@@ -320,11 +281,11 @@ const tools = {
   async getAlternativeFlights(origin, destination) {
     console.log("TOOL CALLED: getAlternativeFlights");
     console.log(`🔧 [TOOL] getAlternativeFlights called with:`, origin, '→', destination);
-    
+
     try {
       // Try AviationStack API first
       const liveAlternatives = await getAlternativeFlights(origin, destination);
-      
+
       if (liveAlternatives && liveAlternatives.length > 0) {
         console.log(`✅ [TOOL] getAlternativeFlights live:`, liveAlternatives.length, 'flights');
         const formattedFlights = liveAlternatives.slice(0, 3).map(alt => ({
@@ -345,7 +306,7 @@ const tools = {
     try {
       const { getAlternativeFlights: getMockAlts } = require('./alternativeFlightsService');
       const mockAltsFull = await getMockAlts(`${origin}${destination}`, {});
-      
+
       if (mockAltsFull && mockAltsFull.length > 0) {
         const formattedFlights = mockAltsFull.slice(0, 3).map(alt => ({
           flightNumber: alt.flight_number,
@@ -365,7 +326,7 @@ const tools = {
     const routeAlternatives = {
       'TUNCDG': [
         { flightNumber: 'AF1083', departure: '16:00', arrival: '18:45', airline: 'Air France', status: 'On time' },
-        { flightNumber: 'TU743',  departure: '18:30', arrival: '21:10', airline: 'Tunisair',   status: 'On time' },
+        { flightNumber: 'TU743', departure: '18:30', arrival: '21:10', airline: 'Tunisair', status: 'On time' },
       ],
       'TUNIST': [
         { flightNumber: 'TK743', departure: '14:00', arrival: '17:30', airline: 'Turkish Airlines', status: 'On time' },
@@ -377,10 +338,10 @@ const tools = {
         { flightNumber: 'BJ522', departure: '15:00', arrival: '17:20', airline: 'Nouvelair', status: 'On time' },
       ],
     };
-    
+
     const key = origin + destination;
     const fallbackFlights = routeAlternatives[key] || [];
-    
+
     if (fallbackFlights.length > 0) {
       console.log(`✅ [TOOL] Hardcoded alternatives for ${key}`);
       return { flights: fallbackFlights, origin, destination };
@@ -402,10 +363,10 @@ const tools = {
 async function runAgent(message, history = [], conversationId = 'default', selectedAirport = null) {
   try {
     console.log(`[AI Agent] Processing message: "${message}" for conversation: ${conversationId}`);
-    
+
     // Per-conversation history
     let conversationHistory = sessions.get(conversationId + '_history') || [];
-    
+
     // Get or create session for this conversation
     let session = sessions.get(conversationId) || {
       flightNumber: null,
@@ -415,7 +376,7 @@ async function runAgent(message, history = [], conversationId = 'default', selec
       delayMinutes: null,
       airline: null
     };
-    
+
     // PRIORITY 0: Use selected airport from frontend if provided
     if (selectedAirport) {
       session.selectedAirport = selectedAirport;
@@ -428,23 +389,23 @@ async function runAgent(message, history = [], conversationId = 'default', selec
       session.delayMinutes = parseInt(delayMatch[1]) * 60; // Convert hours to minutes
       console.log(`🎯 [PRIORITY] User specified delay: ${session.delayMinutes} minutes`);
     }
-    
+
     // PRIORITY 2: Extract flight number from current message if present
     const flightMatch = message.match(/([A-Z]{2}\d{3,4})/i);
     if (flightMatch) {
       session.flightNumber = flightMatch[1].toUpperCase();
       console.log(`🎯 [PRIORITY] User specified flight: ${session.flightNumber}`);
     }
-    
+
     // Store updated session back
     sessions.set(conversationId, session);
-    
+
     // Set timeout to clear session after 30 minutes
     setTimeout(() => {
       sessions.delete(conversationId);
       console.log(`🧹 [SESSION] Cleared conversation ${conversationId} after 30 minutes`);
     }, 30 * 60 * 1000);
-    
+
     // Intents that don't need a flight number
     const intentNeedsNoFlight = ['hotels', 'airport_services', 'passenger_rights', 'general'];
     const currentIntent = detectIntent(message);
@@ -454,20 +415,20 @@ async function runAgent(message, history = [], conversationId = 'default', selec
     if (!flightMatch && !session.flightNumber && !intentNeedsNoFlight.includes(currentIntent)) {
       console.log(`🚫 [AI] No flight number found, asking user`);
       const askFlightResponse = { "message": "Could you please provide your flight number?", "type": "general", "actions": [] };
-      
+
       conversationHistory.push({ role: 'user', content: message });
       conversationHistory.push({ role: 'assistant', content: JSON.stringify(askFlightResponse) });
       sessions.set(conversationId + '_history', conversationHistory);
-      
+
       const result = {
         reply: JSON.stringify(askFlightResponse),
         updatedHistory: [...history, { role: "user", content: message }, { role: "assistant", content: JSON.stringify(askFlightResponse) }]
       };
-      
+
       console.log("AGENT RESPONSE:", JSON.stringify(result, null, 2));
       return result;
     }
-    
+
     // Update conversation history
     conversationHistory = [
       ...conversationHistory.slice(-9), // Keep last 9 messages
@@ -477,17 +438,17 @@ async function runAgent(message, history = [], conversationId = 'default', selec
     // DETECT INTENT AND EXECUTE TOOLS BEFORE LLM
     const intent = detectIntent(message);
     console.log(`🎯 [INTENT] Detected:`, intent);
-    
+
     let toolData = null;
     let toolUsed = false;
-    
+
     // Execute tools based on intent
     if (intent === 'flight_status') {
       const flightNumber = extractFlightNumber(message) || session.flightNumber;
       if (flightNumber) {
         toolData = await tools.getFlightStatus(flightNumber, session);
         toolUsed = true;
-        
+
         // If tool returned direct response (no AviationStack data), return immediately
         if (toolData && toolData.type === 'general') {
           console.log(`🚫 [AI] Returning direct response for empty AviationStack data`);
@@ -495,7 +456,7 @@ async function runAgent(message, history = [], conversationId = 'default', selec
             reply: JSON.stringify(toolData),
             updatedHistory: [...history, { role: "user", content: message }, { role: "assistant", content: JSON.stringify(toolData) }]
           };
-          
+
           console.log("AGENT RESPONSE:", JSON.stringify(result, null, 2));
           return result;
         }
@@ -556,17 +517,17 @@ async function runAgent(message, history = [], conversationId = 'default', selec
       const origin = session.origin;
       const destination = session.destination;
       const airline = session.airline; // Store airline from flight status
-      
+
       if (origin && destination) {
         toolData = await tools.getAlternativeFlights(origin, destination);
         toolUsed = true;
-        
+
         // Filter alternatives to only show same airline if available, otherwise any airline
         if (toolData.flights && airline) {
-          const sameAirlineFlights = toolData.flights.filter(flight => 
+          const sameAirlineFlights = toolData.flights.filter(flight =>
             flight.airline.toLowerCase() === airline.toLowerCase()
           );
-          
+
           if (sameAirlineFlights.length > 0) {
             toolData.flights = sameAirlineFlights;
             console.log(`🎯 [AIRLINE] Filtered to ${airline} flights only`);
@@ -632,7 +593,7 @@ Output ONLY the JSON object starting with {`;
 
     // Call LLM (without tools since we already executed them)
     const llmResponse = await chat(messages, []); // Empty tools array
-    
+
     // Parse JSON response
     let parsedResponse;
     try {
@@ -640,16 +601,16 @@ Output ONLY the JSON object starting with {`;
       console.log(`✅ [AI] JSON parsed successfully:`, parsedResponse);
       // Add isFollowUp flag to successful LLM responses
       parsedResponse.isFollowUp = history.length > 2;
-      
+
       // Ensure actions array is never empty for delayed flights
       if (session.status === 'Delayed' && (!parsedResponse.actions || parsedResponse.actions.length === 0)) {
         parsedResponse.actions = ["Passenger Rights", "Alternative Flights", "Airport Services"];
         console.log(`🔧 [FIX] Added required actions for delayed flight`);
       }
-      
+
     } catch (parseError) {
       console.log(`❌ [AI] JSON parse failed, using fallback format`);
-      
+
       // Create fallback response based on tool data
       if (toolData && intent === 'flight_status') {
         parsedResponse = {
@@ -657,12 +618,12 @@ Output ONLY the JSON object starting with {`;
           type: 'flight',
           flight: toolData.flightNumber,
           airline: toolData.airline,
-          route: { 
-            from: `${toolData.route.split(' → ')[0]} (${toolData.route.split(' → ')[0].match(/[A-Z]{3}/)})`, 
+          route: {
+            from: `${toolData.route.split(' → ')[0]} (${toolData.route.split(' → ')[0].match(/[A-Z]{3}/)})`,
             to: `${toolData.route.split(' → ')[1]} (${toolData.route.split(' → ')[1].match(/[A-Z]{3}/)})`
           },
           status: toolData.status,
-          delay: toolData.delay > 0 ? `${Math.floor(toolData.delay/60)}h ${toolData.delay%60}min` : undefined,
+          delay: toolData.delay > 0 ? `${Math.floor(toolData.delay / 60)}h ${toolData.delay % 60}min` : undefined,
           suggestion: null,
           actions: ["Passenger Rights", "Alternative Flights", "Airport Services"],
           isFollowUp: history.length > 2
@@ -702,7 +663,7 @@ Output ONLY the JSON object starting with {`;
         parsedResponse = { message: llmResponse.reply, type: 'general', actions: [], isFollowUp: history.length > 2 };
       }
     }
-    
+
     // Special handling for "Alternative Flights" with no flight number
     if (intent === 'alternative_flights' && !session.flightNumber && !session.origin && !session.destination) {
       parsedResponse = {
@@ -722,13 +683,13 @@ Output ONLY the JSON object starting with {`;
       reply: JSON.stringify(parsedResponse),
       updatedHistory: [...history, { role: "user", content: message }, { role: "assistant", content: JSON.stringify(parsedResponse) }]
     };
-    
+
     console.log("AGENT RESPONSE:", JSON.stringify(result, null, 2));
     return result;
 
   } catch (error) {
     console.error('AI Agent error:', error);
-    
+
     const fallbackResponse = {
       message: "I'm sorry, I'm having trouble processing your request right now. Please try again or visit the airline service desk.",
       type: "general",
@@ -738,7 +699,7 @@ Output ONLY the JSON object starting with {`;
     const safeHistory = sessions.get(conversationId + '_history') || [];
     safeHistory.push({ role: 'assistant', content: JSON.stringify(fallbackResponse) });
     sessions.set(conversationId + '_history', safeHistory);
-    
+
     return {
       reply: JSON.stringify(fallbackResponse),
       updatedHistory: [...history, { role: "user", content: message }, { role: "assistant", content: JSON.stringify(fallbackResponse) }]
@@ -760,8 +721,8 @@ function clearConversationHistory() {
   sessions.clear();
 }
 
-module.exports = { 
-  runAgent, 
-  getConversationHistory, 
-  clearConversationHistory 
+module.exports = {
+  runAgent,
+  getConversationHistory,
+  clearConversationHistory
 };

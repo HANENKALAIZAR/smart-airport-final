@@ -298,6 +298,8 @@ export default function About() {
             <div className="mt-8 max-w-md relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
+                id="airport-search"
+                name="query"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search airport, city or IATA code…"

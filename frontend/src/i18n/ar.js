@@ -435,24 +435,17 @@ const ar = {
     filter_risk_suffix: 'مخاطر',
 
     /* ── الشريط الجانبي / رأس صفحة المسؤول ─────────────────── */
-    smartAirport: 'المطار الذكي',
     dashboard: 'لوحة التحكم',
-    flights: 'الرحلات',
     departures: 'المغادرات',
     arrivals: 'الوصول',
+    globalOps: 'العمليات العالمية',
     predictDelay: 'التنبؤ بالتأخير',
+
     analytics: 'التحليلات',
     aiExplanations: 'تفسيرات الذكاء الاصطناعي',
     settings: 'الإعدادات',
     logout: 'تسجيل الخروج',
-    notifications: 'الإشعارات',
-    markAllRead: 'تحديد الكل كمقروء',
-    viewAll: 'عرض الكل',
-    switchAirport: 'تغيير المطار',
-    operations: 'العمليات',
-    superAdmin: 'مسؤول أعلى',
-    admin: 'مسؤول',
-    searchFlights: 'بحث عن رحلات...',
+
 
     /* ── تسجيل دخول المسؤول ─────────────────────────────────── */
     admin_login_title: 'تسجيل دخول الأعضاء',
@@ -661,24 +654,7 @@ const ar = {
     table_risk: 'المخاطر',
     table_status: 'الحالة',
 
-    /* ── شريط الفلاتر ────────────────────────────────────────── */
-    filter_time_range: 'النطاق الزمني',
-    filter_select_time: 'اختر نطاقاً زمنياً',
-    filter_morning: 'الصباح (00:00–12:00)',
-    filter_afternoon: 'بعد الظهر (12:00–18:00)',
-    filter_evening: 'المساء (18:00–23:59)',
-    filter_risk_level: 'مستوى المخاطر',
-    filter_low_risk: 'مخاطر منخفضة',
-    filter_medium_risk: 'مخاطر متوسطة',
-    filter_high_risk: 'مخاطر عالية',
-    filter_risk_suffix: 'مخاطر',
-    filter_status: 'الحالة',
-    filter_on_time: 'في الموعد',
-    filter_delayed: 'متأخر',
-    filter_boarding: 'الصعود',
-    filter_departed: 'مغادر',
-    filter_apply: 'تطبيق الفلاتر',
-    filter_reset: 'إعادة ضبط',
+
 
     /* ── نص شرح النافذة ─────────────────────────────────────── */
     modal_explanation_text_1: 'يتنبأ نموذج الذكاء الاصطناعي بتأخير مدته',

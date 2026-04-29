@@ -10,7 +10,7 @@ import {
     apiListMessages, apiSendMessage, apiReplyToMessage, apiUpdateMessageStatus, apiListAdmins,
     apiDeleteMessage, apiMarkMessagesInboxRead,
 } from '../../services/adminApi';
-import CustomSelect from '../../components/ui/CustomSelect';
+import CustomSelect from '../../components/admin/ui/CustomSelect';
 
 const CATEGORIES = [
     { value: 'technical',   label: '🔧 Technical',   color: '#3B82F6' },
@@ -362,6 +362,8 @@ export default function AdminMessages() {
                                     {msg.status !== 'resolved' && (
                                         <div style={{ display: 'flex', gap: 8, marginTop: 14, alignItems: 'center' }}>
                                             <input
+                                                id={`reply-${msg.id}`}
+                                                name="reply"
                                                 value={replyText[msg.id] || ''}
                                                 onChange={e => setReplyText(p => ({ ...p, [msg.id]: e.target.value }))}
                                                 onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleReply(msg.id)}
@@ -410,8 +412,10 @@ export default function AdminMessages() {
                             <div className="admin-modal__body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                                 {isSuperAdmin && (
                                     <div>
-                                        <label style={{ display: 'block', fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Recipient</label>
+                                        <label htmlFor="msg-recipient" style={{ display: 'block', fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Recipient</label>
                                         <CustomSelect
+                                            id="msg-recipient"
+                                            name="to_user_id"
                                             required
                                             placeholder="— Select an administrator —"
                                             options={adminList.map(a => ({ value: String(a.id), label: `${a.full_name} · ${a.airport_iata}` }))}
@@ -433,13 +437,13 @@ export default function AdminMessages() {
                                 </div>
 
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Subject</label>
-                                    <input required maxLength={120} value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value }))} placeholder="Brief, descriptive subject line…" className="admin-form-input" />
+                                    <label htmlFor="msg-subject" style={{ display: 'block', fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Subject</label>
+                                    <input id="msg-subject" name="subject" required maxLength={120} value={form.subject} onChange={e => setForm(f => ({ ...f, subject: e.target.value }))} placeholder="Brief, descriptive subject line…" className="admin-form-input" />
                                 </div>
 
                                 <div>
-                                    <label style={{ display: 'block', fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Message</label>
-                                    <textarea required rows={6} value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} placeholder="Write your full message here…" className="admin-form-input" style={{ resize: 'vertical', minHeight: 110 }} />
+                                    <label htmlFor="msg-body" style={{ display: 'block', fontSize: '0.78rem', color: 'rgba(255,255,255,0.5)', marginBottom: 8, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Message</label>
+                                    <textarea id="msg-body" name="body" required rows={6} value={form.body} onChange={e => setForm(f => ({ ...f, body: e.target.value }))} placeholder="Write your full message here…" className="admin-form-input" style={{ resize: 'vertical', minHeight: 110 }} />
                                     <div style={{ textAlign: 'right', fontSize: '0.7rem', color: 'rgba(255,255,255,0.25)', marginTop: 4 }}>{form.body.length} chars</div>
                                 </div>
                             </div>

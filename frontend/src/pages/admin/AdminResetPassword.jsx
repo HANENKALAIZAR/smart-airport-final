@@ -62,7 +62,7 @@ export default function AdminResetPassword() {
             return;
         }
         setMsg(data?.message || 'Password changed successfully. You can now log in.');
-        setTimeout(() => navigate('/login', { replace: true }), 2800);
+        setTimeout(() => navigate('/admin/login', { replace: true }), 2800);
     }
 
     if (valid === null) {
@@ -88,11 +88,11 @@ export default function AdminResetPassword() {
                             This link has expired or has already been used.
                         </p>
                     </div>
-                    <Link to="/forgot-password" className="admin-btn admin-btn--primary admin-login__submit" style={{ textAlign: 'center', textDecoration: 'none' }}>
+                    <Link to="/admin/forgot-password" className="admin-btn admin-btn--primary admin-login__submit" style={{ textAlign: 'center', textDecoration: 'none' }}>
                         Request a new link
                     </Link>
                     <p style={{ marginTop: 16, textAlign: 'center' }}>
-                        <Link to="/login" style={{ color: '#60a5fa', fontSize: '0.9rem' }}>
+                        <Link to="/admin/login" style={{ color: '#60a5fa', fontSize: '0.9rem' }}>
                             Back to login
                         </Link>
                     </p>
@@ -148,9 +148,11 @@ export default function AdminResetPassword() {
                     )}
 
                     <div className="admin-login__field">
-                        <label>New password</label>
+                        <label htmlFor="new-password">New password</label>
                         <div style={{ position: 'relative' }}>
                             <input
+                                id="new-password"
+                                name="new-password"
                                 type={show.n ? 'text' : 'password'}
                                 className="admin-form-input"
                                 value={np}
@@ -177,9 +179,11 @@ export default function AdminResetPassword() {
                     </div>
 
                     <div className="admin-login__field">
-                        <label>Confirm password</label>
+                        <label htmlFor="confirm-password">Confirm password</label>
                         <div style={{ position: 'relative' }}>
                             <input
+                                id="confirm-password"
+                                name="confirm-password"
                                 type={show.c ? 'text' : 'password'}
                                 className="admin-form-input"
                                 value={cp}
@@ -214,7 +218,7 @@ export default function AdminResetPassword() {
                     </button>
 
                     <p style={{ marginTop: 12, textAlign: 'center' }}>
-                        <Link to="/login" style={{ color: '#60a5fa', fontSize: '0.85rem' }}>
+                        <Link to="/admin/login" style={{ color: '#60a5fa', fontSize: '0.85rem' }}>
                             Back to login
                         </Link>
                     </p>

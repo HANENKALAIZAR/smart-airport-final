@@ -123,7 +123,7 @@ const Landing = () => {
                 {[Plane, MapPinned, Bell, Sparkles].map((Icon, i) => (
                   <Link
                     key={i}
-                    to={["/app", "/services", "/notifications", "/app"][i]}
+                    to={["/flights", "/services", "/notifications", "/flights"][i]}
                     className="h-11 w-11 grid place-items-center rounded-full text-primary-foreground hover:bg-white/20 transition-colors"
                   >
                     <Icon className="h-4 w-4" />
@@ -210,7 +210,7 @@ const Landing = () => {
                     size="lg"
                     className="rounded-full h-12 px-7 bg-foreground text-background hover:bg-foreground/90 gap-2"
                   >
-                    <Link to="/app">
+                    <Link to="/flights">
                       {t("landing.cta_primary")} <ArrowRight className="h-4 w-4 rtl-flip" />
                     </Link>
                   </Button>

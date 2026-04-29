@@ -2,15 +2,15 @@ version: '3.9'
 
 services:
 
-  # ── PostgreSQL database ──────────────────────────────────────────────
+  # ── PostgreSQL Database ────────────────────────────────────────────────
   db:
     image: postgres:16-alpine
     container_name: smart_airport_db
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_USER:     ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASS:-postgres}
-      POSTGRES_DB: ${DB_NAME:-smart_airport}
+      POSTGRES_DB:       ${DB_NAME:-smart_airport}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
@@ -22,7 +22,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── FastAPI backend ──────────────────────────────────────────────────
+  # ── FastAPI Backend (Gunicorn + Uvicorn workers) ───────────────────────
   backend:
     build:
       context: ./backend
@@ -35,29 +35,50 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DB_HOST: db
-      DB_PORT: 5432
+      DB_HOST:          db
+      DB_PORT:          "5432"
+      LOG_LEVEL:        info
+      WEB_CONCURRENCY:  "2"
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend:/app
-      - ./backend/app.log:/app/app.log
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
-  # ── React frontend ───────────────────────────────────────────────────
-  frontend:
-    image: node:20-alpine
-    container_name: smart_airport_frontend
+  # ── Admin Frontend (React / Vite, served by nginx) ────────────────────
+  admin:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: smart_airport_admin
     restart: unless-stopped
-    working_dir: /app
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy
     ports:
-      - "5173:5173"
-    command: sh -c "npm install && npm run dev -- --host"
+      - "5173:80"
     environment:
-      - VITE_API_BASE=http://localhost:8000
+      - VITE_API_BASE_URL=http://backend:8000
+      - VITE_APP_ENV=prod
+
+  # ── Passenger Frontend (React / Vite, served by nginx) ────────────────
+  passenger:
+    build:
+      context: ./passenger
+      dockerfile: Dockerfile.prod
+    container_name: smart_airport_passenger
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "8080:80"
+    environment:
+      - VITE_API_URL=http://backend:8000/api
+      - VITE_APP_ENV=prod
 
 volumes:
   postgres_data:

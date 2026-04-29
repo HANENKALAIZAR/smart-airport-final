@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { Search, Calendar as CalendarIcon, ChevronDown, Building2, Bell } from 'lucide-react';
 import { useAirport, TUNISIAN_AIRPORTS } from '../../context/AirportContext';
 import { useLanguage } from '../../context/LanguageContext';
-import LanguageSwitcher from '../LanguageSwitcher';
-import { apiGetNotificationSummary, apiMarkNotificationRead, apiMarkAllNotificationsRead, apiGetMe } from '../../services/adminApi';
+import LanguageSwitcher from './LanguageSwitcher';
+import { apiGetNotificationSummary, apiMarkNotificationRead, apiMarkAllNotificationsRead } from '../../services/adminApi';
+import useAdminAuth from '../../hooks/useAdminAuth';
 
 function initialsFromName(name) {
     if (!name || !String(name).trim()) return '?';
@@ -35,16 +36,9 @@ export default function AdminHeader({ selectedDate, onDateClick }) {
     const [airportDropdownOpen, setAirportDropdownOpen] = useState(false);
     const [notifOpen, setNotifOpen] = useState(false);
     const [summary, setSummary] = useState(null);
-    const [headerUser, setHeaderUser] = useState(null);
+    const { user: headerUser, refetch: refetchMe } = useAdminAuth();
     const dropdownRef = useRef(null);
     const notifRef = useRef(null);
-
-    const loadMe = useCallback(async () => {
-        const token = localStorage.getItem('admin_token');
-        if (!token || token === 'demo') return;
-        const { data } = await apiGetMe();
-        if (data) setHeaderUser(data);
-    }, []);
 
     const loadSummary = useCallback(async () => {
         const token = localStorage.getItem('admin_token');
@@ -54,14 +48,13 @@ export default function AdminHeader({ selectedDate, onDateClick }) {
     }, []);
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         loadSummary();
-        loadMe();
         const iv = setInterval(() => {
             loadSummary();
-            loadMe();
         }, 45000);
         return () => clearInterval(iv);
-    }, [loadSummary, loadMe]);
+    }, [loadSummary]);
 
     const badgeCount =
         role === 'super_admin'
@@ -71,10 +64,10 @@ export default function AdminHeader({ selectedDate, onDateClick }) {
     const items = summary?.items ?? [];
 
     useEffect(() => {
-        const onRefreshMe = () => loadMe();
+        const onRefreshMe = () => refetchMe();
         window.addEventListener('admin-header-refresh-me', onRefreshMe);
         return () => window.removeEventListener('admin-header-refresh-me', onRefreshMe);
-    }, [loadMe]);
+    }, [refetchMe]);
 
     useEffect(() => {
         function handleClick(e) {
@@ -165,6 +158,8 @@ export default function AdminHeader({ selectedDate, onDateClick }) {
                 <div className="admin-header__search">
                     <Search className="admin-header__search-icon" />
                     <input
+                        id="global-flight-search"
+                        name="search"
                         type="text"
                         placeholder={t('searchFlights')}
                         className="admin-header__search-input"

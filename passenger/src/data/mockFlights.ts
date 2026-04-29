@@ -1,3 +1,5 @@
+import { TUNISIAN_AIRPORTS, TUNISIAN_AIRPORT_CODES } from '@smart-airport/shared-core/constants/airports.js';
+
 export type FlightStatus = "scheduled" | "boarding" | "in_air" | "landed" | "delayed" | "cancelled";
 
 export interface Airport {
@@ -188,21 +190,21 @@ export interface AirportService {
   airport?: TunisianAirportCode;
 }
 
-export type TunisianAirportCode = "TUN" | "MIR" | "NBE" | "DJE";
+// ── Tunisian airports — single source of truth via shared-core (import at top) ──
 
-export const tunisianAirports: {
-  code: TunisianAirportCode;
-  name: string;
-  city: string;
-  region: string;
-  terminals: number;
-  iata: string;
-}[] = [
-  { code: "TUN", name: "Tunis–Carthage International", city: "Tunis", region: "Greater Tunis", terminals: 2, iata: "TUN" },
-  { code: "MIR", name: "Monastir Habib Bourguiba International", city: "Monastir", region: "Sahel", terminals: 1, iata: "MIR" },
-  { code: "NBE", name: "Enfidha–Hammamet International", city: "Enfidha", region: "Hammamet", terminals: 1, iata: "NBE" },
-  { code: "DJE", name: "Djerba–Zarzis International", city: "Djerba", region: "South", terminals: 1, iata: "DJE" },
-];
+/** Union type derived from the canonical airport code list */
+export type TunisianAirportCode = typeof TUNISIAN_AIRPORT_CODES[number];
+
+/** Re-export in the shape previously consumed by AirportService.airport */
+export const tunisianAirports = TUNISIAN_AIRPORTS.map(a => ({
+  code: a.code as TunisianAirportCode,
+  name: a.name,
+  city: a.city,
+  region: a.region,
+  terminals: a.code === 'TUN' ? 2 : 1,
+  iata: a.iata,
+}));
+
 
 export const services: AirportService[] = [
   { id: "s1", name: "Air France Business Lounge", category: "lounges", terminal: "2E - K", walkMin: 4, rating: 4.7, open: true, description: "Premium quiet zone with showers, dining and runway views.", hours: "05:00 — 23:30" },

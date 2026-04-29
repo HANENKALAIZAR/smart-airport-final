@@ -62,6 +62,9 @@ class FlightDetailOut(FlightListOut):
     actual_arrival: Optional[datetime] = None
     prediction: Optional["PredictionOut"] = None
     passenger_rights: Optional[list["PassengerRightOut"]] = None
+    gate: Optional[str] = None
+    terminal: Optional[str] = None
+    delay_cause: Optional["DelayCause"] = None
 
     class Config:
         from_attributes = True

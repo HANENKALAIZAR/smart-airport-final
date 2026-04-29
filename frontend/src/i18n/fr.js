@@ -435,24 +435,18 @@ const fr = {
     filter_risk_suffix: 'Risque',
 
     /* ── Sidebar / En-tête Admin ─────────────────────────────── */
-    smartAirport: 'Smart Airport',
     dashboard: 'Tableau de bord',
-    flights: 'Vols',
     departures: 'Départs',
     arrivals: 'Arrivées',
+    globalOps: 'Opérations mondiales',
     predictDelay: 'Prédire Retard',
+
+
     analytics: 'Analytique',
     aiExplanations: 'Explications IA',
     settings: 'Paramètres',
     logout: 'Déconnexion',
-    notifications: 'Notifications',
-    markAllRead: 'Tout marquer comme lu',
-    viewAll: 'Voir tout',
-    switchAirport: 'Changer d\'aéroport',
-    operations: 'Opérations',
-    superAdmin: 'Super Administrateur',
-    admin: 'Administrateur',
-    searchFlights: 'Rechercher des vols...',
+
 
     /* ── Connexion Admin ─────────────────────────────────────── */
     admin_login_title: 'Member login',
@@ -661,24 +655,7 @@ const fr = {
     table_risk: 'Risque',
     table_status: 'Statut',
 
-    /* ── Barre de filtres ────────────────────────────────────── */
-    filter_time_range: 'Plage horaire',
-    filter_select_time: 'Sélectionner une plage horaire',
-    filter_morning: 'Matin (00:00–12:00)',
-    filter_afternoon: 'Après-midi (12:00–18:00)',
-    filter_evening: 'Soir (18:00–23:59)',
-    filter_risk_level: 'Niveau de risque',
-    filter_low_risk: 'Risque faible',
-    filter_medium_risk: 'Risque moyen',
-    filter_high_risk: 'Risque élevé',
-    filter_risk_suffix: 'Risque',
-    filter_status: 'Statut',
-    filter_on_time: 'À l\'heure',
-    filter_delayed: 'Retardé',
-    filter_boarding: 'Embarquement',
-    filter_departed: 'Parti',
-    filter_apply: 'Appliquer les filtres',
-    filter_reset: 'Réinitialiser',
+
 
     /* ── Texte d'explication modale ──────────────────────────── */
     modal_explanation_text_1: 'Le modèle IA prédit un retard de',

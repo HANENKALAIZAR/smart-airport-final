@@ -4,28 +4,38 @@
  * Central HTTP client for the admin/super-admin interface.
  * - Automatically attaches the JWT from localStorage to every request.
  * - Returns { data, error } so callers can handle both cases cleanly.
- * - On 401 → clears token and reloads to force re-login.
+ * - On 401 → clears token and redirects to /admin/login.
+ * - Retries up to 2× on network errors or 5xx (not on 4xx).
+ * - Times out after 12 seconds.
  */
 
 const BASE = '/api';
+const TIMEOUT_MS = 12_000;
+const MAX_RETRIES = 2;
 
-/** Parse JSON safely - servers may return plain text or HTML on 5xx. */
+/** Parse JSON safely — servers may return plain text or HTML on 5xx. */
 function parseResponseBody(text) {
   if (text == null || !String(text).trim()) return null;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(text); } catch { return null; }
 }
 
-/** Human-readable API error (FastAPI detail string, array, or raw body snippet). */
+/** Extract also the standardized { data, error } envelope if present. */
+function unwrapEnvelope(parsed) {
+  if (parsed && typeof parsed === 'object' && 'data' in parsed && 'error' in parsed) {
+    return parsed.data;
+  }
+  return parsed;
+}
+
+/** Human-readable error from FastAPI detail, array, or raw snippet. */
 function errorMessageFromBody(data, text, status) {
+  // Handle standardized { data, error } envelope from our backend
+  if (data?.error) return String(data.error);
   if (data?.detail != null) {
     const d = data.detail;
     if (typeof d === 'string') return d;
     if (Array.isArray(d) && d.length) {
-      const parts = d.map((e) => e.msg || e.detail || JSON.stringify(e)).filter(Boolean);
+      const parts = d.map(e => e.msg || e.detail || JSON.stringify(e)).filter(Boolean);
       if (parts.length) return parts.join('; ');
     }
     return `Error ${status}`;
@@ -36,7 +46,8 @@ function errorMessageFromBody(data, text, status) {
 }
 
 function getToken() {
-  return localStorage.getItem('admin_token') || '';
+  try { return localStorage.getItem('admin_token') || ''; }
+  catch { return ''; }
 }
 
 function authHeaders(extra = {}) {
@@ -47,36 +58,68 @@ function authHeaders(extra = {}) {
   };
 }
 
-async function request(method, path, body) {
+/** Fetch with AbortController timeout. */
+async function fetchWithTimeout(url, opts) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    const opts = {
-      method,
-      headers: authHeaders(),
-    };
-    if (body !== undefined) opts.body = JSON.stringify(body);
-
-    const res = await fetch(`${BASE}${path}`, opts);
-
-    // Expired / invalid token → force logout
-    if (res.status === 401) {
-      localStorage.removeItem('admin_token');
-      localStorage.removeItem('admin_role');
-      localStorage.removeItem('admin_airport');
-      window.location.reload();
-      return { data: null, error: 'Session expired' };
-    }
-
-    const text = await res.text();
-    const data = parseResponseBody(text);
-
-    if (!res.ok) {
-      return { data: null, error: errorMessageFromBody(data, text, res.status) };
-    }
-    return { data, error: null };
-  } catch (err) {
-    return { data: null, error: err.message };
+    return await fetch(url, { ...opts, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
   }
 }
+
+/** Returns true for errors worth retrying (network, 429, 5xx). */
+function isRetryable(err, status) {
+  if (err?.name === 'AbortError') return false; // timeout — don't retry
+  if (!status) return true; // network error
+  return status === 429 || status >= 500;
+}
+
+async function request(method, path, body, _retry = 0) {
+  const opts = { method, headers: authHeaders() };
+  if (body !== undefined) opts.body = JSON.stringify(body);
+
+  let res;
+  try {
+    res = await fetchWithTimeout(`${BASE}${path}`, opts);
+  } catch (err) {
+    // Network / timeout error
+    if (_retry < MAX_RETRIES && isRetryable(err, null)) {
+      await new Promise(r => setTimeout(r, 500 * (_retry + 1)));
+      return request(method, path, body, _retry + 1);
+    }
+    const msg = err?.name === 'AbortError'
+      ? 'Request timed out. Please check your connection.'
+      : (err?.message || 'Network error — check your connection.');
+    return { data: null, error: msg };
+  }
+
+  // 401 → expired/invalid token, force logout
+  if (res.status === 401) {
+    import('./adminAuth.js')
+      .then(m => m.clearAuthAndRedirect())
+      .catch(() => window.location.replace('/admin/login'));
+    return { data: null, error: 'Session expired. Please log in again.' };
+  }
+
+  const text = await res.text();
+  const parsed = parseResponseBody(text);
+
+  // Retry 5xx automatically
+  if (res.status >= 500 && _retry < MAX_RETRIES) {
+    await new Promise(r => setTimeout(r, 500 * (_retry + 1)));
+    return request(method, path, body, _retry + 1);
+  }
+
+  if (!res.ok) {
+    return { data: null, error: errorMessageFromBody(parsed, text, res.status) };
+  }
+
+  // Unwrap { data, error } envelope if backend returns it
+  return { data: unwrapEnvelope(parsed), error: null };
+}
+
 
 // ── Auth ──────────────────────────────────────────────────────────────────
 
@@ -207,9 +250,6 @@ export async function apiPatchSettings(payload) {
   return request('PATCH', '/users/me/settings', payload);
 }
 
-export async function apiPatchSuperAdminProfile(payload) {
-  return request('PATCH', '/users/me/super-admin-profile', payload);
-}
 
 export async function apiReuploadIdDocument(cinDocumentUrl, passportDocumentUrl) {
   const body = {};

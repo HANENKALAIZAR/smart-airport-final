@@ -1,5 +1,5 @@
 import { X, Plane, Clock, MapPin, AlertTriangle, CloudLightning, CheckCircle } from 'lucide-react';
-import { useLanguage } from '../../context/LanguageContext';
+
 
 /* ── Helpers ─────────────────────────────────────── */
 function riskColor(risk) {
@@ -87,19 +87,18 @@ function TimelineItem({ label, time, done, active }) {
 
 /* ── Main Modal ──────────────────────────────────── */
 export default function FlightDetailsModal({ flight, isOpen, onClose }) {
-    const { t } = useLanguage();
     if (!isOpen || !flight) return null;
 
-    const delay = flight.predictedDelay || flight.delay_minutes || 0;
+    const delay = flight.predictedDelay ?? flight.delay_minutes ?? null;
     const status = flight.status || 'scheduled';
-    const prob = riskPct(delay);
+    const prob = delay === null ? 0 : riskPct(delay);
     const gaugeColor = riskColor(flight.riskLevel);
     const sColor = statusColor(status);
     const statusLabel = flight.status || status;
 
     // Normalise times
     const sched = flight.scheduledTime || flight.dep_scheduled || '—';
-    const estimated = delay > 0 ? '(+' + delay + ' min)' : '—';
+    const estimated = delay !== null && delay > 0 ? '(+' + delay + ' min)' : '—';
     const depIata = flight.origin || flight.dep_iata || '—';
     const arrIata = flight.destination || flight.arr_iata || '—';
     const terminal = flight.dep_terminal || flight.arr_terminal || '—';
@@ -107,15 +106,16 @@ export default function FlightDetailsModal({ flight, isOpen, onClose }) {
     const aircraft = flight.aircraftType || 'Boeing 737-800';
 
     /* Risk analysis factors (derived from delay/risk) */
+    const safeDelay = delay || 0;
     const riskFactors = [
-        { label: 'Weather Conditions', pct: Math.min(95, 48 + delay), color: '#0EA5E9' },
-        { label: 'Air Traffic Congestion', pct: Math.min(92, 35 + delay * 0.8), color: '#0EA5E9' },
-        { label: 'Aircraft Turnaround Time', pct: Math.min(88, 22 + delay * 0.6), color: '#0EA5E9' },
-        { label: 'Historical Performance', pct: Math.min(80, 30 + delay * 0.5), color: '#0EA5E9' },
+        { label: 'Weather Conditions', pct: Math.min(95, 48 + safeDelay), color: '#0EA5E9' },
+        { label: 'Air Traffic Congestion', pct: Math.min(92, 35 + safeDelay * 0.8), color: '#0EA5E9' },
+        { label: 'Aircraft Turnaround Time', pct: Math.min(88, 22 + safeDelay * 0.6), color: '#0EA5E9' },
+        { label: 'Historical Performance', pct: Math.min(80, 30 + safeDelay * 0.5), color: '#0EA5E9' },
     ];
 
     /* Timeline events */
-    const isDelayed = delay > 0;
+    const isDelayed = delay !== null && delay > 0;
     const timeline = [
         { label: 'Flight scheduled', time: sched, done: true, active: false },
         { label: 'Boarding started', time: sched ? `${sched}` : '—', done: isDelayed, active: !isDelayed },

@@ -111,7 +111,7 @@ def create_flight(
 
 @router.put("/{flight_id}", response_model=FlightListOut)
 def update_flight(
-    flight_id: int,
+    flight_id: str,
     payload: FlightUpdate,
     db: Session = Depends(get_db),
     _user: User = Depends(require_approved_admin),
@@ -135,7 +135,7 @@ def update_flight(
 
 @router.delete("/{flight_id}", status_code=204)
 def delete_flight(
-    flight_id: int,
+    flight_id: str,
     db: Session = Depends(get_db),
     _user: User = Depends(require_approved_admin),
 ):
@@ -151,9 +151,16 @@ def delete_flight(
 
 
 @router.get("/{flight_id}", response_model=FlightDetailOut)
-def get_flight(flight_id: int, db: Session = Depends(get_db)):
+def get_flight(flight_id: str, db: Session = Depends(get_db)):
     """Get detailed flight info with prediction and passenger rights."""
-    flight = get_flight_detail(db, flight_id)
+    try:
+        fid = int(flight_id)
+    except ValueError:
+        # Not a DB integer ID. Likely an external ID (OpenSky)
+        # For now, return 404 since we don't store external flights in DB
+        raise HTTPException(status_code=404, detail=f"External flight {flight_id} not in database")
+
+    flight = get_flight_detail(db, fid)
     if not flight:
         raise HTTPException(status_code=404, detail="Flight not found")
 
@@ -176,11 +183,16 @@ def get_flight(flight_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{flight_id}/prediction", response_model=PredictionOut)
-def get_flight_prediction(flight_id: int, db: Session = Depends(get_db)):
+def get_flight_prediction(flight_id: str, db: Session = Depends(get_db)):
     """Get AI prediction for a specific flight."""
+    try:
+        fid = int(flight_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="External flight prediction not available")
+
     from app.models.models import Flight as FlightModel
 
-    flight = db.query(FlightModel).filter(FlightModel.id == flight_id).first()
+    flight = db.query(FlightModel).filter(FlightModel.id == fid).first()
     if not flight:
         raise HTTPException(status_code=404, detail="Flight not found")
 
@@ -197,9 +209,14 @@ def get_flight_prediction(flight_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{flight_id}/features", response_model=FlightFeaturesOut)
-def get_flight_features_endpoint(flight_id: int, db: Session = Depends(get_db)):
+def get_flight_features_endpoint(flight_id: str, db: Session = Depends(get_db)):
     """Get computed ML features for a flight."""
-    features = get_flight_features(db, flight_id)
+    try:
+        fid = int(flight_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="External flight features not available")
+
+    features = get_flight_features(db, fid)
     if not features:
         raise HTTPException(status_code=404, detail="Flight features not found")
     return FlightFeaturesOut.model_validate(features)

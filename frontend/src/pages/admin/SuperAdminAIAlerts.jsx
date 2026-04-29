@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Clock } from 'lucide-react';
 import { useAirport } from '../../context/AirportContext';
 import { apiGetAiAlerts } from '../../services/adminApi';
-import CustomSelect from '../../components/ui/CustomSelect';
+import CustomSelect from '../../components/admin/ui/CustomSelect';
 
 function riskBadgeStyle(riskPct) {
     const risk = Number(riskPct || 0);

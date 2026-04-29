@@ -1,61 +1,48 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { CheckCircle, AlertTriangle } from 'lucide-react';
-import { apiAiAlertGenerated, apiAiAlertAction } from '../../services/adminApi';
+import { apiGetAiAlerts, apiAiAlertAction } from '../../services/adminApi';
+import { useAirport } from '../../context/AirportContext';
 
-const MOCK_ALERTS = [
-    {
-        id: 'AA1234',
-        risk: 68,
-        riskColor: '#F59E0B',
-        title: 'AA1234',
-        issue: 'High weather delay probability',
-        recommendation: 'Recommend gate change to B15',
-    },
-    {
-        id: 'LH7890',
-        risk: 72,
-        riskColor: '#EF4444',
-        title: 'LH7890',
-        issue: 'Aircraft turnaround delay expected',
-        recommendation: 'Increase ground crew by 2 staff',
-    },
-    {
-        id: 'UA9012',
-        risk: 25,
-        riskColor: '#22C55E',
-        title: 'UA9012',
-        issue: 'Minor schedule deviation',
-        recommendation: 'Monitor boarding process',
-    },
-    {
-        id: 'BA5678',
-        risk: 45,
-        riskColor: '#F59E0B',
-        title: 'BA5678',
-        issue: 'Slot conflict at Terminal 2',
-        recommendation: 'Coordinate with ground ops team',
-    },
-];
-
-const BATCH_NOTIFIED_KEY = 'ai_alert_batch_notified_v1';
-
+/**
+ * AirportAdminAIAlerts
+ * ====================
+ * Displays AI-generated alerts from the backend (GET only).
+ * The client NEVER generates/POSTs mock alerts — backend is source of truth.
+ */
 export default function AirportAdminAIAlerts() {
-    const [alerts, setAlerts] = useState(MOCK_ALERTS.map((a) => ({ ...a, dismissed: false })));
+    const { selectedAirport } = useAirport();
+    const airportIata = selectedAirport?.iata || '';
+
+    const [alerts, setAlerts] = useState([]);
+    const [loading, setLoading] = useState(false);
+
+    const fetchAlerts = useCallback(async () => {
+        if (!airportIata) return;
+        setLoading(true);
+        const { data } = await apiGetAiAlerts(airportIata);
+        setLoading(false);
+        if (Array.isArray(data)) {
+            // Adapt backend alert shape to UI shape
+            setAlerts(data.map(a => ({
+                id: a.id || a.flight_number,
+                title: a.flight_number,
+                risk: a.risk_pct || 0,
+                riskColor: (a.risk_pct || 0) >= 70 ? '#EF4444' : (a.risk_pct || 0) >= 40 ? '#F59E0B' : '#22C55E',
+                issue: a.cause || a.brief_cause || '',
+                recommendation: a.recommendation || '',
+                dismissed: false,
+                approved: a.decision === 'approved',
+            })));
+        }
+    }, [airportIata]);
 
     useEffect(() => {
-        const token = localStorage.getItem('admin_token');
-        if (!token || token === 'demo') return;
-        if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(BATCH_NOTIFIED_KEY)) return;
-        if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(BATCH_NOTIFIED_KEY, '1');
-        MOCK_ALERTS.forEach((a) => {
-            apiAiAlertGenerated({
-                flight_number: a.title,
-                brief_cause: a.issue,
-                recommendation: a.recommendation,
-                risk_pct: a.risk,
-            });
-        });
-    }, []);
+        fetchAlerts();
+        const iv = setInterval(fetchAlerts, 300000); // refresh every 5 min
+        return () => clearInterval(iv);
+    }, [fetchAlerts]);
+
+
 
     async function approve(id) {
         const a = alerts.find((x) => x.id === id);

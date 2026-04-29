@@ -77,8 +77,10 @@ export default function AdminForgotPasswordPage() {
                     )}
 
                     <div className="admin-login__field">
-                        <label>Work email</label>
+                        <label htmlFor="work-email">Work email</label>
                         <input
+                            id="work-email"
+                            name="email"
                             type="email"
                             className="admin-form-input"
                             value={workEmail}
@@ -98,7 +100,7 @@ export default function AdminForgotPasswordPage() {
                     </button>
 
                     <p style={{ marginTop: 16, textAlign: 'center', fontSize: '0.85rem' }}>
-                        <Link to="/login" style={{ color: '#60a5fa' }}>
+                        <Link to="/admin/login" style={{ color: '#60a5fa' }}>
                             Back to login
                         </Link>
                     </p>

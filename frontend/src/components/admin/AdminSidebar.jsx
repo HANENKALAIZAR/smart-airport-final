@@ -8,28 +8,26 @@ import {
 import { useAirport } from '../../context/AirportContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { apiGetMessageUnreadCount } from '../../services/adminApi';
+import usePersistentState from '../../hooks/usePersistentState';
 
-export default function AdminSidebar({ activeTab, onTabChange, onLogout, isRejected }) {
+export default function AdminSidebar({ onTabChange, onLogout, isRejected }) {
     const { selectedAirport, role } = useAirport();
     const { t } = useLanguage();
     const location = useLocation();
-    const [collapsed, setCollapsed] = useState(
-        () => localStorage.getItem('admin_sidebar_collapsed') === 'true'
-    );
+    const [collapsed, setCollapsed] = usePersistentState('admin_sidebar_collapsed', false);
+    const [token]                    = usePersistentState('admin_token', null);
     const [msgUnread, setMsgUnread] = useState(0);
 
     const refreshMsgUnread = useCallback(async () => {
-        const token = localStorage.getItem('admin_token');
         if (!token || token === 'demo') return;
         const { data } = await apiGetMessageUnreadCount();
         if (data && typeof data.count === 'number') setMsgUnread(data.count);
-    }, []);
+    }, [token]);
+
+    // collapsed is persisted automatically by usePersistentState — no manual effect needed
 
     useEffect(() => {
-        localStorage.setItem('admin_sidebar_collapsed', String(collapsed));
-    }, [collapsed]);
-
-    useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         refreshMsgUnread();
         const iv = setInterval(refreshMsgUnread, 45000);
         const onRefresh = () => refreshMsgUnread();
@@ -41,6 +39,7 @@ export default function AdminSidebar({ activeTab, onTabChange, onLogout, isRejec
     }, [refreshMsgUnread]);
 
     useEffect(() => {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         if (location.pathname.includes('/dashboard/messages')) refreshMsgUnread();
     }, [location.pathname, refreshMsgUnread]);
 
@@ -96,6 +95,7 @@ export default function AdminSidebar({ activeTab, onTabChange, onLogout, isRejec
 
             {/* Navigation */}
             <nav className="admin-sidebar__nav">
+                {/* eslint-disable-next-line no-unused-vars */}
                 {menuItems.map(({ to, icon: Icon, label }) => (
                     <NavLink
                         key={to}

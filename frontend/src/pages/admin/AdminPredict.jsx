@@ -107,7 +107,7 @@ export default function AdminPredict() {
                             {Object.entries(FEATURE_LABELS).map(([key, meta]) => (
                                 <div key={key}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                                        <label style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)', fontWeight: 500 }}>
+                                        <label htmlFor={key} style={{ fontSize: '0.78rem', color: 'rgba(255,255,255,0.55)', fontWeight: 500 }}>
                                             {meta.label}
                                         </label>
                                         <span style={{ fontSize: '0.78rem', color: '#A5B4FC', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
@@ -115,6 +115,8 @@ export default function AdminPredict() {
                                         </span>
                                     </div>
                                     <input
+                                        id={key}
+                                        name={key}
                                         type="range"
                                         min={meta.min}
                                         max={meta.max}

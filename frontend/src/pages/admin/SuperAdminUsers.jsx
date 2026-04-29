@@ -18,7 +18,7 @@ import {
     apiCheckEmail, apiSuggestEmail, apiCheckDuplicate,
     apiGetAdminReview, apiPostIdReview,
 } from '../../services/adminApi';
-import CustomSelect from '../../components/ui/CustomSelect';
+import CustomSelect from '../../components/admin/ui/CustomSelect';
 
 /* ── Small helpers ──────────────────────────────────────────── */
 function StatusBadge({ status }) {

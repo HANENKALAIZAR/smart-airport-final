@@ -1,12 +1,12 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plane, Clock, TrendingUp, AlertTriangle, RefreshCw, ArrowDown, ArrowUp } from 'lucide-react';
 import KPICard from '../../components/admin/KPICard';
 import FlightDetailsModal from '../../components/admin/FlightDetailsModal';
 import FilterBar from '../../components/admin/FilterBar';
-import Pagination from '../../components/Pagination';
-import AircraftList from '../../components/AircraftList';
+import Pagination from '../../components/admin/Pagination';
 import AirportAdminAIAlerts from './AirportAdminAIAlerts';
 import SuperAdminAIAlerts from './SuperAdminAIAlerts';
+import LiveClock from '../../components/admin/LiveClock';
 import { useAirport } from '../../context/AirportContext';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -88,13 +88,7 @@ export default function AdminDashboard({ selectedDate }) {
     const [error, setError] = useState(null);
     const [lastUpdated, setLastUpdated] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
-    const [nowTime, setNowTime] = useState(() => new Date());
-
-    // Real-time clock — ticks every second
-    useEffect(() => {
-        const t = setInterval(() => setNowTime(new Date()), 1000);
-        return () => clearInterval(t);
-    }, []);
+    // NOTE: clock state removed — now in isolated <LiveClock /> component
 
     const fetchFlights = useCallback(async () => {
         try {
@@ -137,18 +131,32 @@ export default function AdminDashboard({ selectedDate }) {
         const cancelled = flights.filter(f => f.status === 'cancelled').length;
         const onTime = flights.filter(f => f.status === 'on_time' || f.status === 'scheduled').length;
         const onTimePct = total > 0 ? Math.round((onTime / total) * 1000) / 10 : 100;
-        const avgDelay = total > 0
-            ? Math.round(flights.reduce((sum, f) => sum + (f.delay_minutes || 0), 0) / total)
+        const validDelays = flights.map(f => f.delay_minutes).filter(d => d != null);
+        const avgDelay = validDelays.length > 0
+            ? Math.round(validDelays.reduce((sum, d) => sum + d, 0) / validDelays.length)
             : 0;
         return { total, departures, arrivals, delayed, cancelled, onTimePct, avgDelay };
     }, [flights]);
 
-    // Filtering: status + direction
+    // Filtering: status + direction + risk + time
     const filtered = flights.filter(f => {
         if (direction !== 'all' && f.direction !== direction) return false;
         if (filters.statuses.length > 0) {
             const uiStatus = STATUS_LABEL[f.status] || f.status;
             if (!filters.statuses.includes(uiStatus)) return false;
+        }
+        if (filters.riskLevels && filters.riskLevels.length > 0) {
+            const risk = f.delay_minutes == null ? 'Unknown' : f.delay_minutes > 30 ? 'High' : f.delay_minutes > 10 ? 'Medium' : 'Low';
+            if (!filters.riskLevels.includes(risk)) return false;
+        }
+        if (filters.timeRange && filters.timeRange.length > 0) {
+            const dateStr = f.direction === 'departure' ? f.dep_scheduled : f.arr_scheduled;
+            if (!dateStr) return false;
+            const hour = new Date(dateStr).getHours();
+            let tr = 'evening';
+            if (hour >= 5 && hour < 12) tr = 'morning';
+            else if (hour >= 12 && hour < 18) tr = 'afternoon';
+            if (!filters.timeRange.includes(tr)) return false;
         }
         return true;
     });
@@ -172,9 +180,7 @@ export default function AdminDashboard({ selectedDate }) {
                 <h1>{t('admin_dash_ops')}</h1>
                 <p>
                     {t('admin_dash_realtime')} — <strong>{selectedAirport.name} ({selectedAirport.iata})</strong>
-                    <span style={{ marginLeft: 12, fontVariantNumeric: 'tabular-nums', fontSize: '0.85rem', color: 'rgba(255,255,255,0.55)', background: 'rgba(255,255,255,0.06)', padding: '2px 10px', borderRadius: 20 }}>
-                        🕐 {nowTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })} &nbsp;·&nbsp; {nowTime.toLocaleDateString([], { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
-                    </span>
+                    <LiveClock />
                 </p>
             </div>
 
@@ -287,11 +293,11 @@ export default function AdminDashboard({ selectedDate }) {
                                                 {(flight.direction === 'departure' ? flight.dep_gate : flight.arr_gate) || '—'}
                                             </td>
                                             <td>
-                                                {flight.delay_minutes > 0 ? (
+                                                {flight.delay_minutes == null ? '—' : flight.delay_minutes > 0 ? (
                                                     <span className="admin-table__danger">
                                                         +{flight.delay_minutes} min
                                                     </span>
-                                                ) : '—'}
+                                                ) : '0 min'}
                                             </td>
                                             <td>
                                                 <span className={STATUS_CLASS[flight.status] || ''}>

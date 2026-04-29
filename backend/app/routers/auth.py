@@ -146,6 +146,8 @@ def change_password(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if current_user.role == "super_admin":
+        raise HTTPException(status_code=403, detail="Super admin profile cannot be modified")
     """
     Change password for the currently authenticated user.
     Required on first login when must_change_password = 1.

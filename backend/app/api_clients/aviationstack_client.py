@@ -154,9 +154,12 @@ def normalize_flight(raw: dict, direction: str) -> dict:
         "diverted": "delayed",
     }
 
-    delay_dep = dep.get("delay") or 0
-    delay_arr = arr.get("delay") or 0
-    delay = max(delay_dep, delay_arr)
+    delay_dep = dep.get("delay")
+    delay_arr = arr.get("delay")
+    if delay_dep is not None and delay_arr is not None:
+        delay = max(delay_dep, delay_arr)
+    else:
+        delay = delay_dep if delay_dep is not None else delay_arr
 
     mapped_status = status_map.get(status, "scheduled")
     if delay and delay > 15 and mapped_status != "cancelled":

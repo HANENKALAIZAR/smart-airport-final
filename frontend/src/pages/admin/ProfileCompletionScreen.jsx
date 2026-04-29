@@ -30,7 +30,7 @@ import {
   ID_DOC_ACCEPT,
   PHOTO_ACCEPT,
 } from '../../utils/uploadValidation';
-import CustomSelect from '../../components/ui/CustomSelect';
+import CustomSelect from '../../components/admin/ui/CustomSelect';
 
 
 const MAX_DOB_STRING = (() => {

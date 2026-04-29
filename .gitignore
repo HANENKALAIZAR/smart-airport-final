@@ -28,8 +28,22 @@ ENV/
 backend/.env
 .env
 *.env
+.env.local
+.env.*.local
 !backend/.env.example
 !.env.example
+!frontend/.env.example
+!passenger/.env.example
+
+# ── Node / Frontend ───────────────────────────────────────────
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+passenger/node_modules/
+passenger/dist/
+passenger/.vite/
+
 
 # ── Database ──────────────────────────────────────────────────
 *.db
@@ -39,8 +53,10 @@ test_smart_airport.db
 
 # ── Logs ──────────────────────────────────────────────────────
 *.log
+backend/*.log
 app.log
 backend/app.log
+
 
 # ── Node / Frontend ───────────────────────────────────────────
 node_modules/
@@ -74,9 +90,35 @@ coverage.xml
 backend/migrations/__pycache__/
 
 # ── AI model cache (large binary files — train locally) ───────
-# Uncomment the next line if you don't want to commit model files:
+# Uncomment to exclude committed model weights:
 # backend/app/ai/model/*.json
 # backend/app/ai/model/*.pkl
 
 # ── API response cache ────────────────────────────────────────
 backend/app/data/flight_cache/
+
+# ── One-off scripts (keep in git, but flag for review) ────────
+# backend/migrate_*.py   ← kept intentionally (migration history)
+
+# ── Gunicorn runtime files ───────────────────────────────────
+*.pid
+gunicorn.pid
+
+# ── ESLint / build reports ───────────────────────────────────
+eslint_raw.txt
+eslint_report.json
+pylint_report.txt
+frontend/eslint_raw.txt
+frontend/eslint_report.json
+
+# ── Login test artifacts ──────────────────────────────────────
+backend/login.json
+
+# ── OS artifacts ─────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── shared-core ──────────────────────────────────────────────
+# Source is committed; exclude any local build artifacts only
+shared-core/node_modules/
+shared-core/dist/

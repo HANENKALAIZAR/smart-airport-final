@@ -12,8 +12,7 @@ import {
     isValidTunisiaPhone,
 } from '../../utils/tunisiaPhone';
 import { validateProfilePhotoFile, validateIdDocumentFile, PHOTO_ACCEPT, ID_DOC_ACCEPT } from '../../utils/uploadValidation';
-import SuperAdminProfileForm from './SuperAdminProfileForm';
-import CustomSelect from '../../components/ui/CustomSelect';
+import CustomSelect from '../../components/admin/ui/CustomSelect';
 
 
 function maskIdNumber(raw) {
@@ -328,6 +327,7 @@ export default function AdminSettings() {
 
     async function handlePasswordSave(e) {
         e.preventDefault();
+        if (profile?.role === 'super_admin') return;
         setPwdError('');
         if (!pwdForm.current || !pwdForm.next || !pwdForm.confirm) {
             setPwdError('All fields are required.');
@@ -536,7 +536,23 @@ export default function AdminSettings() {
                 </h3>
                 {profile ? (
                     profile.role === 'super_admin' ? (
-                        <SuperAdminProfileForm profile={profile} onSaved={refreshProfile} />
+                        <div>
+                            <div style={{ marginBottom: 16 }}>
+                                <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>Email</label>
+                                <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.05)', borderRadius: 8, fontSize: '0.9rem', color: '#E2E8F0' }}>
+                                    {profile.email}
+                                </div>
+                            </div>
+                            <div style={{ marginBottom: 16 }}>
+                                <label style={{ display: 'block', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', marginBottom: 6 }}>Role</label>
+                                <div style={{ padding: '10px 14px', background: 'rgba(255,255,255,0.05)', borderRadius: 8, fontSize: '0.9rem', color: '#E2E8F0' }}>
+                                    ⭐ Super Admin
+                                </div>
+                            </div>
+                            <div style={{ padding: '10px 14px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)', borderRadius: 8, color: '#93C5FD', fontSize: '0.85rem' }}>
+                                This is a system-level account. Profile editing is disabled.
+                            </div>
+                        </div>
                     ) : (
                     <div>
 
@@ -606,6 +622,8 @@ export default function AdminSettings() {
                                 {tunisianAirportAdmin && (
                                     <>
                                         <input
+                                            id="profile-photo-upload"
+                                            name="profile_photo"
                                             ref={photoRef}
                                             type="file"
                                             accept={PHOTO_ACCEPT}
@@ -688,6 +706,7 @@ export default function AdminSettings() {
                             {/* Phone — editable for airport admin */}
                             <div style={{ gridColumn: tunisianAirportAdmin ? 'span 1' : 'span 2' }}>
                                 <label
+                                    htmlFor="phone-number"
                                     style={{
                                         display: 'block',
                                         fontSize: '0.8rem',
@@ -700,6 +719,8 @@ export default function AdminSettings() {
                                 {tunisianAirportAdmin && editPhone ? (
                                     <div>
                                         <input
+                                            id="phone-number"
+                                            name="phone_number"
                                             className="admin-form-input"
                                             value={phoneDraft}
                                             onChange={(e) => {
@@ -885,6 +906,7 @@ export default function AdminSettings() {
 
                             <div style={{ gridColumn: '1 / -1' }}>
                                 <label
+                                    htmlFor="residential-address"
                                     style={{
                                         display: 'block',
                                         fontSize: '0.8rem',
@@ -897,6 +919,8 @@ export default function AdminSettings() {
                                 {tunisianAirportAdmin && canEditAddress && addrEdit ? (
                                     <div>
                                         <textarea
+                                            id="residential-address"
+                                            name="residential_address"
                                             className="admin-form-input"
                                             style={{ minHeight: 72, width: '100%' }}
                                             value={addrDraft}
@@ -967,6 +991,7 @@ export default function AdminSettings() {
 
                             <div style={{ gridColumn: '1 / -1' }}>
                                 <label
+                                    htmlFor="emergency-name"
                                     style={{
                                         display: 'block',
                                         fontSize: '0.8rem',
@@ -979,6 +1004,8 @@ export default function AdminSettings() {
                                 {tunisianAirportAdmin && canEditEmergency && emergencyEdit ? (
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                                         <input
+                                            id="emergency-name"
+                                            name="emergency_contact_name"
                                             className="admin-form-input"
                                             placeholder="Name"
                                             value={emergencyDraft.name}
@@ -987,6 +1014,8 @@ export default function AdminSettings() {
                                             }
                                         />
                                         <input
+                                            id="emergency-phone"
+                                            name="emergency_contact_phone"
                                             className="admin-form-input"
                                             placeholder="+216 … or international"
                                             value={emergencyDraft.phone}
@@ -995,6 +1024,8 @@ export default function AdminSettings() {
                                             }
                                         />
                                         <CustomSelect
+                                            id="emergency-relationship"
+                                            name="emergency_contact_relationship"
                                             options={['Parent', 'Spouse', 'Sibling', 'Friend', 'Other'].map(r => ({ value: r, label: r }))}
                                             value={emergencyDraft.relationship || 'Parent'}
                                             onChange={(val) =>
@@ -1098,6 +1129,7 @@ export default function AdminSettings() {
                                         {unlockFields.includes('full_name') && (
                                             <div>
                                                 <label
+                                                    htmlFor="correction-full-name"
                                                     style={{
                                                         display: 'block',
                                                         fontSize: '0.8rem',
@@ -1108,6 +1140,8 @@ export default function AdminSettings() {
                                                     Full name
                                                 </label>
                                                 <input
+                                                    id="correction-full-name"
+                                                    name="full_name"
                                                     className="admin-form-input"
                                                     value={correctionIdentityDraft.full_name}
                                                     onChange={(e) =>
@@ -1122,6 +1156,7 @@ export default function AdminSettings() {
                                         {unlockFields.includes('date_of_birth') && (
                                             <div>
                                                 <label
+                                                    htmlFor="correction-dob"
                                                     style={{
                                                         display: 'block',
                                                         fontSize: '0.8rem',
@@ -1132,6 +1167,8 @@ export default function AdminSettings() {
                                                     Date of birth
                                                 </label>
                                                 <input
+                                                    id="correction-dob"
+                                                    name="date_of_birth"
                                                     type="date"
                                                     className="admin-form-input"
                                                     style={{ colorScheme: 'dark' }}
@@ -1148,6 +1185,7 @@ export default function AdminSettings() {
                                         {unlockFields.includes('gender') && (
                                             <div>
                                                 <label
+                                                    htmlFor="correction-gender"
                                                     style={{
                                                         display: 'block',
                                                         fontSize: '0.8rem',
@@ -1158,6 +1196,8 @@ export default function AdminSettings() {
                                                     Gender
                                                 </label>
                                                 <CustomSelect
+                                                    id="correction-gender"
+                                                    name="gender"
                                                     options={[
                                                         { value: 'Male', label: 'Male' },
                                                         { value: 'Female', label: 'Female' },
@@ -1175,6 +1215,7 @@ export default function AdminSettings() {
                                         {unlockFields.includes('nationality') && (
                                             <div>
                                                 <label
+                                                    htmlFor="correction-nationality"
                                                     style={{
                                                         display: 'block',
                                                         fontSize: '0.8rem',
@@ -1185,6 +1226,8 @@ export default function AdminSettings() {
                                                     Nationality
                                                 </label>
                                                 <input
+                                                    id="correction-nationality"
+                                                    name="nationality"
                                                     className="admin-form-input"
                                                     value={correctionIdentityDraft.nationality}
                                                     onChange={(e) =>
@@ -1221,6 +1264,7 @@ export default function AdminSettings() {
                                     CIN
                                 </div>
                                 <label
+                                    htmlFor="correction-cin-number"
                                     style={{
                                         display: 'block',
                                         fontSize: '0.8rem',
@@ -1232,6 +1276,8 @@ export default function AdminSettings() {
                                 </label>
                                 {cinEditable ? (
                                     <input
+                                        id="correction-cin-number"
+                                        name="cin_number"
                                         className="admin-form-input"
                                         style={{ fontFamily: 'monospace', marginBottom: 10 }}
                                         value={unlockCinNumber}
@@ -1282,6 +1328,7 @@ export default function AdminSettings() {
                                     </p>
                                 )}
                                 <label
+                                    htmlFor="correction-cin-doc"
                                     style={{
                                         display: 'block',
                                         fontSize: '0.8rem',
@@ -1294,6 +1341,8 @@ export default function AdminSettings() {
                                 {cinEditable ? (
                                     <div>
                                         <input
+                                            id="correction-cin-doc"
+                                            name="cin_document"
                                             ref={cinDocInputRef}
                                             type="file"
                                             accept={ID_DOC_ACCEPT}
@@ -1404,6 +1453,7 @@ export default function AdminSettings() {
                                     Passport
                                 </div>
                                 <label
+                                    htmlFor="correction-passport-number"
                                     style={{
                                         display: 'block',
                                         fontSize: '0.8rem',
@@ -1415,6 +1465,8 @@ export default function AdminSettings() {
                                 </label>
                                 {passportEditable ? (
                                     <input
+                                        id="correction-passport-number"
+                                        name="passport_number"
                                         className="admin-form-input"
                                         style={{ fontFamily: 'monospace', marginBottom: 10 }}
                                         value={unlockPassportNumber}
@@ -1467,6 +1519,7 @@ export default function AdminSettings() {
                                     </p>
                                 )}
                                 <label
+                                    htmlFor="correction-passport-expiry"
                                     style={{
                                         display: 'block',
                                         fontSize: '0.8rem',
@@ -1478,6 +1531,8 @@ export default function AdminSettings() {
                                 </label>
                                 {passportEditable ? (
                                     <input
+                                        id="correction-passport-expiry"
+                                        name="passport_expiry_date"
                                         type="date"
                                         className="admin-form-input"
                                         style={{ marginBottom: 10, colorScheme: 'dark' }}
@@ -1504,6 +1559,7 @@ export default function AdminSettings() {
                                     </p>
                                 )}
                                 <label
+                                    htmlFor="correction-passport-doc"
                                     style={{
                                         display: 'block',
                                         fontSize: '0.8rem',
@@ -1516,6 +1572,8 @@ export default function AdminSettings() {
                                 {passportEditable ? (
                                     <div>
                                         <input
+                                            id="correction-passport-doc"
+                                            name="passport_document"
                                             ref={passportDocInputRef}
                                             type="file"
                                             accept={ID_DOC_ACCEPT}
@@ -1678,8 +1736,9 @@ export default function AdminSettings() {
             )}
 
             {/* ── Change Password ── */}
-            <div className="admin-card">
-                <h3
+            {profile?.role !== 'super_admin' && (
+                <div className="admin-card">
+                    <h3
                     style={{
                         fontSize: '1rem',
                         fontWeight: 600,
@@ -1738,6 +1797,7 @@ export default function AdminSettings() {
                         ].map(({ key, label, vis }) => (
                             <div key={key}>
                                 <label
+                                    htmlFor={`settings-pwd-${key}`}
                                     style={{
                                         display: 'block',
                                         fontSize: '0.8rem',
@@ -1749,6 +1809,8 @@ export default function AdminSettings() {
                                 </label>
                                 <div style={{ position: 'relative' }}>
                                     <input
+                                        id={`settings-pwd-${key}`}
+                                        name={`${key}_password`}
                                         type={vis && pwdVisible[vis] ? 'text' : 'password'}
                                         className="admin-form-input"
                                         value={pwdForm[key]}
@@ -1796,8 +1858,9 @@ export default function AdminSettings() {
                             <Lock size={16} /> {pwdLoading ? 'Updating…' : 'Update Password'}
                         </button>
                     </div>
-                </form>
-            </div>
+                    </form>
+                </div>
+            )}
 
             {/* ── Operational Settings ── */}
             <div className="admin-card">
@@ -1844,6 +1907,7 @@ export default function AdminSettings() {
                             <span style={{ fontSize: '0.88rem', color: '#CBD5E1' }}>{label}</span>
                             {type === 'toggle' ? (
                                 <button
+                                    id={key}
                                     onClick={() => update(key, !settings[key])}
                                     style={{
                                         width: 44,
@@ -1871,6 +1935,8 @@ export default function AdminSettings() {
                                 </button>
                             ) : (
                                 <CustomSelect
+                                    id={key}
+                                    name={key}
                                     options={(options || []).map((o) => ({ value: o, label: o }))}
                                     value={settings[key]}
                                     onChange={(val) => update(key, val)}

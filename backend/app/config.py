@@ -61,9 +61,9 @@ class Settings(BaseSettings):
 ]
 
     model_config = SettingsConfigDict(
-        env_file=None
+        env_file=str(Path(__file__).resolve().parent.parent / ".env")
         if os.getenv("TESTING", "").lower() in {"1", "true", "yes", "on"}
-        else ".env",
+        else str(Path(__file__).resolve().parent.parent / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )

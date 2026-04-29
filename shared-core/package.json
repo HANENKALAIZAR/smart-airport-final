@@ -1,0 +1,13 @@
+{
+  "name": "@smart-airport/shared-core",
+  "version": "1.0.0",
+  "description": "Shared constants, types and utilities for the Smart Airport monorepo",
+  "private": true,
+  "type": "module",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./constants/airports": "./constants/airports.js",
+    "./types/api": "./types/api.js"
+  }
+}

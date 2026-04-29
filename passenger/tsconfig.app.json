@@ -19,6 +19,12 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@smart-airport/shared-core": [
+        "../shared-core/index.js"
+      ],
+      "@smart-airport/shared-core/*": [
+        "../shared-core/*"
       ]
     },
     "skipLibCheck": true,

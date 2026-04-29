@@ -420,6 +420,7 @@ export default function PassengerRights() {
                     <Label htmlFor="flight">Flight number (optional)</Label>
                     <Input
                       id="flight"
+                      name="flight_number"
                       placeholder="e.g. AF1234"
                       value={flightNo}
                       onChange={(e) => setFlightNo(e.target.value)}
@@ -428,7 +429,7 @@ export default function PassengerRights() {
                   </div>
                   <div>
                     <Label>Region of departure</Label>
-                    <Select value={region} onValueChange={(v) => setRegion(v as Region)}>
+                    <Select name="region" value={region} onValueChange={(v) => setRegion(v as Region)}>
                       <SelectTrigger className="mt-2">
                         <SelectValue />
                       </SelectTrigger>
@@ -478,6 +479,7 @@ export default function PassengerRights() {
                     <Label htmlFor="hours">Delay at final destination (hours)</Label>
                     <Input
                       id="hours"
+                      name="delay_hours"
                       type="number"
                       min={0}
                       max={48}
@@ -493,6 +495,7 @@ export default function PassengerRights() {
                     <Label htmlFor="notice">How many days notice did you receive?</Label>
                     <Input
                       id="notice"
+                      name="notice_days"
                       type="number"
                       min={0}
                       max={60}

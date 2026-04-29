@@ -4,7 +4,7 @@ import { apiGetFlights } from '../../services/adminApi';
 import FlightTable from '../../components/admin/FlightTable';
 import FlightDetailsModal from '../../components/admin/FlightDetailsModal';
 import { useLanguage } from '../../context/LanguageContext';
-import CustomSelect from '../../components/ui/CustomSelect';
+import CustomSelect from '../../components/admin/ui/CustomSelect';
 
 /* ── Adapt backend data to admin table format ─── */
 function adaptFlight(f) {
@@ -18,8 +18,8 @@ function adaptFlight(f) {
             ? new Date(f.scheduled_departure).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })
             : '—',
         weather: '—',
-        predictedDelay: f.delay_minutes || 0,
-        riskLevel: f.delay_minutes > 30 ? 'High' : f.delay_minutes > 10 ? 'Medium' : 'Low',
+        predictedDelay: f.delay_minutes ?? null,
+        riskLevel: f.delay_minutes == null ? 'Unknown' : f.delay_minutes > 30 ? 'High' : f.delay_minutes > 10 ? 'Medium' : 'Low',
         status: f.status === 'on_time' ? 'On-Time'
             : f.status === 'delayed' ? 'Delayed'
             : f.status === 'cancelled' ? 'Cancelled'
@@ -87,6 +87,8 @@ export default function AdminFlights() {
                 <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
                     <Search size={15} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'rgba(255,255,255,0.3)' }} />
                     <input
+                        id="flight-list-search"
+                        name="search"
                         value={search}
                         onChange={e => setSearch(e.target.value)}
                         placeholder={t('admin_flights_search_placeholder')}
@@ -95,11 +97,14 @@ export default function AdminFlights() {
                 </div>
                 <div style={{ width: 180 }}>
                     <CustomSelect
+                        id="risk-level-filter"
+                        name="riskLevel"
                         options={[
                             { value: 'all', label: 'All Risk Levels' },
                             { value: 'High', label: 'High Risk' },
                             { value: 'Medium', label: 'Medium Risk' },
                             { value: 'Low', label: 'Low Risk' },
+                            { value: 'Unknown', label: 'Unknown Risk' },
                         ]}
                         value={riskFilter}
                         onChange={setRiskFilter}

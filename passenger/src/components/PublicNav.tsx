@@ -241,7 +241,7 @@ export function PublicNav({ overlay = true }: { overlay?: boolean }) {
                   </p>
 
                   <Link
-                    to="/app/assistant"
+                    to="/assistant"
                     onClick={() => setExploreOpen(false)}
                     className="mt-auto inline-flex items-center justify-center gap-1.5 h-9 rounded-full px-4 bg-foreground text-background text-xs font-medium hover:bg-foreground/90 transition-colors group/cta"
                   >
@@ -284,7 +284,7 @@ export function PublicNav({ overlay = true }: { overlay?: boolean }) {
             size="sm"
             className="ms-2 rounded-full h-10 px-5 bg-gradient-amber text-primary-foreground hover:opacity-90 shadow-amber font-medium gap-2"
           >
-            <Link to="/app/assistant">
+            <Link to="/assistant">
               <Sparkles className="h-4 w-4" />
               {t("landing.cta_assistant")}
             </Link>

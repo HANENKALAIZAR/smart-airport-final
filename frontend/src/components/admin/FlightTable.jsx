@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import AviationBadge from './AviationBadge';
-import Pagination from '../../components/Pagination';
+import Pagination from './Pagination';
 import { useLanguage } from '../../context/LanguageContext';
 
 const PAGE_SIZE = 10;
@@ -54,8 +54,8 @@ export default function FlightTable({ flights, onFlightClick }) {
                                 <td>{flight.scheduledTime}</td>
                                 <td className="admin-table__muted">{flight.weather}</td>
                                 <td>
-                                    <span className={flight.predictedDelay > 30 ? 'admin-table__danger' : ''}>
-                                        {flight.predictedDelay}
+                                    <span className={flight.predictedDelay !== null && flight.predictedDelay > 30 ? 'admin-table__danger' : ''}>
+                                        {flight.predictedDelay ?? '—'}
                                     </span>
                                 </td>
                                 <td><AviationBadge riskLevel={flight.riskLevel} /></td>

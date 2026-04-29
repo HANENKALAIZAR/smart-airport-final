@@ -338,6 +338,7 @@ export default function Contact() {
                   <Label htmlFor="name">Full name</Label>
                   <Input
                     id="name"
+                    name="name"
                     placeholder="Your name"
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
@@ -347,6 +348,7 @@ export default function Contact() {
                   <Label htmlFor="email">Email</Label>
                   <Input
                     id="email"
+                    name="email"
                     type="email"
                     placeholder="you@example.com"
                     value={form.email}
@@ -359,6 +361,7 @@ export default function Contact() {
                 <div className="space-y-1.5">
                   <Label htmlFor="airport">Airport</Label>
                   <Select
+                    name="airport"
                     value={form.airport}
                     onValueChange={(v) => {
                       const code = v as TunisianAirportCode;
@@ -381,6 +384,7 @@ export default function Contact() {
                 <div className="space-y-1.5">
                   <Label htmlFor="subject">Subject</Label>
                   <Select
+                    name="subject"
                     value={form.subject}
                     onValueChange={(v) => setForm({ ...form, subject: v })}
                   >
@@ -403,6 +407,7 @@ export default function Contact() {
                 <Label htmlFor="message">Message</Label>
                 <Textarea
                   id="message"
+                  name="message"
                   rows={6}
                   placeholder="How can we help?"
                   value={form.message}

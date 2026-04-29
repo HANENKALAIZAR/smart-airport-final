@@ -31,7 +31,6 @@ export function AppSidebar() {
   const { pathname } = useLocation();
 
   const items = [
-    { to: "/app", label: t("nav.dashboard"), icon: LayoutDashboard, end: true },
     { to: "/flights", label: t("nav.flights"), icon: Plane },
     { to: "/services", label: t("nav.services"), icon: MapPinned },
     { to: "/notifications", label: t("nav.notifications"), icon: Bell },

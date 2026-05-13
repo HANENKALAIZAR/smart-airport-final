@@ -1,0 +1,707 @@
+{"ts": "2026-05-01T00:04:00Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Started server process [10300]"}
+{"ts": "2026-05-01T00:04:00Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application startup."}
+{"ts": "2026-05-01T00:04:03Z", "level": "WARNING", "logger": "app.main", "msg": "AI model could not be loaded at startup: `_estimator_type` undefined.  Please use appropriate mixin to define estimator type."}
+{"ts": "2026-05-01T00:04:03Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler started — weather=30min | flights=48h | predictions=30min"}
+{"ts": "2026-05-01T00:04:03Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application startup complete."}
+{"ts": "2026-05-01T00:12:37Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Shutting down"}
+{"ts": "2026-05-01T00:12:37Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application shutdown."}
+{"ts": "2026-05-01T00:12:37Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler stopped"}
+{"ts": "2026-05-01T00:12:37Z", "level": "INFO", "logger": "app.main", "msg": "Server shutdown complete"}
+{"ts": "2026-05-01T00:12:37Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application shutdown complete."}
+{"ts": "2026-05-01T00:12:37Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Finished server process [10300]"}
+{"ts": "2026-05-01T00:12:38Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Started server process [28280]"}
+{"ts": "2026-05-01T00:12:38Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application startup."}
+{"ts": "2026-05-01T00:12:40Z", "level": "WARNING", "logger": "app.main", "msg": "AI model could not be loaded at startup: `_estimator_type` undefined.  Please use appropriate mixin to define estimator type."}
+{"ts": "2026-05-01T00:12:40Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler started — weather=30min | flights=48h | predictions=30min"}
+{"ts": "2026-05-01T00:12:40Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application startup complete."}
+{"ts": "2026-05-01T00:42:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T00:42:43Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T00:42:43Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 9.25km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T00:42:44Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T00:42:44Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 19°C | wind 9.25km/h | vis 6.0km | precip 0.0mm"}
+{"ts": "2026-05-01T01:12:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T01:12:43Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T01:12:43Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 9.25km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T01:12:44Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T01:12:44Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 19°C | wind 9.25km/h | vis 6.0km | precip 0.0mm"}
+{"ts": "2026-05-01T01:42:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T01:42:42Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T01:42:42Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 9.25km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T01:42:43Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T01:42:43Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 18.5km/h | vis 6.0km | precip 0.0mm"}
+{"ts": "2026-05-01T01:47:53Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Started server process [37152]"}
+{"ts": "2026-05-01T01:47:53Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application startup."}
+{"ts": "2026-05-01T01:47:54Z", "level": "WARNING", "logger": "app.main", "msg": "AI model could not be loaded at startup: `_estimator_type` undefined.  Please use appropriate mixin to define estimator type."}
+{"ts": "2026-05-01T01:47:54Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler started — weather=30min | flights=48h | predictions=30min"}
+{"ts": "2026-05-01T01:47:54Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application startup complete."}
+{"ts": "2026-05-01T01:48:28Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49783 - \"OPTIONS /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T01:48:28Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49784 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T01:48:28Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49783 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T01:48:28Z", "level": "WARNING", "logger": "app.main", "msg": "HTTP 401 on /api/auth/me: Invalid or expired token"}
+{"ts": "2026-05-01T01:48:28Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49784 - \"GET /api/auth/me HTTP/1.1\" 401"}
+{"ts": "2026-05-01T01:48:28Z", "level": "WARNING", "logger": "app.main", "msg": "HTTP 401 on /api/notifications/summary: Invalid or expired token"}
+{"ts": "2026-05-01T01:48:28Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49783 - \"GET /api/notifications/summary HTTP/1.1\" 401"}
+{"ts": "2026-05-01T01:48:28Z", "level": "WARNING", "logger": "app.main", "msg": "HTTP 401 on /api/notifications/summary: Invalid or expired token"}
+{"ts": "2026-05-01T01:48:28Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49783 - \"GET /api/notifications/summary HTTP/1.1\" 401"}
+{"ts": "2026-05-01T01:48:29Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49783 - \"OPTIONS /api/auth/login HTTP/1.1\" 200"}
+{"ts": "2026-05-01T01:48:30Z", "level": "INFO", "logger": "app.routers.auth", "msg": "Successful login: admin@example.com (role=super_admin)"}
+{"ts": "2026-05-01T01:48:30Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49783 - \"POST /api/auth/login HTTP/1.1\" 200"}
+{"ts": "2026-05-01T01:48:30Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49783 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T01:48:30Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49784 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T01:48:30Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49783 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T01:48:30Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49784 - \"OPTIONS /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T01:48:30Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49786 - \"OPTIONS /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T01:48:30Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49786 - \"GET /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T01:48:30Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49784 - \"GET /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T01:48:31Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T01:48:34Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T01:48:34Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49783 - \"GET /api/aviationstack/flights/TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T01:48:36Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T01:48:37Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T01:48:37Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49784 - \"GET /api/aviationstack/flights/TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T02:12:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T02:12:41Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T02:12:41Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 9.25km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T02:12:42Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T02:12:42Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 17.99°C | wind 18.5km/h | vis 6.0km | precip 0.0mm"}
+{"ts": "2026-05-01T02:17:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:57723 - \"OPTIONS /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T02:17:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:57724 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T02:17:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:57725 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T02:17:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:57725 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T02:17:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:57724 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T02:17:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:57725 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T02:17:54Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T02:17:55Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T02:17:55Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 9.25km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T02:17:56Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T02:17:56Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 16.67km/h | vis 6.0km | precip 0.0mm"}
+{"ts": "2026-05-01T02:42:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T02:42:40Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T02:42:40Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 9.25km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T02:42:41Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T02:42:41Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 16.67km/h | vis 6.0km | precip 0.0mm"}
+{"ts": "2026-05-01T02:47:54Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T02:47:55Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T02:47:55Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 12.96km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T02:47:56Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T02:47:56Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18.99°C | wind 18.5km/h | vis 6.0km | precip 0.0mm"}
+{"ts": "2026-05-01T03:12:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T03:12:41Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T03:12:41Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 12.96km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T03:12:42Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T03:12:42Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18.99°C | wind 18.5km/h | vis 6.0km | precip 0.0mm"}
+{"ts": "2026-05-01T03:17:54Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T03:17:56Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T03:17:56Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 11.12km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T03:17:57Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T03:17:57Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 18.5km/h | vis 7.0km | precip 0.0mm"}
+{"ts": "2026-05-01T03:42:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T03:42:41Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T03:42:41Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 11.12km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T03:42:41Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T03:42:41Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 14.83km/h | vis 7.0km | precip 0.0mm"}
+{"ts": "2026-05-01T03:47:54Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T03:47:54Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T03:47:54Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 11.12km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T03:47:55Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T03:47:55Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 14.83km/h | vis 7.0km | precip 0.0mm"}
+{"ts": "2026-05-01T04:12:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T04:12:40Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T04:12:40Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 11.12km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T04:12:41Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T04:12:41Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 14.83km/h | vis 7.0km | precip 0.0mm"}
+{"ts": "2026-05-01T04:17:54Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T04:17:54Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T04:17:54Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 11.12km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T04:17:55Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T04:17:55Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 14.83km/h | vis 7.0km | precip 0.0mm"}
+{"ts": "2026-05-01T17:11:49Z", "level": "WARNING", "logger": "apscheduler.executors.default", "msg": "Run time of job \"Collect airport weather (OpenWeatherMap) (trigger: interval[0:30:00], next run at: 2026-05-01 17:17:54 +01)\" was missed by 0:23:55.190486"}
+{"ts": "2026-05-01T17:11:50Z", "level": "WARNING", "logger": "apscheduler.executors.default", "msg": "Run time of job \"Batch predict upcoming flights (trigger: interval[0:30:00], next run at: 2026-05-01 17:17:54 +01)\" was missed by 0:23:56.117828"}
+{"ts": "2026-05-01T17:11:50Z", "level": "WARNING", "logger": "apscheduler.executors.default", "msg": "Run time of job \"Collect airport weather (OpenWeatherMap) (trigger: interval[0:30:00], next run at: 2026-05-01 17:12:40 +01)\" was missed by 0:29:09.883654"}
+{"ts": "2026-05-01T17:11:50Z", "level": "WARNING", "logger": "apscheduler.executors.default", "msg": "Run time of job \"Batch predict upcoming flights (trigger: interval[0:30:00], next run at: 2026-05-01 17:12:40 +01)\" was missed by 0:29:09.899025"}
+{"ts": "2026-05-01T17:12:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T17:12:41Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T17:12:41Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 20°C | wind 24.08km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T17:12:41Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T17:12:41Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 19.01°C | wind 20.38km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T17:17:54Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T17:17:54Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T17:17:54Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 20°C | wind 24.08km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T17:17:55Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T17:17:55Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 19°C | wind 16.67km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T17:42:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T17:42:41Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T17:42:41Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 19°C | wind 24.08km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T17:42:42Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T17:42:42Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 19°C | wind 16.67km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T17:47:54Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T17:47:54Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T17:47:54Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 19°C | wind 24.08km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T17:47:55Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T17:47:55Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 19°C | wind 16.67km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T18:12:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T18:12:44Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T18:12:44Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 19°C | wind 18.5km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T18:12:46Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T18:12:46Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 19°C | wind 11.12km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T18:17:54Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T18:17:55Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T18:17:55Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 19°C | wind 18.5km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T18:17:56Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T18:17:56Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 19°C | wind 11.12km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T18:42:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T18:42:40Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T18:42:40Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 18°C | wind 20.38km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T18:42:41Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T18:42:41Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 19°C | wind 12.96km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T18:47:54Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T18:47:54Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T18:47:54Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 18°C | wind 20.38km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T18:47:55Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T18:47:55Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 19°C | wind 12.96km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T19:12:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T19:12:40Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T19:12:40Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 18°C | wind 18.5km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T19:12:41Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T19:12:41Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 19°C | wind 12.96km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T19:17:54Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T19:17:54Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T19:17:54Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 18°C | wind 18.5km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T19:17:55Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T19:17:55Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 19°C | wind 12.96km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T19:42:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T19:42:40Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T19:42:40Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 18.5km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T19:42:41Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T19:42:41Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 19°C | wind 14.83km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T19:44:00Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Shutting down"}
+{"ts": "2026-05-01T19:44:00Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application shutdown."}
+{"ts": "2026-05-01T19:44:00Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler stopped"}
+{"ts": "2026-05-01T19:44:00Z", "level": "INFO", "logger": "app.main", "msg": "Server shutdown complete"}
+{"ts": "2026-05-01T19:44:00Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application shutdown complete."}
+{"ts": "2026-05-01T19:44:00Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Finished server process [37152]"}
+{"ts": "2026-05-01T19:44:06Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Started server process [38020]"}
+{"ts": "2026-05-01T19:44:06Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application startup."}
+{"ts": "2026-05-01T19:44:12Z", "level": "WARNING", "logger": "app.main", "msg": "AI model could not be loaded at startup: `_estimator_type` undefined.  Please use appropriate mixin to define estimator type."}
+{"ts": "2026-05-01T19:44:12Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler started — weather=30min | flights=48h | predictions=30min"}
+{"ts": "2026-05-01T19:44:12Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application startup complete."}
+{"ts": "2026-05-01T19:44:44Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50171 - \"OPTIONS /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:44:44Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50172 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:44:44Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50173 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:44:44Z", "level": "WARNING", "logger": "app.main", "msg": "HTTP 401 on /api/auth/me: Invalid or expired token"}
+{"ts": "2026-05-01T19:44:44Z", "level": "WARNING", "logger": "app.main", "msg": "HTTP 401 on /api/notifications/summary: Invalid or expired token"}
+{"ts": "2026-05-01T19:44:44Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50173 - \"GET /api/auth/me HTTP/1.1\" 401"}
+{"ts": "2026-05-01T19:44:44Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50172 - \"GET /api/notifications/summary HTTP/1.1\" 401"}
+{"ts": "2026-05-01T19:44:44Z", "level": "WARNING", "logger": "app.main", "msg": "HTTP 401 on /api/notifications/summary: Invalid or expired token"}
+{"ts": "2026-05-01T19:44:44Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50172 - \"GET /api/notifications/summary HTTP/1.1\" 401"}
+{"ts": "2026-05-01T19:44:46Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50172 - \"OPTIONS /api/auth/login HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:44:46Z", "level": "INFO", "logger": "app.routers.auth", "msg": "Successful login: admin@example.com (role=super_admin)"}
+{"ts": "2026-05-01T19:44:46Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50172 - \"POST /api/auth/login HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:44:46Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50172 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:44:46Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50173 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:44:46Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50172 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:44:47Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50172 - \"OPTIONS /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:44:47Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50173 - \"OPTIONS /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:44:47Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50174 - \"GET /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:44:47Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50173 - \"GET /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:44:48Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T19:44:50Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T19:44:50Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50171 - \"GET /api/aviationstack/flights/TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:44:51Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T19:44:51Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50171 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:44:51Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50174 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:44:51Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50171 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:44:52Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T19:52:43Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Shutting down"}
+{"ts": "2026-05-01T19:52:43Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application shutdown."}
+{"ts": "2026-05-01T19:52:43Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler stopped"}
+{"ts": "2026-05-01T19:52:43Z", "level": "INFO", "logger": "app.main", "msg": "Server shutdown complete"}
+{"ts": "2026-05-01T19:52:43Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application shutdown complete."}
+{"ts": "2026-05-01T19:52:43Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Finished server process [38020]"}
+{"ts": "2026-05-01T19:52:47Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Started server process [33940]"}
+{"ts": "2026-05-01T19:52:47Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application startup."}
+{"ts": "2026-05-01T19:52:53Z", "level": "WARNING", "logger": "app.main", "msg": "AI model could not be loaded at startup: `_estimator_type` undefined.  Please use appropriate mixin to define estimator type."}
+{"ts": "2026-05-01T19:52:53Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler started — weather=30min | flights=48h | predictions=30min"}
+{"ts": "2026-05-01T19:52:53Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application startup complete."}
+{"ts": "2026-05-01T19:53:02Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52486 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:53:02Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52486 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:53:02Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52485 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:54:20Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52851 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:54:20Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52852 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:54:20Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52851 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:55:45Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53236 - \"OPTIONS /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:55:45Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53237 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:55:45Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53238 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:55:45Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53238 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:55:45Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53237 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:55:45Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53238 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:55:49Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53238 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:55:49Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53237 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:55:49Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53236 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:57:21Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53701 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:57:21Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53702 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:57:21Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53701 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:58:41Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Shutting down"}
+{"ts": "2026-05-01T19:58:41Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application shutdown."}
+{"ts": "2026-05-01T19:58:41Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler stopped"}
+{"ts": "2026-05-01T19:58:41Z", "level": "INFO", "logger": "app.main", "msg": "Server shutdown complete"}
+{"ts": "2026-05-01T19:58:41Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application shutdown complete."}
+{"ts": "2026-05-01T19:58:41Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Finished server process [33940]"}
+{"ts": "2026-05-01T19:58:44Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Started server process [16600]"}
+{"ts": "2026-05-01T19:58:44Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application startup."}
+{"ts": "2026-05-01T19:58:45Z", "level": "WARNING", "logger": "app.main", "msg": "AI model could not be loaded at startup: `_estimator_type` undefined.  Please use appropriate mixin to define estimator type."}
+{"ts": "2026-05-01T19:58:45Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler started — weather=30min | flights=48h | predictions=30min"}
+{"ts": "2026-05-01T19:58:45Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application startup complete."}
+{"ts": "2026-05-01T19:58:58Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54171 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:58:58Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54171 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:58:58Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54170 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:59:00Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54170 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:59:00Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54171 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T19:59:00Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54177 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:01:58Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55028 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:01:58Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55029 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:01:58Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55028 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:05:07Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Shutting down"}
+{"ts": "2026-05-01T20:05:07Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application shutdown."}
+{"ts": "2026-05-01T20:05:07Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler stopped"}
+{"ts": "2026-05-01T20:05:07Z", "level": "INFO", "logger": "app.main", "msg": "Server shutdown complete"}
+{"ts": "2026-05-01T20:05:07Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application shutdown complete."}
+{"ts": "2026-05-01T20:05:07Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Finished server process [16600]"}
+{"ts": "2026-05-01T20:05:11Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Started server process [39772]"}
+{"ts": "2026-05-01T20:05:11Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application startup."}
+{"ts": "2026-05-01T20:05:13Z", "level": "WARNING", "logger": "app.main", "msg": "AI model could not be loaded at startup: `_estimator_type` undefined.  Please use appropriate mixin to define estimator type."}
+{"ts": "2026-05-01T20:05:13Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler started — weather=30min | flights=48h | predictions=30min"}
+{"ts": "2026-05-01T20:05:13Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application startup complete."}
+{"ts": "2026-05-01T20:05:48Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56081 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:05:48Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56079 - \"OPTIONS /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:05:48Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56080 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:05:48Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56080 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:05:48Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56081 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:05:48Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56079 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:06:05Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56085 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:06:05Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56085 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:06:05Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56085 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:06:28Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56176 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:06:28Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56179 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:06:28Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56176 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:12:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T20:12:40Z", "level": "ERROR", "logger": "app.api_clients.weather_client", "msg": "OpenWeatherMap fetch failed for TUN: [Errno 11001] getaddrinfo failed"}
+{"ts": "2026-05-01T20:12:40Z", "level": "ERROR", "logger": "app.api_clients.weather_client", "msg": "OpenWeatherMap fetch failed for MIR: [Errno 11001] getaddrinfo failed"}
+{"ts": "2026-05-01T20:22:34Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Shutting down"}
+{"ts": "2026-05-01T20:22:34Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application shutdown."}
+{"ts": "2026-05-01T20:22:34Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler stopped"}
+{"ts": "2026-05-01T20:22:34Z", "level": "INFO", "logger": "app.main", "msg": "Server shutdown complete"}
+{"ts": "2026-05-01T20:22:34Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application shutdown complete."}
+{"ts": "2026-05-01T20:22:34Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Finished server process [39772]"}
+{"ts": "2026-05-01T20:22:37Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Started server process [16780]"}
+{"ts": "2026-05-01T20:22:37Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application startup."}
+{"ts": "2026-05-01T20:22:38Z", "level": "WARNING", "logger": "app.main", "msg": "AI model could not be loaded at startup: `_estimator_type` undefined.  Please use appropriate mixin to define estimator type."}
+{"ts": "2026-05-01T20:22:38Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler started — weather=30min | flights=48h | predictions=30min"}
+{"ts": "2026-05-01T20:22:38Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application startup complete."}
+{"ts": "2026-05-01T20:22:50Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:51873 - \"OPTIONS /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:22:50Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:51874 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:22:50Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:51876 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:22:50Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:51876 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:22:50Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:51874 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:22:50Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:51876 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:25:01Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Shutting down"}
+{"ts": "2026-05-01T20:25:02Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application shutdown."}
+{"ts": "2026-05-01T20:25:02Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler stopped"}
+{"ts": "2026-05-01T20:25:02Z", "level": "INFO", "logger": "app.main", "msg": "Server shutdown complete"}
+{"ts": "2026-05-01T20:25:02Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application shutdown complete."}
+{"ts": "2026-05-01T20:25:02Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Finished server process [16780]"}
+{"ts": "2026-05-01T20:25:05Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Started server process [26756]"}
+{"ts": "2026-05-01T20:25:05Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application startup."}
+{"ts": "2026-05-01T20:25:06Z", "level": "WARNING", "logger": "app.main", "msg": "AI model could not be loaded at startup: `_estimator_type` undefined.  Please use appropriate mixin to define estimator type."}
+{"ts": "2026-05-01T20:25:06Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler started — weather=30min | flights=48h | predictions=30min"}
+{"ts": "2026-05-01T20:25:06Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application startup complete."}
+{"ts": "2026-05-01T20:25:17Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52551 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:25:17Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52551 - \"OPTIONS /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:25:17Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52552 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:25:17Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52551 - \"OPTIONS /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:25:17Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52551 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:25:17Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52552 - \"GET /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:25:17Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52551 - \"GET /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:25:36Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52556 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:25:36Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52557 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:25:36Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52558 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:25:37Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52558 - \"GET /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:25:37Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52557 - \"GET /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:26:22Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52840 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:27:07Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52841 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:27:52Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53307 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:28:37Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53308 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:29:22Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53661 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:30:07Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53662 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:31:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54188 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:32:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54190 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:33:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54682 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:33:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54682 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:34:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54684 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:35:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55163 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:36:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55164 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:37:24Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55630 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:37:37Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55631 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:38:22Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55876 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:39:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56155 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:40:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56156 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:41:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56653 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:42:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56656 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:42:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T20:42:41Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T20:42:41Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 20.38km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T20:42:41Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T20:42:41Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 19°C | wind 20.23km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T20:43:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:57155 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:44:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:57156 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:44:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:57156 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T20:45:33Z", "level": "WARNING", "logger": "app.main", "msg": "HTTP 401 on /api/notifications/summary: Invalid or expired token"}
+{"ts": "2026-05-01T20:45:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:57634 - \"GET /api/notifications/summary HTTP/1.1\" 401"}
+{"ts": "2026-05-01T20:55:06Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T20:55:06Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T20:55:06Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 20.38km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T20:55:09Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T20:55:09Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 19°C | wind 20.23km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T21:06:04Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62771 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:06:04Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62769 - \"OPTIONS /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:06:04Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62770 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:06:04Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62771 - \"OPTIONS /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:06:04Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62769 - \"OPTIONS /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:06:05Z", "level": "WARNING", "logger": "app.main", "msg": "HTTP 401 on /api/notifications/summary: Invalid or expired token"}
+{"ts": "2026-05-01T21:06:05Z", "level": "WARNING", "logger": "app.main", "msg": "HTTP 401 on /api/auth/me: Invalid or expired token"}
+{"ts": "2026-05-01T21:06:05Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62771 - \"GET /api/notifications/summary HTTP/1.1\" 401"}
+{"ts": "2026-05-01T21:06:05Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62769 - \"GET /api/auth/me HTTP/1.1\" 401"}
+{"ts": "2026-05-01T21:06:05Z", "level": "WARNING", "logger": "app.main", "msg": "HTTP 401 on /api/notifications/ai-alerts: Invalid or expired token"}
+{"ts": "2026-05-01T21:06:05Z", "level": "WARNING", "logger": "app.main", "msg": "HTTP 401 on /api/notifications/summary: Invalid or expired token"}
+{"ts": "2026-05-01T21:06:05Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62771 - \"GET /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 401"}
+{"ts": "2026-05-01T21:06:05Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62769 - \"GET /api/notifications/summary HTTP/1.1\" 401"}
+{"ts": "2026-05-01T21:06:05Z", "level": "WARNING", "logger": "app.main", "msg": "HTTP 401 on /api/notifications/ai-alerts: Invalid or expired token"}
+{"ts": "2026-05-01T21:06:05Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62771 - \"GET /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 401"}
+{"ts": "2026-05-01T21:06:06Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T21:06:07Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62769 - \"OPTIONS /api/auth/login HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:06:08Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T21:06:08Z", "level": "INFO", "logger": "app.routers.auth", "msg": "Successful login: admin@example.com (role=super_admin)"}
+{"ts": "2026-05-01T21:06:08Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62769 - \"POST /api/auth/login HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:06:08Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62769 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:06:08Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62775 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:06:08Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62769 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:06:08Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62769 - \"GET /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:06:08Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62776 - \"GET /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:06:09Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T21:06:09Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T21:06:09Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62775 - \"GET /api/aviationstack/flights/TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:06:10Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T21:06:10Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62769 - \"OPTIONS /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:06:10Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62775 - \"OPTIONS /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:06:10Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62775 - \"GET /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:06:10Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62769 - \"GET /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:06:10Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T21:06:11Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T21:06:11Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T21:06:11Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:62776 - \"GET /api/aviationstack/flights/TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:12:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T21:12:41Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T21:12:41Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 18.5km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T21:12:42Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T21:12:42Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 17.7°C | wind 20.23km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T21:20:15Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Shutting down"}
+{"ts": "2026-05-01T21:20:15Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application shutdown."}
+{"ts": "2026-05-01T21:20:15Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler stopped"}
+{"ts": "2026-05-01T21:20:15Z", "level": "INFO", "logger": "app.main", "msg": "Server shutdown complete"}
+{"ts": "2026-05-01T21:20:15Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application shutdown complete."}
+{"ts": "2026-05-01T21:20:15Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Finished server process [26756]"}
+{"ts": "2026-05-01T21:20:19Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Started server process [6208]"}
+{"ts": "2026-05-01T21:20:19Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application startup."}
+{"ts": "2026-05-01T21:20:20Z", "level": "WARNING", "logger": "app.main", "msg": "AI model could not be loaded at startup: `_estimator_type` undefined.  Please use appropriate mixin to define estimator type."}
+{"ts": "2026-05-01T21:20:20Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler started — weather=30min | flights=48h | predictions=30min"}
+{"ts": "2026-05-01T21:20:20Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application startup complete."}
+{"ts": "2026-05-01T21:20:36Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50285 - \"OPTIONS /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:20:36Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50286 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:20:36Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50287 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:20:36Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50285 - \"OPTIONS /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:20:36Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50286 - \"OPTIONS /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:20:36Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50286 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:20:36Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50286 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:20:36Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50292 - \"GET /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:20:36Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50286 - \"GET /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:20:36Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50285 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:20:39Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50285 - \"OPTIONS /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:20:39Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50286 - \"OPTIONS /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:20:39Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50286 - \"GET /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:20:39Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50285 - \"GET /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:20:48Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T21:20:48Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50287 - \"GET /api/aviationstack/flights/TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:20:49Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T21:20:51Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T21:20:51Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50294 - \"GET /api/aviationstack/flights/TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:21:21Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50295 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:22:06Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50703 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:22:51Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50707 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:23:36Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:51083 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:24:21Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:51084 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:25:06Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:51444 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:26:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:51797 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:27:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52065 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:28:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52070 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:29:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52603 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:29:58Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52604 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:30:21Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52854 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:31:59Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53328 - \"OPTIONS /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:31:59Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53330 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:31:59Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53329 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:31:59Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53329 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:31:59Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53330 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:31:59Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53329 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:32:00Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53329 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:32:00Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53330 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:32:00Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53328 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:32:00Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53328 - \"OPTIONS /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:32:00Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53330 - \"OPTIONS /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:32:00Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53330 - \"GET /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:32:00Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53328 - \"GET /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:32:46Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53331 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:33:30Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53719 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:34:16Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53721 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:35:00Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54095 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:35:46Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54098 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:36:31Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54482 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:37:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54754 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:38:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54757 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:39:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55241 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:40:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55242 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:41:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55722 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:42:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55724 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:42:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55724 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:42:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T21:42:41Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T21:42:41Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 12.96km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T21:42:42Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T21:42:42Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 29.63km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T21:43:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56233 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:44:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56234 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:45:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56719 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:46:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56720 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:47:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:57216 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:48:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:57217 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:49:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:57701 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:50:20Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T21:50:20Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T21:50:20Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 12.96km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T21:50:21Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T21:50:21Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 29.63km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T21:50:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:57702 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:51:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:58209 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:52:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:58212 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:53:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:58718 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:53:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:58718 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:54:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:58721 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:55:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:59200 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:56:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:59201 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:57:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:59715 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:58:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:59716 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T21:59:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:60202 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T22:00:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:60203 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T22:01:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:60682 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T22:02:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:60685 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T22:03:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:61194 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T22:04:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:61197 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T22:04:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:61197 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T22:05:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:61685 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T22:06:33Z", "level": "WARNING", "logger": "app.main", "msg": "HTTP 401 on /api/notifications/summary: Invalid or expired token"}
+{"ts": "2026-05-01T22:06:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:61686 - \"GET /api/notifications/summary HTTP/1.1\" 401"}
+{"ts": "2026-05-01T22:12:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T22:12:42Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T22:12:42Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 12.96km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T22:12:43Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T22:12:43Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 27.79km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T22:20:20Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T22:20:20Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T22:20:20Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 17°C | wind 12.96km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T22:20:21Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T22:20:21Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 27.79km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T22:42:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T22:42:42Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T22:42:42Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 16°C | wind 14.83km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T22:42:43Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T22:42:43Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 29.63km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T22:50:20Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T22:50:21Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T22:50:21Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 16°C | wind 14.83km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T22:50:21Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T22:50:21Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 29.63km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T23:12:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T23:12:41Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T23:12:41Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 16°C | wind 12.96km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T23:12:46Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T23:12:46Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 35.17km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T23:20:20Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T23:20:21Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T23:20:21Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 16°C | wind 12.96km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T23:20:22Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T23:20:22Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 35.17km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T23:28:26Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Shutting down"}
+{"ts": "2026-05-01T23:28:26Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application shutdown."}
+{"ts": "2026-05-01T23:28:26Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler stopped"}
+{"ts": "2026-05-01T23:28:26Z", "level": "INFO", "logger": "app.main", "msg": "Server shutdown complete"}
+{"ts": "2026-05-01T23:28:26Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application shutdown complete."}
+{"ts": "2026-05-01T23:28:26Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Finished server process [6208]"}
+{"ts": "2026-05-01T23:28:31Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Started server process [38864]"}
+{"ts": "2026-05-01T23:28:31Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Waiting for application startup."}
+{"ts": "2026-05-01T23:28:32Z", "level": "WARNING", "logger": "app.main", "msg": "AI model could not be loaded at startup: `_estimator_type` undefined.  Please use appropriate mixin to define estimator type."}
+{"ts": "2026-05-01T23:28:32Z", "level": "INFO", "logger": "app.scheduler", "msg": "APScheduler started — weather=30min | flights=48h | predictions=30min"}
+{"ts": "2026-05-01T23:28:32Z", "level": "INFO", "logger": "uvicorn.error", "msg": "Application startup complete."}
+{"ts": "2026-05-01T23:28:49Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49969 - \"OPTIONS /api/auth/login HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:28:49Z", "level": "INFO", "logger": "app.routers.auth", "msg": "Successful login: admin@example.com (role=super_admin)"}
+{"ts": "2026-05-01T23:28:49Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49969 - \"POST /api/auth/login HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:28:49Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49969 - \"OPTIONS /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:28:49Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49971 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:28:49Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49969 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:28:49Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49971 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:28:49Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49969 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:28:49Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49971 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:28:49Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49971 - \"OPTIONS /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:28:49Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49969 - \"OPTIONS /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:28:49Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49969 - \"GET /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:28:49Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49969 - \"GET /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:28:50Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:28:51Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:28:51Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49976 - \"GET /api/aviationstack/flights/TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:28:52Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:28:53Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:28:53Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49969 - \"GET /api/aviationstack/flights/TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:28:56Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49969 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:28:56Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49976 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:28:56Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49982 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:01Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49984 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:01Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49984 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:01Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49984 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:03Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49984 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:03Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50046 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:03Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49984 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:07Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49984 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:07Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50046 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:07Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49984 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:07Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49984 - \"GET /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:07Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50047 - \"GET /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:08Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:08Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:08Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50046 - \"GET /api/aviationstack/flights/TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:09Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50046 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:09Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:49984 - \"GET /api/auth/me HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:09Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:10Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:10Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50047 - \"GET /api/aviationstack/flights/TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:14Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50047 - \"OPTIONS /api/messages/mark-inbox-read HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:14Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50047 - \"OPTIONS /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:14Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50047 - \"OPTIONS /api/messages?tab=inbox HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:14Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50047 - \"OPTIONS /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:14Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50047 - \"POST /api/messages/mark-inbox-read HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:14Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50047 - \"GET /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:14Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50047 - \"GET /api/messages?tab=inbox HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:14Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50047 - \"GET /api/users/admins HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:14Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50047 - \"GET /api/messages?tab=inbox HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:21Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50106 - \"OPTIONS /api/flights HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:21Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50107 - \"OPTIONS /api/flights HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:21Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50107 - \"GET /api/flights HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:21Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50106 - \"GET /api/flights HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:25Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50106 - \"GET /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:25Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50108 - \"GET /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:26Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:27Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:27Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50107 - \"GET /api/aviationstack/flights/TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:28Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:28Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:28Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50108 - \"GET /api/aviationstack/flights/TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:39Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50109 - \"OPTIONS /api/notifications/ai-alerts?airport_iata=MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:39Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50109 - \"GET /api/notifications/ai-alerts?airport_iata=MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:39Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=MIR \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:40Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=MIR \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:40Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50110 - \"GET /api/aviationstack/flights/MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:42Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50110 - \"GET /api/notifications/ai-alerts?airport_iata=TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:43Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:44Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=TUN \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:44Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50109 - \"GET /api/aviationstack/flights/TUN HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:45Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50109 - \"OPTIONS /api/notifications/ai-alerts?airport_iata=DJE HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:45Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50109 - \"GET /api/notifications/ai-alerts?airport_iata=DJE HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:46Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=DJE \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:47Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=DJE \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:47Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50110 - \"GET /api/aviationstack/flights/DJE HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:48Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50110 - \"OPTIONS /api/notifications/ai-alerts?airport_iata=NBE HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:48Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50110 - \"GET /api/notifications/ai-alerts?airport_iata=NBE HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:48Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=NBE \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:49Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=NBE \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:49Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50109 - \"GET /api/aviationstack/flights/NBE HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:50Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50109 - \"GET /api/notifications/ai-alerts?airport_iata=MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:51Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=MIR \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:51Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=MIR \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:29:51Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50110 - \"GET /api/aviationstack/flights/MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:29:52Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50110 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:30:37Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50450 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:31:22Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50454 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:32:07Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50862 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:32:52Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:50864 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:33:37Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:51244 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:34:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:51245 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:34:51Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:51552 - \"GET /api/notifications/ai-alerts?airport_iata=MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:34:53Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=MIR \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:34:56Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=MIR \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:34:56Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:51553 - \"GET /api/aviationstack/flights/MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:35:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:51554 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:36:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:51947 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:37:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:51949 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:38:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52457 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:39:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52459 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:39:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52459 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:39:51Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52788 - \"OPTIONS /api/notifications/ai-alerts?airport_iata=MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:39:51Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52788 - \"GET /api/notifications/ai-alerts?airport_iata=MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:39:53Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=MIR \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:39:56Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=MIR \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:39:56Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52789 - \"GET /api/aviationstack/flights/MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:40:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:52794 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:41:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53206 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:42:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53207 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:42:40Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T23:42:42Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T23:42:42Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 16°C | wind 12.96km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T23:42:44Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T23:42:44Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 33.34km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T23:43:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53731 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:44:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:53732 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:44:51Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54055 - \"GET /api/notifications/ai-alerts?airport_iata=MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:44:52Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=MIR \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:44:52Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=MIR \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:44:52Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54056 - \"GET /api/aviationstack/flights/MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:45:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54057 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:46:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54513 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:47:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54516 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:48:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:54998 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:49:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55000 - \"OPTIONS /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:49:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55000 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:49:51Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55318 - \"GET /api/notifications/ai-alerts?airport_iata=MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:49:52Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=MIR \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:49:52Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=MIR \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:49:52Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55319 - \"GET /api/aviationstack/flights/MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:50:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55323 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:51:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55726 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:52:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:55729 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:53:15Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56161 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:53:52Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56165 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:54:51Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56553 - \"OPTIONS /api/notifications/ai-alerts?airport_iata=MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:54:51Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56553 - \"GET /api/notifications/ai-alerts?airport_iata=MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:54:52Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=MIR \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:54:52Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=MIR \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:54:52Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56554 - \"GET /api/aviationstack/flights/MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:55:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56557 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:56:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56958 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:57:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:56961 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:58:32Z", "level": "INFO", "logger": "app.services.prediction_service", "msg": "Batch predictions complete: 0 generated"}
+{"ts": "2026-05-01T23:58:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:57483 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:58:34Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=36.851&lon=10.2272&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T23:58:34Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: TUN | clouds | 16°C | wind 12.96km/h | vis 10.0km | precip 0.0mm"}
+{"ts": "2026-05-01T23:58:35Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.openweathermap.org/data/2.5/weather?lat=35.7586&lon=10.7546&appid=2379c6f7fcfd7b1a7ca8f0e841bcce98&units=metric \"HTTP/1.1 200 OK\""}
+{"ts": "2026-05-01T23:58:35Z", "level": "INFO", "logger": "app.api_clients.weather_client", "msg": "Weather stored: MIR | clouds | 18°C | wind 33.34km/h | vis 8.0km | precip 0.0mm"}
+{"ts": "2026-05-01T23:59:33Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:57485 - \"GET /api/notifications/summary HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:59:51Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:58005 - \"GET /api/notifications/ai-alerts?airport_iata=MIR HTTP/1.1\" 200"}
+{"ts": "2026-05-01T23:59:52Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&dep_iata=MIR \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:59:53Z", "level": "INFO", "logger": "httpx", "msg": "HTTP Request: GET http://api.aviationstack.com/v1/flights?access_key=&limit=100&offset=0&arr_iata=MIR \"HTTP/1.1 401 Unauthorized\""}
+{"ts": "2026-05-01T23:59:53Z", "level": "INFO", "logger": "uvicorn.access", "msg": "127.0.0.1:58006 - \"GET /api/aviationstack/flights/MIR HTTP/1.1\" 200"}

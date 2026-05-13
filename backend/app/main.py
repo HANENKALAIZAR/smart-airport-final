@@ -66,10 +66,8 @@ def _build_logging_config() -> dict:
                 "formatter": "plain" if is_debug else "json",
             },
             "file": {
-                "class": "logging.handlers.TimedRotatingFileHandler",
+                "class": "logging.FileHandler",
                 "filename": "app.log",
-                "when": "midnight",
-                "backupCount": 14,       # Keep 14 days of rotated logs
                 "encoding": "utf-8",
                 "formatter": "json",     # Always JSON on disk for aggregators
             },
@@ -99,6 +97,12 @@ logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 
 from app.routers import aviationstack, opensky
+from app.routers import aviation_edge
+from app.routers import alerts
+from app.routers import ae_dataset
+
+# Ensure AE pipeline tables are registered with Base metadata
+import app.models.ae_models  # noqa: F401
 
 _optional_routers = []
 try:
@@ -227,6 +231,9 @@ for mod in _optional_routers:
 
 app.include_router(opensky.router)
 app.include_router(aviationstack.router)
+app.include_router(aviation_edge.router)
+app.include_router(alerts.router)
+app.include_router(ae_dataset.router)
 
 
 @app.get("/")

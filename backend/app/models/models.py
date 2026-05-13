@@ -107,7 +107,7 @@ class WeatherCondition(Base):
     airport = relationship("Airport", back_populates="weather_conditions")
 
     __table_args__ = (
-        Index("idx_airport_time", "airport_id", "recorded_at"),
+        Index("idx_airport_time", "airport_id", "recorded_at", unique=True),
     )
 
 
@@ -228,6 +228,8 @@ class User(Base):
     )
     id_document_rejection_reason = Column(Text, nullable=True)
     rejected_fields = Column(JSON, nullable=True)  # List of explicitly rejected field keys
+    correction_attempts = Column(Integer, default=0, nullable=False)
+
 
 
 # ── In-app notifications (bell) ────────────────────────────

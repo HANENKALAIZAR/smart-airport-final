@@ -34,22 +34,60 @@ const FlightDetail = () => {
   const [alertsOpen, setAlertsOpen] = useState(false);
   const [alertEmail, setAlertEmail] = useState("");
   const [alertPhone, setAlertPhone] = useState("");
+  const [alertSaving, setAlertSaving] = useState(false);
 
   useEffect(() => {
-    if (id) {
-      getFlight(id).then(data => {
-        if (data) {
-          setFlight(data);
+    let cancelled = false;
+    let interval: ReturnType<typeof setInterval>;
+
+    const loadData = async () => {
+      if (!id) return;
+      try {
+        // Try DB first
+        const dbData = await getFlight(id);
+        if (dbData && !cancelled) {
+          setFlight(dbData);
           setError(false);
-        } else if (!flight) {
-          // If we don't have it in state AND backend returned null/404
+          return;
+        }
+      } catch (err) {
+        // Fallback to AE
+      }
+
+      // If DB fails (it's an AE flight), fetch from AE using the Tunisian airport code
+      const currentFlight = flight || location.state?.flight;
+      if (!currentFlight) {
+        if (!cancelled) setError(true);
+        return;
+      }
+
+      const isTnDep = ["TUN", "MIR", "NBE", "DJE", "SFA", "GAF", "TOE"].includes(currentFlight.from.code);
+      const isTnArr = ["TUN", "MIR", "NBE", "DJE", "SFA", "GAF", "TOE"].includes(currentFlight.to.code);
+      const airportCode = isTnDep ? currentFlight.from.code : isTnArr ? currentFlight.to.code : "TUN";
+      
+      try {
+        const { getAviationEdgeFlights } = await import("@/services/api");
+        const aeFlights = await getAviationEdgeFlights(airportCode, "both");
+        const updated = aeFlights.find(f => f.id === id || f.flightNumber === id);
+        if (updated && !cancelled) {
+          setFlight(updated);
+          setError(false);
+        } else if (!flight && !cancelled) {
           setError(true);
         }
-      }).catch(() => {
-        if (!flight) setError(true);
-      });
-    }
-  }, [id, flight]);
+      } catch (e) {
+        if (!flight && !cancelled) setError(true);
+      }
+    };
+
+    loadData();
+    interval = setInterval(loadData, 15000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [id]);
 
   const locale = i18n.language === "fr" ? "fr-FR" : i18n.language === "ar" ? "ar" : "en-US";
   const cd = useCountdown(flight?.departureTime ?? new Date().toISOString());
@@ -197,14 +235,37 @@ const FlightDetail = () => {
                   </TabsContent>
                 </Tabs>
                 <DialogFooter className="mt-4">
-                  <Button variant="ghost" onClick={() => setAlertsOpen(false)}>Cancel</Button>
-                  <Button onClick={() => {
+                  <Button variant="ghost" onClick={() => setAlertsOpen(false)} disabled={alertSaving}>Cancel</Button>
+                  <Button disabled={alertSaving} onClick={async () => {
                     const target = alertEmail || alertPhone;
-                    if (!target) { toast({ title: "Missing contact", description: "Please enter an email or WhatsApp number.", variant: "destructive" }); return; }
-                    toast({ title: "Alerts activated", description: `You'll receive live updates for ${flight.flightNumber} on ${target}.` });
-                    setAlertsOpen(false); setAlertEmail(""); setAlertPhone("");
+                    if (!target) { toast({ title: "Missing contact", description: "Please enter an email.", variant: "destructive" }); return; }
+                    if (!alertEmail) { toast({ title: "Not supported", description: "Only email alerts are supported right now.", variant: "destructive" }); return; }
+                    
+                    setAlertSaving(true);
+                    try {
+                      const res = await fetch(`${import.meta.env.VITE_API_URL}/alerts/subscribe`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          email: alertEmail,
+                          flight_number: flight.flightNumber,
+                          dep_iata: flight.from.code,
+                          arr_iata: flight.to.code,
+                          scheduled_departure: flight.scheduledDeparture,
+                          airline: flight.airline
+                        })
+                      });
+                      if (!res.ok) throw new Error("Failed to subscribe");
+                      toast({ title: "Alerts activated", description: `You'll receive live updates on ${target}.` });
+                      setAlertsOpen(false); setAlertEmail(""); setAlertPhone("");
+                    } catch (err) {
+                      toast({ title: "Error", description: "Could not activate alerts. Try again.", variant: "destructive" });
+                    } finally {
+                      setAlertSaving(false);
+                    }
                   }} className="gap-2">
-                    <Bell className="h-4 w-4" /> Activate
+                    {alertSaving ? <div className="h-4 w-4 rounded-full border-2 border-white/20 border-t-white animate-spin"/> : <Bell className="h-4 w-4" />} 
+                    {alertSaving ? "Activating..." : "Activate"}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -214,9 +275,9 @@ const FlightDetail = () => {
           <div className="mt-auto pt-8 grid md:grid-cols-3 gap-6">
             <Stat label={t("common.departure")} value={formatTime(flight.departureTime, locale)} sub={`${flight.from.code} · ${formatDate(flight.departureTime, locale)}`} />
             <Stat
-              label={flight.status === "in_air" ? t("flightDetail.flightProgress") : t("dashboard.countdown")}
-              value={flight.status === "in_air" ? `${Math.round(flight.progress * 100)}%` : `${cd.hours}h ${String(cd.minutes).padStart(2, "0")}m`}
-              sub={flight.status === "in_air" ? `${Math.round((1 - flight.progress) * flight.durationMin)} ${t("common.minutes")} remaining` : undefined}
+              label={flight.status === "in_air" ? t("flightDetail.flightProgress") : flight.status === "landed" ? "Status" : t("dashboard.countdown")}
+              value={flight.status === "in_air" ? `${Math.round(flight.progress * 100)}%` : flight.status === "landed" ? "Arrived" : `${cd.hours}h ${String(cd.minutes).padStart(2, "0")}m`}
+              sub={flight.status === "in_air" ? `${Math.round((1 - flight.progress) * flight.durationMin)} ${t("common.minutes")} remaining` : flight.status === "landed" ? "Flight completed" : undefined}
             />
             <Stat label={t("common.arrival")} value={formatTime(flight.arrivalTime, locale)} sub={`${flight.to.code} · ${formatDate(flight.arrivalTime, locale)}`} align="end" />
           </div>
@@ -267,9 +328,11 @@ const FlightDetail = () => {
       </section>
 
       {/* Info grid */}
-      <div className="grid md:grid-cols-3 gap-4">
+      <div className={`grid gap-4 ${flight.aircraft !== '—' ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
         <InfoCard title={t("common.gate")} value={flight.gate ?? "—"} sub={`${t("common.terminal")} ${flight.terminal ?? "—"}`} />
-        <InfoCard title="Aircraft" value={flight.aircraft} sub={`${flight.airline} · ${flight.airlineCode}`} />
+        {flight.aircraft !== '—' && (
+          <InfoCard title="Aircraft" value={flight.aircraft} sub={`${flight.airline} · ${flight.airlineCode}`} />
+        )}
         <InfoCard title={t("common.distance")} value={`${flight.distanceKm.toLocaleString()} km`} sub={`${Math.floor(flight.durationMin / 60)}h ${flight.durationMin % 60}m`} />
       </div>
 

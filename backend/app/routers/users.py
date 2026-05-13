@@ -518,6 +518,9 @@ def patch_my_settings(
     if not data:
         raise HTTPException(status_code=422, detail="Nothing to update.")
 
+    if not current_user.is_active:
+        raise HTTPException(status_code=403, detail="Your account is deactivated. Please contact support.")
+
     if current_user.id_document_status == "rejected":
         # Targeted correction mode
         allowed_keys = set(current_user.rejected_fields or [])
@@ -738,6 +741,14 @@ def review_admin_profile(
         user.id_document_status = "rejected"
         user.id_document_rejection_reason = reason_msg
         user.rejected_fields = rejected_fields
+        user.correction_attempts = (user.correction_attempts or 0) + 1
+        
+        if user.correction_attempts >= 3:
+            user.is_active = 0
+            reason_msg += ". Maximum correction attempts (3) reached. Account deactivated."
+            user.id_document_rejection_reason = reason_msg
+            logger.warning(f"Admin {user.email} reached max correction attempts and was deactivated.")
+
         user.updated_at = datetime.now(timezone.utc)
         db.commit()
 

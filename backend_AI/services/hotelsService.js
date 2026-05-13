@@ -1,190 +1,294 @@
 /**
  * Hotels Service
- * Provides hotel search and pricing near airports
- * Uses OpenStreetMap/Nominatim for hotel discovery and mock pricing
+ * Real-time hotel search using Google Places API (New).
+ * Falls back to static airport data if the API key is absent or the call fails.
+ *
+ * Required in your .env:
+ *   GOOGLE_PLACES_KEY=xxxxxxxxxxxxxxxxxxxx
+ *
+ * Google Places API (New) endpoints used:
+ *   POST https://places.googleapis.com/v1/places:searchNearby   (nearby search)
+ *   GET  https://places.googleapis.com/v1/places/{id}           (place details — optional)
  */
 
-const https = require('https');
+const { getHotelsNearAirport } = require('./googlePlacesService');
 
-// Mock hotel pricing database (would use real hotel API in production)
-const HOTEL_PRICING = {
-  budget: { min: 30, max: 80, stars: [2, 3] },
-  midrange: { min: 80, max: 180, stars: [3, 4] },
-  luxury: { min: 180, max: 400, stars: [4, 5] }
+// ─────────────────────────────────────────────────────────────────────────────
+// AIRPORT COORDINATE TABLE
+// Used to build the "locationRestriction" circle for the Google Places call.
+// Coordinates are the approximate centre of each airport's terminal area.
+// ─────────────────────────────────────────────────────────────────────────────
+const AIRPORT_COORDS = {
+  TUN: { lat: 36.8510, lng: 10.2272, city: 'Tunis' },
+  DJE: { lat: 33.8750, lng: 10.7755, city: 'Djerba' },
+  MIR: { lat: 35.7581, lng: 10.7547, city: 'Monastir' },
+  NBE: { lat: 36.0758, lng: 10.4385, city: 'Enfidha' },
+  // International airports frequently seen on Tunisian routes
+  CDG: { lat: 49.0097, lng: 2.5479, city: 'Paris' },
+  ORY: { lat: 48.7262, lng: 2.3652, city: 'Paris Orly' },
+  FRA: { lat: 50.0379, lng: 8.5622, city: 'Frankfurt' },
+  DXB: { lat: 25.2528, lng: 55.3644, city: 'Dubai' },
 };
 
-/**
- * Search hotels near a specific airport
- * @param {string} airportIata - Airport IATA code (e.g., "TUN", "CDG")
- * @param {Object} options - Search options
- * @returns {Promise<Array>} - Array of hotel options
- */
-async function searchHotelsNearAirport(airportIata, options = {}) {
-  const { 
-    checkIn = 'today', 
-    checkOut = 'tomorrow', 
-    guests = 1, 
-    rooms = 1,
-    priceRange = 'midrange',
-    radius = 10000 // 10km radius
-  } = options;
-
-  try {
-    // Get airport coordinates from our airports database
-    const { AIRPORTS } = require('./data/airports');
-    const airport = AIRPORTS[airportIata];
-    
-    if (!airport || !airport.coordinates) {
-      // Fallback to mock hotels if no coordinates available
-      return getMockHotels(airportIata, options);
-    }
-
-    // Search for hotels using OpenStreetMap Overpass API
-    const hotels = await searchNearbyHotels(airport.coordinates.lat, airport.coordinates.lon, radius);
-    
-    // Enhance with pricing and availability
-    const enrichedHotels = hotels.map(hotel => enrichHotelData(hotel, priceRange, airportIata));
-    
-    // Sort by rating and price
-    return enrichedHotels
-      .sort((a, b) => (b.rating || 0) - (a.rating || 0) || a.pricePerNight - b.pricePerNight)
-      .slice(0, 10); // Return top 10 options
-
-  } catch (error) {
-    console.error('Hotel search error:', error.message);
-    return getMockHotels(airportIata, options);
-  }
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Search for hotels using OpenStreetMap Overpass API
+ * Tiny HTTPS POST helper that returns parsed JSON.
  */
-async function searchNearbyHotels(lat, lon, radius) {
+function httpsPost(hostname, path, headers, body) {
   return new Promise((resolve, reject) => {
-    const query = `
-      [out:json][timeout:25];
-      (
-        node["tourism"="hotel"](around:${radius},${lat},${lon});
-        way["tourism"="hotel"](around:${radius},${lat},${lon});
-        relation["tourism"="hotel"](around:${radius},${lat},${lon});
-      );
-      out geom;
-    `;
-    
-    const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
-    
-    https.get(url, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try {
-          const result = JSON.parse(data);
-          const hotels = result.elements.map(element => ({
-            name: element.tags?.name || 'Unknown Hotel',
-            type: 'hotel',
-            address: element.tags?.['addr:street'] || 'Near Airport',
-            phone: element.tags?.phone || null,
-            website: element.tags?.website || null,
-            rating: parseFloat(element.tags?.rating) || null,
-            stars: parseInt(element.tags?.stars) || null,
-            coordinates: {
-              lat: element.lat || element.center?.lat,
-              lon: element.lon || element.center?.lon
-            },
-            distance: calculateDistance(lat, lon, element.lat || element.center?.lat, element.lon || element.center?.lon)
-          })).filter(h => h.coordinates.lat && h.coordinates.lon);
-          
-          resolve(hotels);
-        } catch (error) {
-          reject(error);
-        }
-      });
-    }).on('error', reject);
+    const payload = JSON.stringify(body);
+    const req = https.request(
+      { hostname, path, method: 'POST', headers: { ...headers, 'Content-Length': Buffer.byteLength(payload) } },
+      (res) => {
+        let data = '';
+        res.on('data', chunk => (data += chunk));
+        res.on('end', () => {
+          try { resolve(JSON.parse(data)); }
+          catch (e) { reject(new Error(`JSON parse failed: ${data.slice(0, 120)}`)); }
+        });
+      }
+    );
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
   });
 }
 
 /**
- * Calculate distance between two points in meters
+ * Convert Google Places price level (0-4) to our internal labels.
  */
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371e3; // Earth's radius in meters
-  const φ1 = lat1 * Math.PI/180;
-  const φ2 = lat2 * Math.PI/180;
-  const Δφ = (lat2-lat1) * Math.PI/180;
-  const Δλ = (lon2-lon1) * Math.PI/180;
-
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-          Math.cos(φ1) * Math.cos(φ2) *
-          Math.sin(Δλ/2) * Math.sin(Δλ/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-
-  return R * c;
+function mapPriceLevel(level) {
+  const map = { 0: 'budget', 1: 'budget', 2: 'midrange', 3: 'luxury', 4: 'luxury' };
+  return map[level] ?? 'midrange';
 }
 
 /**
- * Enrich hotel data with pricing and availability
+ * Build amenity list from Google place types / features.
  */
-function enrichHotelData(hotel, priceRange, airportIata) {
-  const pricing = HOTEL_PRICING[priceRange] || HOTEL_PRICING.midrange;
-  const basePrice = pricing.min + Math.random() * (pricing.max - pricing.min);
-  
+function buildAmenities(place) {
+  const amenities = ['WiFi', 'Air Conditioning'];
+  const types = place.types || [];
+  if (types.includes('spa')) amenities.push('Spa');
+  if (place.goodForGroups) amenities.push('Group Friendly');
+  if (place.servesMeal) amenities.push('Restaurant');
+  return amenities;
+}
+
+/**
+ * Haversine distance in metres.
+ */
+function haversineMetres(lat1, lng1, lat2, lng2) {
+  const R = 6_371_000;
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const dφ = ((lat2 - lat1) * Math.PI) / 180;
+  const dλ = ((lng2 - lng1) * Math.PI) / 180;
+  const a = Math.sin(dφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(dλ / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GOOGLE PLACES API (NEW) — NEARBY SEARCH
+// POST https://places.googleapis.com/v1/places:searchNearby
+// Docs: https://developers.google.com/maps/documentation/places/web-service/nearby-search
+// ─────────────────────────────────────────────────────────────────────────────
+async function searchGooglePlacesNearby(lat, lng, radiusMetres, apiKey) {
+  const fieldMask = [
+    'places.id',
+    'places.displayName',
+    'places.formattedAddress',
+    'places.location',
+    'places.rating',
+    'places.userRatingCount',
+    'places.priceLevel',
+    'places.websiteUri',
+    'places.nationalPhoneNumber',
+    'places.regularOpeningHours',
+    'places.types',
+    'places.goodForGroups',
+    'places.servesMeal',
+  ].join(',');
+
+  const body = {
+    includedTypes: ['hotel', 'lodging'],
+    maxResultCount: 10,
+    locationRestriction: {
+      circle: {
+        center: { latitude: lat, longitude: lng },
+        radius: radiusMetres,
+      },
+    },
+    rankPreference: 'DISTANCE',
+  };
+
+  const result = await httpsPost(
+    'places.googleapis.com',
+    '/v1/places:searchNearby',
+    {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': apiKey,
+      'X-Goog-FieldMask': fieldMask,
+    },
+    body
+  );
+
+  // Google returns { places: [...] } or { error: {...} }
+  if (result.error) {
+    throw new Error(`Google Places error ${result.error.code}: ${result.error.message}`);
+  }
+
+  return result.places || [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ENRICH: map a raw Google Place to our internal hotel shape
+// ─────────────────────────────────────────────────────────────────────────────
+function enrichGooglePlace(place, airportCoords, airportIata) {
+  const placeLat = place.location?.latitude;
+  const placeLng = place.location?.longitude;
+  const distMetres = (placeLat && placeLng)
+    ? haversineMetres(airportCoords.lat, airportCoords.lng, placeLat, placeLng)
+    : null;
+
+  const priceRange = mapPriceLevel(place.priceLevel);
+
+  // Rough nightly price estimate (TND) from price level.
+  // In production you'd call a hotel-rates API; this keeps the fallback honest.
+  const priceEstimates = { budget: 65, midrange: 130, luxury: 280 };
+  const pricePerNight = priceEstimates[priceRange];
+
+  // Is the hotel open right now?
+  const isOpenNow = place.regularOpeningHours?.openNow ?? true;
+
   return {
-    ...hotel,
-    pricePerNight: Math.round(basePrice),
-    currency: 'TND', // Tunisian Dinar
+    name: place.displayName?.text || 'Hotel',
+    type: 'hotel',
+    address: place.formattedAddress || 'Near Airport',
+    phone: place.nationalPhoneNumber || null,
+    website: place.websiteUri || null,
+    rating: place.rating || null,
+    userRatings: place.userRatingCount || 0,
     priceRange,
-    available: true, // Would check real availability
-    amenities: getHotelAmenities(hotel.stars || 3),
-    shuttleService: hotel.distance < 5000, // Free shuttle if < 5km
+    pricePerNight,
+    currency: 'TND',
+    available: true,
+    isOpenNow,
+    amenities: buildAmenities(place),
+    shuttleService: distMetres !== null && distMetres < 5_000,
+    distanceKm: distMetres !== null ? Math.round(distMetres / 100) / 10 : null,
     airportIata,
-    bookingUrl: `https://booking.com/hotel/${airportIata}/${hotel.name.toLowerCase().replace(/\s+/g, '-')}`
+    source: 'google_places',
+    bookingUrl: place.websiteUri
+      || `https://www.google.com/travel/hotels/entity/${place.id}`,
   };
 }
 
-/**
- * Get hotel amenities based on star rating
- */
-function getHotelAmenities(stars) {
-  const baseAmenities = ['WiFi', 'Air Conditioning'];
-  
-  if (stars >= 3) baseAmenities.push('Restaurant', 'Room Service');
-  if (stars >= 4) baseAmenities.push('Fitness Center', 'Business Center');
-  if (stars >= 5) baseAmenities.push('Spa', 'Concierge', 'Airport Shuttle');
-  
-  return baseAmenities;
+// ─────────────────────────────────────────────────────────────────────────────
+// FALLBACK — static data from airports.js  (unchanged from original)
+// ─────────────────────────────────────────────────────────────────────────────
+function getMockHotels(airportIata) {
+  try {
+    const { AIRPORTS } = require('./airports');
+    const airport = AIRPORTS[airportIata];
+    if (!airport) return [];
+
+    const mockHotels = airport.hotels_nearby || [
+      { name: 'Airport Hotel', distance: '2 km by taxi', stars: 3, approx_price: '120 TND/night' },
+      { name: 'City Center Hotel', distance: '15 min by taxi', stars: 4, approx_price: '200 TND/night' },
+      { name: 'Budget Inn', distance: '10 min by taxi', stars: 2, approx_price: '60 TND/night' },
+    ];
+
+    return mockHotels.map(hotel => ({
+      name: hotel.name,
+      type: 'hotel',
+      address: hotel.distance,
+      stars: hotel.stars,
+      pricePerNight: parseInt(hotel.approx_price) || 100,
+      currency: 'TND',
+      available: true,
+      amenities: getStaticAmenities(hotel.stars),
+      shuttleService: typeof hotel.distance === 'string' && hotel.distance.includes('km')
+        && parseInt(hotel.distance) <= 5,
+      airportIata,
+      rating: 3.5 + Math.random() * 1.5,
+      source: 'static_fallback',
+      bookingUrl: `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(hotel.name)}`,
+    }));
+  } catch (_) {
+    return [];
+  }
 }
 
+function getStaticAmenities(stars = 3) {
+  const list = ['WiFi', 'Air Conditioning'];
+  if (stars >= 3) list.push('Restaurant', 'Room Service');
+  if (stars >= 4) list.push('Fitness Center', 'Business Center');
+  if (stars >= 5) list.push('Spa', 'Concierge', 'Airport Shuttle');
+  return list;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PUBLIC API
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * Fallback mock hotels when API fails
+ * Search hotels near a specific airport.
+ *
+ * Priority:
+ *   1. Google Places API (New) — live results with ratings, pricing level, hours
+ *   2. Static airport data    — always available, no external call needed
+ *
+ * @param {string} airportIata  - e.g. "TUN", "CDG"
+ * @param {object} options
+ * @param {number} [options.radiusMetres=12000]  - search radius (default 12 km)
+ * @param {string} [options.priceRange]          - 'budget' | 'midrange' | 'luxury' | undefined (all)
+ * @returns {Promise<Array>}
  */
-function getMockHotels(airportIata, options) {
-  const { AIRPORTS } = require('./data/airports');
-  const airport = AIRPORTS[airportIata];
-  
-  if (!airport) return [];
-  
-  // Use hotels from airport database or create mock ones
-  const mockHotels = airport.hotels_nearby || [
-    { name: 'Airport Hotel', distance: '2 km by taxi', stars: 3, approx_price: '120 TND/night' },
-    { name: 'City Center Hotel', distance: '15 min by taxi', stars: 4, approx_price: '200 TND/night' },
-    { name: 'Budget Inn', distance: '10 min by taxi', stars: 2, approx_price: '60 TND/night' }
-  ];
-  
-  return mockHotels.map((hotel, index) => ({
-    name: hotel.name,
-    type: 'hotel',
-    address: hotel.distance,
-    distance: parseInt(hotel.distance) || 5000,
-    stars: hotel.stars,
-    pricePerNight: parseInt(hotel.approx_price) || 100,
-    currency: 'TND',
-    available: true,
-    amenities: getHotelAmenities(hotel.stars),
-    shuttleService: hotel.distance.includes('km') && parseInt(hotel.distance) <= 5,
-    airportIata,
-    rating: 3.5 + Math.random() * 1.5,
-    bookingUrl: `https://booking.com/hotel/${airportIata}/${hotel.name.toLowerCase().replace(/\s+/g, '-')}`
-  }));
+async function searchHotelsNearAirport(airportIata, options = {}) {
+  const { radiusMetres = 12_000, priceRange } = options;
+
+  const apiKey = process.env.GOOGLE_PLACES_KEY;
+  const coords = AIRPORT_COORDS[airportIata];
+
+  // ── Layer 1: Google Places ────────────────────────────────────────────────
+  if (apiKey && coords) {
+    try {
+      console.log(`🌐 [Google Places] Hotels near ${airportIata}`);
+      const rawPlaces = await getHotelsNearAirport(coords.lat, coords.lng, radiusMetres);
+
+      if (rawPlaces.length > 0) {
+        let hotels = rawPlaces.map(p => enrichGooglePlace(p, coords, airportIata));
+
+        // Optional price filter
+        if (priceRange) {
+          hotels = hotels.filter(h => h.priceRange === priceRange);
+        }
+
+        // Sort: highest rating first, then by distance
+        hotels.sort((a, b) =>
+          (b.rating || 0) - (a.rating || 0) ||
+          (a.distanceKm || 99) - (b.distanceKm || 99)
+        );
+
+        console.log(`✅ [Google Places] ${hotels.length} hotels near ${airportIata}`);
+        return hotels.slice(0, 8); // top 8
+      }
+
+      console.log(`↩  [Google Places] No results for ${airportIata} — using fallback`);
+    } catch (err) {
+      console.error(`❌ [Google Places] ${err.message} — using fallback`);
+    }
+  } else {
+    if (!apiKey) console.warn('⚠️  [Hotels] GOOGLE_PLACES_KEY not set — using static fallback');
+    if (!coords) console.warn(`⚠️  [Hotels] No coordinates for ${airportIata} — using static fallback`);
+  }
+
+  // ── Layer 2: Static fallback ──────────────────────────────────────────────
+  console.log(`📋 [Hotels] Static fallback for ${airportIata}`);
+  return getMockHotels(airportIata);
 }
 
 module.exports = { searchHotelsNearAirport };

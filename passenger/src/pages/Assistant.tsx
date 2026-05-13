@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Sparkles, Send, Plane, Luggage, Clock, MapPin, Bot, User, Scale, Hotel, PlaneTakeoff, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:3001";
-type Msg = { role: "user" | "assistant"; content: string };
+type Msg = { role: "user" | "assistant"; content: string; actions?: string[] };
 
 const SUGGESTIONS = [
   { icon: Plane, label: "Track flight AF1234" },
@@ -80,7 +80,22 @@ export default function Assistant() {
       const parsed = typeof data.reply === "string" ? JSON.parse(data.reply) : data.reply;
 
       // Build a readable reply from the structured JSON your backend returns
-      let reply = parsed.message || "I'm here to help!";
+      let reply = parsed.message || "";
+
+      if (parsed.flight) {
+        const f = parsed.flight;
+        const statusStr = f.status ? ` — **${f.status.toUpperCase()}**` : "";
+        const delayStr = f.delay && f.delay !== "0min" ? ` (${f.delay} delay)` : "";
+        reply += `Flight **${f.number}** (${f.airline})${statusStr}${delayStr}\n`;
+        if (f.route) reply += `Route: ${f.route.from || f.route} → ${f.route.to || ''}\n`;
+        if (f.scheduledDeparture) reply += `Departure: ${f.scheduledDeparture}\n`;
+        if (f.scheduledArrival) reply += `Arrival: ${f.scheduledArrival}\n`;
+        if (f.gate) reply += `Gate: ${f.gate}\n`;
+      }
+
+      if (!reply && !parsed.rights && !parsed.flights && !parsed.hotels && !parsed.services && !parsed.suggestion) {
+        reply = "I'm here to help!";
+      }
 
       if (parsed.rights?.length) {
         reply += "\n\n" + parsed.rights.map((r: { title: string; detail: string }) => `• **${r.title}**: ${r.detail}`).join("\n");
@@ -92,8 +107,16 @@ export default function Assistant() {
       }
       if (parsed.hotels?.length) {
         reply += "\n\n" + parsed.hotels.slice(0, 3).map((h: { name: string; stars: number; pricePerNight: number }) =>
-          `• **${h.name}** ${"★".repeat(h.stars)} — ${h.pricePerNight} TND/night`
+          `• **${h.name}** ${"★".repeat(h.stars || 3)} — ${h.pricePerNight || 0} TND/night`
         ).join("\n");
+      }
+      if (parsed.services?.length) {
+        reply += "\n\n" + parsed.services.map((s: { name: string; location?: string; detail?: string }) => {
+          let str = `• **${s.name}**`;
+          if (s.location) str += ` — ${s.location}`;
+          if (s.detail) str += ` (${s.detail})`;
+          return str;
+        }).join("\n");
       }
       if (parsed.suggestion) {
         reply += `\n\n${parsed.suggestion}`;
@@ -102,7 +125,7 @@ export default function Assistant() {
       setIsTyping(false);
 
       // Animate the reply token by token
-      setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+      setMessages((prev) => [...prev, { role: "assistant", content: "", actions: parsed.actions }]);
       const tokens = reply.split(/(\s+)/);
       for (let i = 0; i < tokens.length; i++) {
         await new Promise((r) => setTimeout(r, 25));
@@ -204,7 +227,7 @@ export default function Assistant() {
             )}
 
             {messages.map((m, i) => (
-              <MessageBubble key={i} message={m} />
+              <MessageBubble key={i} message={m} onActionClick={sendMessage} />
             ))}
 
             {isTyping && (
@@ -246,20 +269,35 @@ export default function Assistant() {
   );
 }
 
-function MessageBubble({ message }: { message: Msg }) {
+function MessageBubble({ message, onActionClick }: { message: Msg; onActionClick?: (text: string) => void }) {
   const isUser = message.role === "user";
   return (
     <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
       <Avatar role={message.role} />
-      <div
-        className={cn(
-          "max-w-[78%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap",
-          isUser
-            ? "bg-gradient-amber text-primary-foreground shadow-amber rounded-tr-sm"
-            : "bg-secondary text-foreground rounded-tl-sm"
+      <div className="flex flex-col gap-2 max-w-[78%]">
+        <div
+          className={cn(
+            "px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap",
+            isUser
+              ? "bg-gradient-amber text-primary-foreground shadow-amber rounded-tr-sm"
+              : "bg-secondary text-foreground rounded-tl-sm"
+          )}
+        >
+          {renderInline(message.content)}
+        </div>
+        {!isUser && message.actions && message.actions.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-1">
+            {message.actions.map((action, i) => (
+              <button
+                key={i}
+                onClick={() => onActionClick?.(action)}
+                className="text-xs px-3 py-1.5 rounded-full border border-primary/20 bg-primary/5 text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
+              >
+                {action}
+              </button>
+            ))}
+          </div>
         )}
-      >
-        {renderInline(message.content)}
       </div>
     </div>
   );

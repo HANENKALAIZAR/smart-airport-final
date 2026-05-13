@@ -212,6 +212,7 @@ class UserOut(BaseModel):
     id_document_status: Optional[str] = None
     id_document_rejection_reason: Optional[str] = None
     rejected_fields: Optional[list[str]] = None
+    correction_attempts: int = 0
 
     @field_validator("id_document_status", "gender", "emergency_contact_relationship", mode="before")
     @classmethod
@@ -341,6 +342,7 @@ class AdminReviewDetail(BaseModel):
     id_document_status: Optional[str] = None
     id_document_rejection_reason: Optional[str] = None
     rejected_fields: Optional[list[str]] = None
+    correction_attempts: int = 0
     profile_complete: int = 0
 
     @field_validator("id_document_status", "gender", "emergency_contact_relationship", mode="before")

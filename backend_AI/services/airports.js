@@ -3,7 +3,7 @@ const AIRPORTS = {
     name: "Tunis-Carthage International Airport",
     city: "Tunis",
     country: "Tunisia",
-    coordinates: { lat: 36.8486, lon: 10.2306 },
+    coordinates: { lat: 36.8486, lng: 10.2306 },
     restaurants: [
       { name: "La Terrasse", terminal: "Terminal 1", type: "Restaurant", open: "06:00–22:00" },
       { name: "Café Express", terminal: "Terminal 2", type: "Café", open: "05:00–23:00" },
@@ -93,9 +93,9 @@ const AIRPORTS = {
     ],
     wifi: "Free Wi-Fi — network: NBE_Airport",
     hotels_nearby: [
-      { name: "Movenpick Resort Gammarth", distance: "20 min by taxi", stars: 5, approx_price: "420 TND/night" },
-      { name: "Laico Hammamet", distance: "15 min by taxi", stars: 4, approx_price: "230 TND/night" },
-      { name: "Iberostar Averroes", distance: "18 min by taxi", stars: 4, approx_price: "210 TND/night" },
+      { name: "Steigenberger Marhaba Thalassa", distance: "25 min by taxi", stars: 5, approx_price: "320 TND/night" },
+      { name: "Laico Hammamet", distance: "25 min by taxi", stars: 5, approx_price: "230 TND/night" },
+      { name: "Iberostar Averroes", distance: "28 min by taxi", stars: 4, approx_price: "210 TND/night" },
     ],
     tourist_activities: [
       { name: "Hammamet old medina", distance: "20 min", description: "Charming old town, kasbah, beach nearby" },

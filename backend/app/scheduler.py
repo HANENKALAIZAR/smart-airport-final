@@ -93,6 +93,47 @@ async def _job_collect_flights():
     await _job_run_features()
 
 
+async def _job_ae_ingest():
+    """
+    Smart Aviation Edge ingestion — runs every 8 minutes.
+    Only calls the AE API for airports whose cache is actually stale (> 10 min old).
+    Airports with fresh data are skipped entirely — no wasted API calls.
+    """
+    from app.services.flight_cache_service import (
+        is_cache_fresh, MONITORED_AIRPORTS, CACHE_TTL_MINUTES,
+    )
+    from app.services.ae_ingestion_service import ingest_airport
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    skipped = 0
+    refreshed = 0
+    errors = 0
+    try:
+        for iata in MONITORED_AIRPORTS:
+            for direction in ("departure", "arrival"):
+                try:
+                    if is_cache_fresh(iata, direction, db):
+                        skipped += 1
+                        continue
+                    stats = await ingest_airport(iata, direction, db)
+                    refreshed += 1
+                    logger.info(
+                        f"[AE Ingest Job] {iata}/{direction}: "
+                        f"fetched={stats.fetched} stored={stats.snapshots_upserted}"
+                    )
+                except Exception as e:
+                    errors += 1
+                    logger.error(f"[AE Ingest Job] {iata}/{direction} error: {e}")
+    finally:
+        db.close()
+
+    logger.info(
+        f"[AE Ingest Job] Done — refreshed={refreshed} skipped={skipped} errors={errors} "
+        f"(TTL={CACHE_TTL_MINUTES}min)"
+    )
+
+
 async def _job_run_features():
     """Run the DB-backed feature engineering pipeline."""
     from app.services.feature_pipeline import run_feature_pipeline
@@ -163,10 +204,20 @@ def start_scheduler():
         misfire_grace_time=120,
     )
 
+    _scheduler.add_job(
+        _job_ae_ingest,
+        trigger=IntervalTrigger(minutes=8),
+        id="ae_ingest",
+        name="Smart AE ingestion — stale airports only (every 8 min)",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=60,
+    )
+
     _scheduler.start()
     logger.info(
         f"APScheduler started — "
-        f"weather=30min | flights={interval_hours}h | predictions=30min"
+        f"weather=30min | flights={interval_hours}h | predictions=30min | ae_ingest=8min(stale-only)"
     )
 
 

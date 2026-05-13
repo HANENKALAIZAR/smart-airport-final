@@ -9,7 +9,7 @@
  * - Times out after 12 seconds.
  */
 
-const BASE = '/api';
+const BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000') + '/api';
 const TIMEOUT_MS = 12_000;
 const MAX_RETRIES = 2;
 

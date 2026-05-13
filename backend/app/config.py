@@ -39,6 +39,7 @@ class Settings(BaseSettings):
 
     AVIATIONSTACK_KEY: str = ""
     AVIATIONSTACK_MAX_REQUESTS: int = 80
+    AVIATION_EDGE_KEY: str = ""
     HISTORICAL_DAYS: int = 2
     OPENWEATHER_KEY: str = ""
 
@@ -53,12 +54,16 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:5173"
 
     CORS_ORIGINS: list[str] = [
-    "http://localhost:5173",
-    "http://localhost:8081",
-    "http://localhost:3000",
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:8081",
-]
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://localhost:8080",
+        "http://localhost:8081",
+        "http://localhost:8082",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:8080",
+        "http://127.0.0.1:8081",
+        "http://127.0.0.1:8082",
+    ]
 
     model_config = SettingsConfigDict(
         env_file=str(Path(__file__).resolve().parent.parent / ".env")

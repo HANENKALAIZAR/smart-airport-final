@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { addDays, format, isSameDay, subDays } from "date-fns";
+import { addDays, format, formatDistanceToNow, isSameDay, subDays } from "date-fns";
 import {
   ArrowUpDown, ArrowDown, ArrowUp, Search, RotateCw, Plane,
   PlaneTakeoff, PlaneLanding, Radio, ChevronLeft, ChevronRight, Building2, Loader2,
+  RefreshCw, Database,
 } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PublicNav } from "@/components/PublicNav";
@@ -22,7 +23,7 @@ import {
 import { formatTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import flightsHero from "@/assets/flights-hero.jpg";
-import { getOpenSkyAirportFlights, type Flight, type FlightStatus } from "@/services/api";
+import { getAviationEdgeFlights, type Flight, type FlightStatus } from "@/services/api";
 import { TUNISIAN_AIRPORTS } from "@smart-airport/shared-core/constants/airports.js";
 
 type SortKey = "flightNumber" | "airline" | "from" | "to" | "scheduled" | "estimated" | "status";
@@ -50,6 +51,8 @@ const Flights = () => {
   const { t } = useTranslation();
   const [allFlights, setAllFlights] = useState<Flight[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [airportCode, setAirportCode] = useState<TnCode>("TUN");
   const [direction, setDirection] = useState<Direction>("departures");
   const [query, setQuery] = useState("");
@@ -59,18 +62,24 @@ const Flights = () => {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(1);
 
-  // Charger les vols + rafraîchir toutes les 30s
+
+  // Load flights from DB cache (no polling — data is kept fresh by backend scheduler)
+  const loadFlights = useCallback(async (forceRefresh = false) => {
+    if (forceRefresh) setRefreshing(true);
+    else setLoading(true);
+    const data = await getAviationEdgeFlights(airportCode, 'both', forceRefresh);
+    setAllFlights(data);
+    setLastUpdated(new Date());
+    setLoading(false);
+    setRefreshing(false);
+  }, [airportCode]);
+
+  // Load once when airport changes — no polling interval
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      const data = await getOpenSkyAirportFlights(airportCode, direction);
-      if (!cancelled) { setAllFlights(data); setLoading(false); }
-    };
-    load();
-    const interval = setInterval(load, 30_000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []);
+    loadFlights(false);
+  }, [loadFlights]);
+
+  const handleRefresh = () => loadFlights(true);
 
   // Reset page quand les filtres changent
   useEffect(() => { setPage(1); }, [airportCode, direction, query, status, date, sortKey, sortDir]);
@@ -79,6 +88,8 @@ const Flights = () => {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const now = Date.now();
+
     let rows = allFlights.filter(f => {
       if (direction === "departures" && f.from.code !== airportCode) return false;
       if (direction === "arrivals" && f.to.code !== airportCode) return false;
@@ -95,21 +106,59 @@ const Flights = () => {
       return true;
     });
 
-    const dir = sortDir === "asc" ? 1 : -1;
-    rows = [...rows].sort((a, b) => {
-      switch (sortKey) {
-        case "flightNumber": return a.flightNumber.localeCompare(b.flightNumber) * dir;
-        case "airline": return a.airline.localeCompare(b.airline) * dir;
-        case "from": return a.from.code.localeCompare(b.from.code) * dir;
-        case "to": return a.to.code.localeCompare(b.to.code) * dir;
-        case "scheduled": return (new Date(a.scheduledDeparture).getTime() - new Date(b.scheduledDeparture).getTime()) * dir;
-        case "estimated": return (new Date(a.departureTime).getTime() - new Date(b.departureTime).getTime()) * dir;
-        case "status": return a.status.localeCompare(b.status) * dir;
-        default: return 0;
-      }
-    });
+    // ── Smart real-time priority sort ──────────────────────────────────────
+    // When using the default sort ("scheduled" asc), apply priority ordering:
+    // 1. Boarding  2. Upcoming departures (soonest first)  3. In-air
+    // 4. Recently landed (closest to now)  5. Old / historical
+    // User can still override by clicking column headers.
+    if (sortKey === "scheduled") {
+      const STATUS_PRIORITY: Record<string, number> = {
+        boarding:  0,
+        delayed:   1,
+        on_time:   1,
+        scheduled: 1,
+        in_air:    2,
+        landed:    3,
+        cancelled: 4,
+      };
+
+      rows = [...rows].sort((a, b) => {
+        const pA = STATUS_PRIORITY[a.status] ?? 5;
+        const pB = STATUS_PRIORITY[b.status] ?? 5;
+        if (pA !== pB) return pA - pB;
+
+        // Within the same priority bucket, sort by proximity to now
+        const refA = new Date(a.departureTime ?? a.scheduledDeparture).getTime();
+        const refB = new Date(b.departureTime ?? b.scheduledDeparture).getTime();
+
+        if (pA <= 1) {
+          // Upcoming: sort ASC (earliest first, but only future/near flights)
+          return refA - refB;
+        } else if (pA === 3) {
+          // Landed: most recent first (closest to now DESC)
+          return refB - refA;
+        }
+        return refA - refB;
+      });
+    } else {
+      // Manual column sort
+      const dir = sortDir === "asc" ? 1 : -1;
+      rows = [...rows].sort((a, b) => {
+        switch (sortKey) {
+          case "flightNumber": return a.flightNumber.localeCompare(b.flightNumber) * dir;
+          case "airline":      return a.airline.localeCompare(b.airline) * dir;
+          case "from":         return a.from.code.localeCompare(b.from.code) * dir;
+          case "to":           return a.to.code.localeCompare(b.to.code) * dir;
+          case "estimated":    return (new Date(a.departureTime).getTime() - new Date(b.departureTime).getTime()) * dir;
+          case "status":       return a.status.localeCompare(b.status) * dir;
+          default:             return 0;
+        }
+      });
+    }
+
     return rows;
   }, [allFlights, airportCode, direction, query, status, date, sortKey, sortDir]);
+
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -117,18 +166,25 @@ const Flights = () => {
   const pageRows = filtered.slice(start, start + PAGE_SIZE);
 
   const toggleSort = (key: SortKey) => {
-    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir("asc"); }
+    if (key === "scheduled") {
+      // Clicking Scheduled header resets to smart real-time sort
+      setSortKey("scheduled"); setSortDir("asc");
+    } else {
+      if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+      else { setSortKey(key); setSortDir("asc"); }
+    }
   };
 
+  // Reset = clear search/status filters only. Does NOT touch sort (smart sort stays).
   const resetFilters = () => {
-    setQuery(""); setStatus("all"); setDate(new Date());
-    setSortKey("scheduled"); setSortDir("asc"); setPage(1);
+    setQuery(""); setStatus("all"); setDate(new Date()); setPage(1);
   };
 
+  const isSmartSorted = sortKey === "scheduled";
   const liveCount = filtered.filter(f => f.status === "in_air" || f.status === "boarding").length;
   const departuresCount = allFlights.filter(f => f.from.code === airportCode).length;
   const arrivalsCount = allFlights.filter(f => f.to.code === airportCode).length;
+
 
   const SortIcon = ({ col }: { col: SortKey }) =>
     sortKey !== col ? <ArrowUpDown className="h-3.5 w-3.5 opacity-50" />
@@ -159,8 +215,8 @@ const Flights = () => {
               transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
               className="max-w-3xl mx-auto text-center">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[11px] uppercase tracking-[0.22em] text-white/90 mb-6">
-                <Radio className="h-3 w-3 text-primary animate-pulse" />
-                Live · Updated every 30s
+                <Database className="h-3 w-3 text-primary" />
+                Live · DB-cached · Auto-refreshed
               </div>
               <h1 className="font-display text-5xl sm:text-6xl md:text-7xl text-white leading-[0.98] drop-shadow-lg">
                 {t("explore_flights")}
@@ -216,16 +272,39 @@ const Flights = () => {
                 <span className="text-muted-foreground">{loading ? "…" : `${filtered.length} flight${filtered.length === 1 ? "" : "s"}`}</span>
               </h2>
             </div>
-            <div className="flex items-center gap-3">
-              <div className="inline-flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-1.5 text-xs font-medium text-success">
-                <span className="relative flex h-1.5 w-1.5">
-                  <span className="absolute inline-flex h-full w-full rounded-full bg-success opacity-60 animate-ping" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" />
-                </span>
-                {liveCount} live now
+          <div className="flex items-center gap-3">
+              <div className={cn(
+                "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium",
+                refreshing
+                  ? "border-warning/30 bg-warning/10 text-warning"
+                  : "border-success/30 bg-success/10 text-success"
+              )}>
+                {refreshing ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-success opacity-60 animate-ping" />
+                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" />
+                  </span>
+                )}
+                {refreshing ? "Refreshing…" : liveCount > 0 ? `${liveCount} live now` : "DB cache"}
               </div>
-              <Button variant="outline" size="sm" onClick={resetFilters} className="gap-2 rounded-full">
-                <RotateCw className="h-3.5 w-3.5" /> Reset
+              {lastUpdated && (
+                <span className="text-xs text-muted-foreground hidden sm:inline">
+                  <Database className="inline h-3 w-3 mr-1 opacity-60" />
+                  {formatDistanceToNow(lastUpdated, { addSuffix: true })}
+                </span>
+              )}
+              {/* Refresh = pull fresh data from Aviation Edge API */}
+              <Button
+                variant="outline" size="sm"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                className="gap-2 rounded-full"
+                title="Pull latest data from Aviation Edge"
+              >
+                <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+                {refreshing ? "Refreshing…" : "Live Refresh"}
               </Button>
             </div>
           </div>
@@ -273,10 +352,10 @@ const Flights = () => {
             </div>
           </div>
 
-          {/* Filtres */}
+          {/* Filters */}
           <div className="rounded-2xl border border-border bg-card/60 p-4 backdrop-blur-sm shadow-sm">
             <div className="grid gap-3 md:grid-cols-12">
-              <div className="relative md:col-span-8">
+              <div className="relative md:col-span-7">
                 <Search className="absolute start-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="filter-flight-query"
@@ -294,6 +373,19 @@ const Flights = () => {
                     {STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
+              </div>
+              {/* Reset filters — only clears search + status, smart sort is preserved */}
+              <div className="md:col-span-1 flex items-center">
+                <Button
+                  variant="ghost" size="sm"
+                  onClick={resetFilters}
+                  disabled={query === "" && status === "all"}
+                  className="gap-1.5 text-muted-foreground hover:text-foreground w-full"
+                  title="Clear search and status filters"
+                >
+                  <RotateCw className="h-3.5 w-3.5" />
+                  <span className="hidden md:inline text-xs">Reset</span>
+                </Button>
               </div>
             </div>
           </div>
@@ -313,7 +405,19 @@ const Flights = () => {
                     <Th col="airline" label={t("common.airline", "Airline")} />
                     <Th col="from" label={t("common.departure")} />
                     <Th col="to" label={t("common.arrival")} />
-                    <Th col="scheduled" label={t("common.scheduled")} />
+                    <TableHead className="whitespace-nowrap">
+                      <button type="button" onClick={() => toggleSort("scheduled")}
+                        className="inline-flex items-center gap-1.5 text-xs uppercase tracking-wider hover:text-foreground transition-colors">
+                        {t("common.scheduled")}
+                        {isSmartSorted ? (
+                          <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold text-primary uppercase tracking-widest">
+                            <span className="h-1 w-1 rounded-full bg-primary animate-pulse inline-block" />LIVE
+                          </span>
+                        ) : (
+                          <SortIcon col="scheduled" />
+                        )}
+                      </button>
+                    </TableHead>
                     <Th col="estimated" label={t("common.estimated", "Estimated")} />
                     <TableHead className="text-xs uppercase tracking-wider">{t("common.gate")}</TableHead>
                     <TableHead className="text-xs uppercase tracking-wider">{t("common.terminal")}</TableHead>

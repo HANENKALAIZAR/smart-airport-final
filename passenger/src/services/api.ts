@@ -265,7 +265,7 @@ function adaptFlight(f: ApiFlightList | ApiFlightDetail): Flight {
 
 // ── Fetch helpers ─────────────────────────────────────────────────────────
 
-const TIMEOUT_MS = 10_000;
+const TIMEOUT_MS = 25_000;
 const MAX_RETRIES = 2;
 
 async function fetchWithTimeout(url: string, opts: RequestInit): Promise<Response> {
@@ -393,6 +393,31 @@ interface AvStackResponse {
   flights: AvStackFlight[];
 }
 
+// ── Real lat/lon for distance calculation (separate from map coords) ──────
+const AIRPORT_LATLON: Record<string, [number, number]> = {
+  TUN: [36.851, 10.227], MIR: [35.758, 10.755], NBE: [36.076, 10.439], DJE: [33.875, 10.775],
+  CDG: [49.009, 2.548],  ORY: [48.725, 2.360],  LHR: [51.477, -0.461], FRA: [50.033, 8.571],
+  FCO: [41.800, 12.239], MXP: [45.630, 8.728],  MAD: [40.494, -3.567], BCN: [41.297, 2.078],
+  IST: [40.977, 28.815], SAW: [40.898, 29.309], DOH: [25.273, 51.608], DXB: [25.253, 55.366],
+  AMM: [31.723, 35.993], CAI: [30.122, 31.406], JED: [21.679, 39.157], CMN: [33.368, -7.590],
+  ALG: [36.691, 3.215],  GVA: [46.238, 6.109],  BRU: [50.901, 4.484],  VIE: [48.110, 16.570],
+  MUC: [48.354, 11.786], DUS: [51.289, 6.767],  LYS: [45.726, 5.091],  NCE: [43.658, 7.217],
+  MRS: [43.436, 5.215],  MLA: [35.857, 14.477], DSS: [14.670, -17.073],YUL: [45.458, -73.749],
+  BHX: [52.453, -1.748],
+};
+
+function haversineKm(iata1: string, iata2: string): number {
+  const c1 = AIRPORT_LATLON[iata1];
+  const c2 = AIRPORT_LATLON[iata2];
+  if (!c1 || !c2) return 0;
+  const R = 6371;
+  const dLat = (c2[0] - c1[0]) * Math.PI / 180;
+  const dLon = (c2[1] - c1[1]) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 +
+    Math.cos(c1[0] * Math.PI / 180) * Math.cos(c2[0] * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+  return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+}
+
 // ── Adaptateur AviationStack → Flight ────────────────────────────────────
 
 function adaptAvStackFlight(f: AvStackFlight): Flight {
@@ -411,12 +436,25 @@ function adaptAvStackFlight(f: AvStackFlight): Flight {
   if (depTs < now && arrTs > now) progress = Math.min(1, (now - depTs) / (arrTs - depTs));
   else if (arrTs < now) progress = 1;
 
-  const status: FlightStatus =
-    f.status === 'landed' ? 'landed' :
-      f.status === 'cancelled' ? 'cancelled' :
-        f.status === 'boarding' ? 'boarding' :
-          f.status === 'delayed' ? 'delayed' :
-            f.status === 'on_time' ? 'on_time' : 'scheduled';
+  // Calculate real great-circle distance between the two airports
+  const distanceKm = haversineKm(f.dep_iata, f.arr_iata);
+
+  let status: FlightStatus =
+    f.status === 'in_air' ? 'in_air' :
+      f.status === 'landed' ? 'landed' :
+        f.status === 'cancelled' ? 'cancelled' :
+          f.status === 'boarding' ? 'boarding' :
+            f.status === 'delayed' ? 'delayed' :
+              f.status === 'on_time' ? 'on_time' : 'scheduled';
+
+  // Force 'landed' if the API is lagging and the flight arrived more than 10 minutes ago
+  if ((status === 'scheduled' || status === 'on_time' || status === 'in_air') && arrTs < now - 10 * 60_000) {
+    status = 'landed';
+  }
+
+  // Resolve airport city name from iata code (fallback to raw airport name)
+  const depCity = f.dep_airport && f.dep_airport !== f.dep_iata ? f.dep_airport : f.dep_iata;
+  const arrCity = f.arr_airport && f.arr_airport !== f.arr_iata ? f.arr_airport : f.arr_iata;
 
   return {
     id: f.id,
@@ -426,16 +464,16 @@ function adaptAvStackFlight(f: AvStackFlight): Flight {
     airlineReliability: 0.85,
     from: {
       code: f.dep_iata,
-      city: f.dep_airport,
-      name: f.dep_airport,
+      city: depCity,
+      name: depCity,
       country: '',
       x: depCoords.x,
       y: depCoords.y,
     },
     to: {
       code: f.arr_iata,
-      city: f.arr_airport,
-      name: f.arr_airport,
+      city: arrCity,
+      name: arrCity,
       country: '',
       x: arrCoords.x,
       y: arrCoords.y,
@@ -447,11 +485,11 @@ function adaptAvStackFlight(f: AvStackFlight): Flight {
     actualDeparture: f.dep_actual,
     actualArrival: f.arr_actual,
     status,
-    gate: f.dep_gate ?? undefined,
-    terminal: f.dep_terminal ?? undefined,
-    aircraft: f.aircraft_type || 'Unknown',
+    gate: (f.direction === 'arrival' ? f.arr_gate : f.dep_gate) ?? undefined,
+    terminal: (f.direction === 'arrival' ? f.arr_terminal : f.dep_terminal) ?? undefined,
+    aircraft: f.aircraft_type || '—',
     durationMin,
-    distanceKm: 0,
+    distanceKm,
     progress,
     delayMin: f.delay_minutes ?? null,
     onTimeHistory: 85,
@@ -469,6 +507,22 @@ export async function getAviationStackFlights(iata: string): Promise<Flight[]> {
     .filter(f => f.flight_number && f.flight_number !== '—')
     .map(adaptAvStackFlight);
 }
+
+/** Vols Aviation Edge — served from DB cache unless forceRefresh=true */
+export async function getAviationEdgeFlights(
+  iata: string,
+  direction: 'departure' | 'arrival' | 'both' = 'both',
+  forceRefresh = false,
+): Promise<Flight[]> {
+  const url = `/aviation-edge/flights/${iata}?direction=${direction}${forceRefresh ? '&refresh=true' : ''}`;
+  const data = await fetchApi<AvStackResponse>(url);
+  if (!data) return [];
+  return data.flights
+    .filter(f => f.flight_number && f.flight_number !== '—')
+    .map(adaptAvStackFlight);
+}
+
+
 // ── Types OpenSky Airport ─────────────────────────────────────────────────
 
 export interface OpenSkyAircraft {

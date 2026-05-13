@@ -94,7 +94,8 @@ export default function AdminDashboard({ selectedDate }) {
         try {
             setLoading(true);
             setError(null);
-            const res = await fetch(`/api/aviationstack/flights/${selectedAirport.iata}`);
+            const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+            const res = await fetch(`${baseUrl}/api/aviationstack/flights/${selectedAirport.iata}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const json = await res.json();
             const rawList = json.flights || [];

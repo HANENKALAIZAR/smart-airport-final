@@ -13,7 +13,7 @@ const https = require('https');
  * @returns {Promise<Array>} - Array of POI options
  */
 async function searchPOIsNearAirport(airportIata, options = {}) {
-  const { 
+  const {
     type = 'all', // 'restaurants', 'lounges', 'all'
     radius = 5000, // 5km radius
     openNow = false,
@@ -22,30 +22,30 @@ async function searchPOIsNearAirport(airportIata, options = {}) {
 
   try {
     // Get airport coordinates
-    const { AIRPORTS } = require('./data/airports');
+    const { AIRPORTS } = require('./airports');
     const airport = AIRPORTS[airportIata];
-    
+
     if (!airport || !airport.coordinates) {
       return getMockPOIs(airportIata, options);
     }
 
     // Search for POIs using OpenStreetMap Overpass API
-    const pois = await searchNearbyPOIs(airport.coordinates.lat, airport.coordinates.lon, radius, type);
-    
+    const pois = await searchNearbyPOIs(airport.coordinates.lat, airport.coordinates.lng, radius, type);
+
     // Enhance with additional data
     const enrichedPOIs = pois.map(poi => enrichPOIData(poi, airportIata));
-    
+
     // Filter and sort
     let filteredPOIs = enrichedPOIs;
-    
+
     if (openNow) {
       filteredPOIs = filteredPOIs.filter(poi => poi.isOpen);
     }
-    
+
     if (priceRange !== 'all') {
       filteredPOIs = filteredPOIs.filter(poi => poi.priceCategory === priceRange);
     }
-    
+
     return filteredPOIs
       .sort((a, b) => (b.rating || 0) - (a.rating || 0))
       .slice(0, 15); // Return top 15 options
@@ -59,24 +59,24 @@ async function searchPOIsNearAirport(airportIata, options = {}) {
 /**
  * Search for POIs using OpenStreetMap Overpass API
  */
-async function searchNearbyPOIs(lat, lon, radius, type) {
+async function searchNearbyPOIs(lat, lng, radius, type) {
   return new Promise((resolve, reject) => {
     let filters = [];
-    
+
     if (type === 'restaurants' || type === 'all') {
       filters.push(`
-        node["amenity"~"restaurant|cafe|fast_food|food_court"](around:${radius},${lat},${lon});
-        way["amenity"~"restaurant|cafe|fast_food|food_court"](around:${radius},${lat},${lon});
+        node["amenity"~"restaurant|cafe|fast_food|food_court"](around:${radius},${lat},${lng});
+        way["amenity"~"restaurant|cafe|fast_food|food_court"](around:${radius},${lat},${lng});
       `);
     }
-    
+
     if (type === 'lounges' || type === 'all') {
       filters.push(`
-        node["amenity"~"lounge|bar"](around:${radius},${lat},${lon});
-        way["amenity"~"lounge|bar"](around:${radius},${lat},${lon});
+        node["amenity"~"lounge|bar"](around:${radius},${lat},${lng});
+        way["amenity"~"lounge|bar"](around:${radius},${lat},${lng});
       `);
     }
-    
+
     const query = `
       [out:json][timeout:25];
       (
@@ -84,9 +84,9 @@ async function searchNearbyPOIs(lat, lon, radius, type) {
       );
       out geom;
     `;
-    
+
     const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
-    
+
     https.get(url, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
@@ -105,11 +105,11 @@ async function searchNearbyPOIs(lat, lon, radius, type) {
             openingHours: element.tags?.['opening_hours'] || null,
             coordinates: {
               lat: element.lat || element.center?.lat,
-              lon: element.lon || element.center?.lon
+              lng: element.lon || element.center?.lon
             },
-            distance: calculateDistance(lat, lon, element.lat || element.center?.lat, element.lon || element.center?.lon)
-          })).filter(poi => poi.coordinates.lat && poi.coordinates.lon);
-          
+            distance: calculateDistance(lat, lng, element.lat || element.center?.lat, element.lon || element.center?.lon)
+          })).filter(poi => poi.coordinates.lat && poi.coordinates.lng);
+
           resolve(pois);
         } catch (error) {
           reject(error);
@@ -147,17 +147,17 @@ function determinePriceCategory(tags) {
 /**
  * Calculate distance between two points in meters
  */
-function calculateDistance(lat1, lon1, lat2, lon2) {
+function calculateDistance(lat1, lng1, lat2, lng2) {
   const R = 6371e3; // Earth's radius in meters
-  const φ1 = lat1 * Math.PI/180;
-  const φ2 = lat2 * Math.PI/180;
-  const Δφ = (lat2-lat1) * Math.PI/180;
-  const Δλ = (lon2-lon1) * Math.PI/180;
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lng2 - lng1) * Math.PI / 180;
 
-  const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-          Math.cos(φ1) * Math.cos(φ2) *
-          Math.sin(Δλ/2) * Math.sin(Δλ/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) *
+    Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
   return R * c;
 }
@@ -168,7 +168,7 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
 function enrichPOIData(poi, airportIata) {
   const currentHour = new Date().getHours();
   const isOpen = parseOpeningHours(poi.openingHours, currentHour);
-  
+
   return {
     ...poi,
     isOpen,
@@ -186,11 +186,11 @@ function enrichPOIData(poi, airportIata) {
  */
 function parseOpeningHours(openingHours, currentHour) {
   if (!openingHours) return true; // Assume open if no hours specified
-  
+
   // Simple parsing - would need more sophisticated logic for real implementation
   if (openingHours.includes('24/7')) return true;
   if (openingHours.includes('Mo-Su')) return true;
-  
+
   // Check if current hour is within typical business hours
   return currentHour >= 8 && currentHour <= 22;
 }
@@ -206,7 +206,7 @@ function getRecommendations(type, cuisine) {
     lounge: ['Comfortable seating', 'Drinks and snacks'],
     bar: ['Evening atmosphere', 'Cocktails available']
   };
-  
+
   return recommendations[type] || ['Popular choice'];
 }
 
@@ -238,13 +238,13 @@ function getPriceRangeDescription(category) {
  * Fallback mock POIs when API fails
  */
 function getMockPOIs(airportIata, options) {
-  const { AIRPORTS } = require('./data/airports');
+  const { AIRPORTS } = require('./airports');
   const airport = AIRPORTS[airportIata];
-  
+
   if (!airport) return [];
-  
+
   const mockPOIs = [];
-  
+
   // Add restaurants from airport database
   if (airport.restaurants) {
     airport.restaurants.forEach(restaurant => {
@@ -266,7 +266,7 @@ function getMockPOIs(airportIata, options) {
       });
     });
   }
-  
+
   // Add lounges from airport database
   if (airport.lounges) {
     airport.lounges.forEach(lounge => {
@@ -288,7 +288,7 @@ function getMockPOIs(airportIata, options) {
       });
     });
   }
-  
+
   return mockPOIs;
 }
 

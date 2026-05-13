@@ -110,10 +110,12 @@ def load_model():
             from app.ai.ml_config import CLASSIFIER_PARAMS, REGRESSOR_PARAMS
 
             _model = xgb.XGBClassifier(**CLASSIFIER_PARAMS)
+            _model._estimator_type = "classifier"
             _model.load_model(str(_CLASSIFIER_PATH))
 
             if _REGRESSOR_PATH.exists():
                 _regressor = xgb.XGBRegressor(**REGRESSOR_PARAMS)
+                _regressor._estimator_type = "regressor"
                 _regressor.load_model(str(_REGRESSOR_PATH))
 
             if _EXPLAINER_PATH.exists():

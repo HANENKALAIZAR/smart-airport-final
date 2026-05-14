@@ -52,11 +52,18 @@ _LATLON: dict[str, tuple[float, float]] = {
 }
 
 
-def _haversine_km(iata1: Optional[str], iata2: Optional[str]) -> Optional[int]:
+# Median great-circle distance for the Tunisian route network (km).
+# Used as a non-null fallback when both airport IATA codes are unknown.
+_FALLBACK_DISTANCE_KM = 1_800
+
+
+def _haversine_km(iata1: Optional[str], iata2: Optional[str]) -> int:
+    """Return Haversine distance in km. Falls back to _FALLBACK_DISTANCE_KM if
+    either airport is not in _LATLON, ensuring distance_km is never NULL."""
     c1 = _LATLON.get(iata1 or "")
     c2 = _LATLON.get(iata2 or "")
     if not c1 or not c2:
-        return None
+        return _FALLBACK_DISTANCE_KM
     R = 6371
     lat1, lon1 = map(math.radians, c1)
     lat2, lon2 = map(math.radians, c2)
@@ -103,6 +110,34 @@ _STATUS_ENC = {
 }
 
 _PEAK_HOURS = {7, 8, 9, 17, 18, 19, 20}
+
+
+def _encode_categorical(encoder_name: str, value: Optional[str]) -> int:
+    """
+    Encode a raw string value using the persistent PersistentLabelEncoder
+    from feature_engineering.py.
+
+    Returns 0 (UNKNOWN code) on any error so the ingestion pipeline never
+    crashes due to encoder unavailability.
+    """
+    try:
+        from app.ml.feature_engineering import _get_encoders
+        enc_airline, enc_dep, enc_arr = _get_encoders()
+        mapping = {
+            "airline":     enc_airline,
+            "dep_airport": enc_dep,
+            "arr_airport": enc_arr,
+        }
+        encoder = mapping.get(encoder_name)
+        if encoder is None:
+            return 0
+        # Extend with this new value before transforming
+        if value is not None:
+            encoder.fit_extend([value])
+        return encoder.transform(value)
+    except Exception as e:
+        logger.debug(f"[AE Ingest] _encode_categorical({encoder_name}, {value}): {e}")
+        return 0
 
 
 # ── Snapshot building ─────────────────────────────────────────────────────────
@@ -215,9 +250,12 @@ def _build_dataset_row(snap: dict) -> dict:
         "dep_delay_min":   dep_delay or None,
         "arr_delay_min":   arr_delay or None,
 
-        "airline_enc":     None,   # populated by ML preprocessing step
-        "dep_airport_enc": None,
-        "arr_airport_enc": None,
+        # Categorical encodings — populated via persistent LabelEncoders.
+        # We call the encoder singletons here so that newly ingested rows
+        # already have valid integer codes without needing a separate rebuild.
+        "airline_enc":     _encode_categorical("airline",     snap.get("airline_iata")),
+        "dep_airport_enc": _encode_categorical("dep_airport", snap.get("dep_iata")),
+        "arr_airport_enc": _encode_categorical("arr_airport", snap.get("arr_iata")),
         "status_enc":      _STATUS_ENC.get(snap.get("status", ""), 0),
 
         "latitude":        snap.get("latitude"),

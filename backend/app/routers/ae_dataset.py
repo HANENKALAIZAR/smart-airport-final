@@ -253,3 +253,79 @@ async def trigger_sync(background_tasks: BackgroundTasks, db: Session = Depends(
 
     background_tasks.add_task(_run)
     return {"message": "Ingestion sync triggered", "status": "running"}
+
+
+# ── ML Feature Engineering Endpoints ─────────────────────────────────────────
+
+@router.post("/rebuild-features")
+def rebuild_features(background_tasks: BackgroundTasks):
+    """
+    One-shot ML feature stabilization for ae_flight_dataset.
+
+    Applies feature_engineering.py to ALL existing rows:
+      - Computes distance_km (Haversine + median fallback)
+      - Derives duration_min where missing
+      - Fits + persists LabelEncoders for airline, dep_airport, arr_airport
+      - Writes airline_enc, dep_airport_enc, arr_airport_enc back to DB
+      - Runs dataset health validation and logs the report
+
+    Safe to run multiple times — encoders are extended, never refit.
+    Check backend logs for the health report after completion.
+    """
+    def _rebuild_task():
+        from app.database import SessionLocal
+        from app.ml.rebuild_dataset import rebuild_ae_dataset
+        _db = SessionLocal()
+        try:
+            result = rebuild_ae_dataset(_db, validate=True)
+            logger.info(
+                f"[FE Rebuild] Done: processed={result['processed']} "
+                f"skipped={result['skipped']} errors={result['errors']} "
+                f"ready={result.get('health_report', {}).get('ready', 'n/a')}"
+            )
+        except Exception as e:
+            logger.exception(f"[FE Rebuild] Failed: {e}")
+        finally:
+            _db.close()
+
+    background_tasks.add_task(_rebuild_task)
+    return {
+        "message": "Feature engineering rebuild triggered",
+        "status":  "running",
+        "note":    "Monitor backend logs for the health report.",
+    }
+
+
+@router.get("/health")
+def dataset_health(db: Session = Depends(get_db)):
+    """
+    Live ML-readiness check for ae_flight_dataset.
+
+    Runs feature engineering on all usable rows and returns the health report.
+    Does NOT modify any data.
+
+    Returns 200 if ready, 422 if blocking issues remain.
+    """
+    from fastapi import HTTPException
+    from app.ml.feature_engineering import apply_feature_engineering, validate_dataset_health
+
+    usable_rows = (
+        db.query(AEFlightDataset)
+        .filter(AEFlightDataset.usable_for_ml == True)
+        .all()
+    )
+
+    if not usable_rows:
+        raise HTTPException(
+            status_code=404,
+            detail="No usable rows in ae_flight_dataset — run ingestion first.",
+        )
+
+    processed = apply_feature_engineering(usable_rows)
+
+    try:
+        report = validate_dataset_health(processed, print_report=False)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    return report

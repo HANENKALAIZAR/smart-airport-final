@@ -100,9 +100,10 @@ from app.routers import aviationstack, opensky
 from app.routers import aviation_edge
 from app.routers import alerts
 from app.routers import ae_dataset
+from app.routers import intelligence
 
-# Ensure AE pipeline tables are registered with Base metadata
-import app.models.ae_models  # noqa: F401
+# Ensure AE pipeline tables (including new intelligence tables) are registered
+import app.models.ae_models  # noqa: F401  (AEFlightSnapshot, AEFlightDataset, AEFutureSchedule, AEAviationStats)
 
 _optional_routers = []
 try:
@@ -234,6 +235,7 @@ app.include_router(aviationstack.router)
 app.include_router(aviation_edge.router)
 app.include_router(alerts.router)
 app.include_router(ae_dataset.router)
+app.include_router(intelligence.router)
 
 
 @app.get("/")

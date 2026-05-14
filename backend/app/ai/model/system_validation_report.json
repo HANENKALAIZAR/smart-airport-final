@@ -1,0 +1,337 @@
+{
+  "validation_timestamp": "2026-05-13T16:33:05.054362+00:00",
+  "overall_status": "READY",
+  "ml_reliability": "invalid \u2014 below baseline",
+  "checks_total": 53,
+  "checks_passed": 53,
+  "checks_failed": 0,
+  "critical_failures": [],
+  "all_checks": [
+    {
+      "check": "FEAT-01: training == inference feature set",
+      "passed": true,
+      "critical": true,
+      "detail": "train=['airline_enc', 'arr_airport_enc', 'dep_airport_enc', 'dep_hour', 'distance_km', 'duration_min', 'is_weekend'] | infer=['airline_enc', 'arr_airport_enc', 'dep_airport_enc', 'dep_hour', 'distance_km', 'duration_min', 'is_weekend']"
+    },
+    {
+      "check": "FEAT-02: training == feature_engineering output set",
+      "passed": true,
+      "critical": true,
+      "detail": "train=['airline_enc', 'arr_airport_enc', 'dep_airport_enc', 'dep_hour', 'distance_km', 'duration_min', 'is_weekend'] | FE=['airline_enc', 'arr_airport_enc', 'dep_airport_enc', 'dep_hour', 'distance_km', 'duration_min', 'is_weekend']"
+    },
+    {
+      "check": "FEAT-03: no leakage columns in feature set",
+      "passed": true,
+      "critical": true,
+      "detail": "clean"
+    },
+    {
+      "check": "FEAT-04: feature count == 7",
+      "passed": true,
+      "critical": false,
+      "detail": "count=7"
+    },
+    {
+      "check": "ART-01: delay_prediction_model.pkl exists",
+      "passed": true,
+      "critical": true,
+      "detail": "C:\\Users\\gzhan\\Downloads\\smart-airport-postgres-feature-cleaned-up-the-chaos\\backend\\app\\ai\\model\\delay_prediction_model.pkl"
+    },
+    {
+      "check": "ART-02: ae_evaluation_report.json exists",
+      "passed": true,
+      "critical": false,
+      "detail": "C:\\Users\\gzhan\\Downloads\\smart-airport-postgres-feature-cleaned-up-the-chaos\\backend\\app\\ai\\model\\ae_evaluation_report.json"
+    },
+    {
+      "check": "ART-03: encoder airline_encoder.pkl",
+      "passed": true,
+      "critical": true,
+      "detail": "C:\\Users\\gzhan\\Downloads\\smart-airport-postgres-feature-cleaned-up-the-chaos\\backend\\app\\ai\\model\\encoders\\airline_encoder.pkl"
+    },
+    {
+      "check": "ART-03: encoder dep_airport_encoder.pkl",
+      "passed": true,
+      "critical": true,
+      "detail": "C:\\Users\\gzhan\\Downloads\\smart-airport-postgres-feature-cleaned-up-the-chaos\\backend\\app\\ai\\model\\encoders\\dep_airport_encoder.pkl"
+    },
+    {
+      "check": "ART-03: encoder arr_airport_encoder.pkl",
+      "passed": true,
+      "critical": true,
+      "detail": "C:\\Users\\gzhan\\Downloads\\smart-airport-postgres-feature-cleaned-up-the-chaos\\backend\\app\\ai\\model\\encoders\\arr_airport_encoder.pkl"
+    },
+    {
+      "check": "ART-04: model loads and has predict()",
+      "passed": true,
+      "critical": true,
+      "detail": "Pipeline"
+    },
+    {
+      "check": "ART-05: sklearn Pipeline has scaler + regressor",
+      "passed": true,
+      "critical": false,
+      "detail": "steps=['scaler', 'regressor']"
+    },
+    {
+      "check": "RPT-01: report readable",
+      "passed": true,
+      "critical": false,
+      "detail": "OK"
+    },
+    {
+      "check": "RPT-02: report feature columns match current definition",
+      "passed": true,
+      "critical": true,
+      "detail": "report=['airline_enc', 'arr_airport_enc', 'dep_airport_enc', 'dep_hour', 'distance_km', 'duration_min', 'is_weekend'] | current=['airline_enc', 'arr_airport_enc', 'dep_airport_enc', 'dep_hour', 'distance_km', 'duration_min', 'is_weekend']"
+    },
+    {
+      "check": "RPT-03: MAE present",
+      "passed": true,
+      "critical": false,
+      "detail": "mae=14.06"
+    },
+    {
+      "check": "RPT-04: RMSE present",
+      "passed": true,
+      "critical": false,
+      "detail": "rmse=21.92"
+    },
+    {
+      "check": "RPT-05: R\u00b2 present",
+      "passed": true,
+      "critical": false,
+      "detail": "r2=-0.2627"
+    },
+    {
+      "check": "RPT-06: MAE in realistic range [0, 300]",
+      "passed": true,
+      "critical": false,
+      "detail": "mae=14.06"
+    },
+    {
+      "check": "RPT-07: time-based split used",
+      "passed": true,
+      "critical": true,
+      "detail": "split_method='time-based (no random shuffle)'"
+    },
+    {
+      "check": "RPT-08: leakage check passed",
+      "passed": true,
+      "critical": true,
+      "detail": "PASSED \u2014 delay_minutes not in feature set"
+    },
+    {
+      "check": "RPT-09: baseline values present",
+      "passed": true,
+      "critical": false,
+      "detail": "{'route_mae': 13.66, 'airline_mae': 15.57, 'global_mean_delay': 21.74}"
+    },
+    {
+      "check": "RPT-10: verdict present",
+      "passed": true,
+      "critical": false,
+      "detail": "recommendation=improve features \u2014 model below baseline"
+    },
+    {
+      "check": "API: routers/ml.py has route '/train-ae'",
+      "passed": true,
+      "critical": false,
+      "detail": "found"
+    },
+    {
+      "check": "API: routers/ml.py has route '/train-ae/report'",
+      "passed": true,
+      "critical": false,
+      "detail": "found"
+    },
+    {
+      "check": "API: routers/intelligence.py has route '/fetch-future'",
+      "passed": true,
+      "critical": false,
+      "detail": "found"
+    },
+    {
+      "check": "API: routers/intelligence.py has route '/compute-stats'",
+      "passed": true,
+      "critical": false,
+      "detail": "found"
+    },
+    {
+      "check": "API: routers/intelligence.py has route '/predict-future'",
+      "passed": true,
+      "critical": false,
+      "detail": "found"
+    },
+    {
+      "check": "API: routers/intelligence.py has route '/run-all'",
+      "passed": true,
+      "critical": false,
+      "detail": "found"
+    },
+    {
+      "check": "API: routers/intelligence.py has route '/future-schedules'",
+      "passed": true,
+      "critical": false,
+      "detail": "found"
+    },
+    {
+      "check": "API: routers/intelligence.py has route '/stats'",
+      "passed": true,
+      "critical": false,
+      "detail": "found"
+    },
+    {
+      "check": "API: routers/ae_dataset.py has route '/rebuild-features'",
+      "passed": true,
+      "critical": false,
+      "detail": "found"
+    },
+    {
+      "check": "API: routers/ae_dataset.py has route '/health'",
+      "passed": true,
+      "critical": false,
+      "detail": "found"
+    },
+    {
+      "check": "DB-01: ae_flight_dataset has rows",
+      "passed": true,
+      "critical": true,
+      "detail": "total=299 usable=271"
+    },
+    {
+      "check": "DB-02: ae_flight_dataset.dep_hour null-free",
+      "passed": true,
+      "critical": false,
+      "detail": "null=0/271 (0.0%)"
+    },
+    {
+      "check": "DB-02: ae_flight_dataset.distance_km null-free",
+      "passed": true,
+      "critical": false,
+      "detail": "null=0/271 (0.0%)"
+    },
+    {
+      "check": "DB-02: ae_flight_dataset.airline_enc null-free",
+      "passed": true,
+      "critical": false,
+      "detail": "null=0/271 (0.0%)"
+    },
+    {
+      "check": "DB-02: ae_flight_dataset.dep_airport_enc null-free",
+      "passed": true,
+      "critical": false,
+      "detail": "null=0/271 (0.0%)"
+    },
+    {
+      "check": "DB-02: ae_flight_dataset.arr_airport_enc null-free",
+      "passed": true,
+      "critical": false,
+      "detail": "null=0/271 (0.0%)"
+    },
+    {
+      "check": "DB-03: ae_flight_dataset no duplicates",
+      "passed": true,
+      "critical": false,
+      "detail": "duplicate groups=0"
+    },
+    {
+      "check": "DB-04: delay_minutes in realistic range",
+      "passed": true,
+      "critical": false,
+      "detail": "min=0 max=315"
+    },
+    {
+      "check": "DB-05: ae_future_schedules exists",
+      "passed": true,
+      "critical": false,
+      "detail": "total=189 predicted=69"
+    },
+    {
+      "check": "DB-06: ae_future_schedules has no delay labels (separation)",
+      "passed": true,
+      "critical": false,
+      "detail": "delay_minutes column absent from AEFutureSchedule schema"
+    },
+    {
+      "check": "DB-07: ae_aviation_stats populated",
+      "passed": true,
+      "critical": false,
+      "detail": "rows=234 types=['airline', 'airport', 'hour', 'route']"
+    },
+    {
+      "check": "INT-01: route stats present",
+      "passed": true,
+      "critical": false,
+      "detail": "120 rows"
+    },
+    {
+      "check": "INT-02: airline stats present",
+      "passed": true,
+      "critical": false,
+      "detail": "46 rows"
+    },
+    {
+      "check": "INT-03: airport stats present",
+      "passed": true,
+      "critical": false,
+      "detail": "45 rows"
+    },
+    {
+      "check": "INT-04: hour stats present",
+      "passed": true,
+      "critical": false,
+      "detail": "23 rows"
+    },
+    {
+      "check": "INT-05: reliability scores in [0.0, 1.0]",
+      "passed": true,
+      "critical": false,
+      "detail": "out-of-range=0"
+    },
+    {
+      "check": "INT-06: delay_rate values in [0.0, 1.0]",
+      "passed": true,
+      "critical": false,
+      "detail": "out-of-range=0"
+    },
+    {
+      "check": "INT-07: avg_delay_min non-negative",
+      "passed": true,
+      "critical": false,
+      "detail": "negative avg_delay rows=0"
+    },
+    {
+      "check": "SIM-02: predictions generated (10/10)",
+      "passed": true,
+      "critical": false,
+      "detail": "predicted=10 null_inputs=0"
+    },
+    {
+      "check": "SIM-03: no null feature vectors entering model",
+      "passed": true,
+      "critical": false,
+      "detail": "null_inputs=0/10"
+    },
+    {
+      "check": "SIM-04: predictions in range [0, 480 min]",
+      "passed": true,
+      "critical": false,
+      "detail": "out_of_range=0/10"
+    },
+    {
+      "check": "SIM-05: cross-validation against historical actuals (10 matches)",
+      "passed": true,
+      "critical": false,
+      "detail": "[{\"flight_number\": \"TK662\", \"dep_iata\": \"TUN\", \"arr_iata\": \"IST\", \"predicted_delay\": 40.9, \"confidence\": 0.6, \"actual_delay\": 43, \"error\": 2.1}, {\"flight_number\": \"NJ412\", \"dep_iata\": \"TUN\", \"arr_iata\": \"MJI\", \"predicted_delay\": 8.6, \"confidence\": 0.75, \"actual_delay\": 0, \"error\": 8.6}, {\"flight_number\": \"Q46012\", \"dep_iata\": \"TUN\", \"arr_iata\": \"BEN\", \"predicted_delay\": 34.5, \"confidence\": 0.6, \"actual_delay\": 39, \"error\": 4.5}, {\"flight_number\": \"NB102\", \"dep_iata\": \"TUN\", \"arr_iata\": \"BEN\", \"predicted_delay\": 34.5, \"confidence\": 0.6, \"actual_delay\": 39, \"error\": 4.5}, {\"flight_number\": \"BJ232\", \"dep_iata\": \"TUN\", \"arr_iata\": \"BER\", \"predicted_delay\": 17.9, \"confidence\": 0.75, \"actual_delay\": 14, \"error\": 3.9}]"
+    }
+  ],
+  "data_flow": {
+    "historical_api": "Aviation Edge timetable \u2192 ae_future_schedules",
+    "stats_pipeline": "ae_flight_dataset \u2192 ae_aviation_stats",
+    "training_pipeline": "ae_flight_dataset \u2192 train_ae_dataset.py \u2192 delay_prediction_model.pkl",
+    "inference_pipeline": "ae_future_schedules \u2192 feature_engineering.py \u2192 model.predict()",
+    "separation_enforced": true
+  },
+  "verdict": "trustworthy"
+}

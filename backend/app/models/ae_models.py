@@ -199,3 +199,229 @@ class AESyncLog(Base):
         Index("idx_ae_synclog_airport", "airport_iata"),
         Index("idx_ae_synclog_started", "started_at"),
     )
+
+
+# ── 4. Future Schedules (prediction-only, NO labels) ──────────────────────────
+
+class AEFutureSchedule(Base):
+    """
+    Upcoming flights sourced from the Aviation Edge timetable.
+    Purpose: prediction input ONLY — this table never contains delay labels.
+
+    Populated by: app/ai/historical_ingestion.py  (fetch_future_schedules)
+    Consumed by:  app/ai/future_predictions.py    (predict_future_flights)
+
+    Strict separation rule: data here must NEVER flow into ae_flight_dataset
+    or be used for model training.
+    """
+    __tablename__ = "ae_future_schedules"
+
+    id               = Column(BigInteger, primary_key=True, autoincrement=True)
+
+    # Identity
+    flight_number    = Column(String(12), nullable=False, index=True)
+    airline_iata     = Column(String(3),  nullable=True,  index=True)
+    airline_name     = Column(String(120),nullable=True)
+
+    # Route
+    dep_iata         = Column(String(3),  nullable=True,  index=True)
+    arr_iata         = Column(String(3),  nullable=True,  index=True)
+    dep_airport      = Column(String(120),nullable=True)
+    arr_airport      = Column(String(120),nullable=True)
+
+    # Schedule
+    scheduled_departure = Column(DateTime, nullable=True, index=True)
+    scheduled_arrival   = Column(DateTime, nullable=True)
+    flight_date         = Column(Date,     nullable=True, index=True)
+    day_of_week         = Column(SmallInteger, nullable=True)   # 0=Mon
+    dep_hour            = Column(SmallInteger, nullable=True)   # 0-23
+
+    # Pre-computed features (filled at insert time via feature_engineering.py)
+    distance_km      = Column(Integer, nullable=True)
+    duration_min     = Column(Integer, nullable=True)
+    is_weekend       = Column(SmallInteger, nullable=True, default=0)
+    airline_enc      = Column(Integer, nullable=True)
+    dep_airport_enc  = Column(Integer, nullable=True)
+    arr_airport_enc  = Column(Integer, nullable=True)
+
+    # Prediction output (written after model.predict())
+    predicted_delay_min = Column(Integer,  nullable=True)
+    confidence          = Column(Float,    nullable=True)
+    predicted_at        = Column(TIMESTAMP,nullable=True)
+    model_version       = Column(String(40), nullable=True)
+
+    # Metadata
+    source           = Column(String(20), nullable=False, default="aviation_edge")
+    fetched_at       = Column(TIMESTAMP,  nullable=False, default=_now)
+    airport_iata     = Column(String(3),  nullable=True, index=True)  # Tunisian airport queried
+
+    __table_args__ = (
+        Index(
+            "idx_ae_future_dedup",
+            "flight_number", "flight_date", "dep_iata", "arr_iata",
+            unique=True,
+        ),
+        Index("idx_ae_future_dep_date",   "scheduled_departure"),
+        Index("idx_ae_future_airline",    "airline_iata"),
+        Index("idx_ae_future_predicted",  "predicted_at"),
+    )
+
+
+# ── 5. Aviation Stats (aggregated intelligence from historical data) ───────────
+
+class AEAviationStats(Base):
+    """
+    Computed statistics from historical flight data.
+    One row per (stat_type, entity_key) pair — updated by historical_ingestion.py.
+
+    stat_type values:
+      'route'    → entity_key = 'TUN→CDG'  (dep_iata→arr_iata)
+      'airline'  → entity_key = 'TU'        (airline IATA)
+      'airport'  → entity_key = 'TUN'       (airport IATA)
+      'hour'     → entity_key = '14'        (departure hour 0-23)
+
+    This table feeds feature enrichment for both ae_flight_dataset and
+    ae_future_schedules without touching the core training logic.
+    """
+    __tablename__ = "ae_aviation_stats"
+
+    id              = Column(Integer, primary_key=True, autoincrement=True)
+
+    stat_type       = Column(String(20),  nullable=False, index=True)
+    entity_key      = Column(String(40),  nullable=False, index=True)
+
+    # Delay statistics
+    avg_delay_min   = Column(Float, nullable=True)
+    median_delay_min= Column(Float, nullable=True)
+    p90_delay_min   = Column(Float, nullable=True)   # 90th-percentile delay
+    delay_rate      = Column(Float, nullable=True)   # fraction of flights > 15 min late
+    on_time_rate    = Column(Float, nullable=True)   # fraction on time (≤ 15 min)
+
+    # Reliability
+    reliability_score = Column(Float, nullable=True)  # 0.0-1.0
+
+    # Volume
+    total_flights   = Column(Integer, nullable=True)
+    sample_days     = Column(Integer, nullable=True)   # distinct days in the sample
+
+    # Context
+    computed_at     = Column(TIMESTAMP, nullable=False, default=_now)
+    data_from_date  = Column(Date, nullable=True)
+    data_to_date    = Column(Date, nullable=True)
+
+    __table_args__ = (
+        Index(
+            "idx_ae_stats_dedup",
+            "stat_type", "entity_key",
+            unique=True,
+        ),
+        Index("idx_ae_stats_type", "stat_type"),
+    )
+
+
+# ── 6. Model Version Registry ──────────────────────────────────────────────────
+
+class AEModelVersion(Base):
+    """
+    Immutable registry of every trained model version.
+    One row per training run — never deleted, only superseded.
+
+    Promotion rule: is_active may be True for exactly ONE row at a time.
+    The promotion controller sets is_active=False on the previous champion
+    before setting is_active=True on the challenger (only if it wins).
+    """
+    __tablename__ = "ae_model_versions"
+
+    id               = Column(Integer,    primary_key=True, autoincrement=True)
+    model_version    = Column(String(40), nullable=False, unique=True, index=True)
+    trained_at       = Column(TIMESTAMP,  nullable=False, default=_now)
+    model_path       = Column(String(300),nullable=True)  # absolute path to .pkl
+
+    # Dataset info at training time
+    dataset_size     = Column(Integer, nullable=True)   # total rows
+    train_rows       = Column(Integer, nullable=True)
+    test_rows        = Column(Integer, nullable=True)
+    cutoff_date      = Column(Date,    nullable=True)
+
+    # Model metrics (on held-out test set)
+    mae              = Column(Float,   nullable=True)
+    rmse             = Column(Float,   nullable=True)
+    r2_score         = Column(Float,   nullable=True)
+
+    # Baseline comparison
+    baseline_route_mae   = Column(Float, nullable=True)
+    baseline_airline_mae = Column(Float, nullable=True)
+    improvement_pct      = Column(Float, nullable=True)  # vs best baseline
+    better_than_baseline = Column(Boolean, nullable=True, default=False)
+
+    # Promotion
+    is_active        = Column(Boolean,   nullable=False, default=False, index=True)
+    promoted_at      = Column(TIMESTAMP, nullable=True)
+    retired_at       = Column(TIMESTAMP, nullable=True)
+    promotion_reason = Column(String(200), nullable=True)
+    rejection_reason = Column(String(200), nullable=True)
+
+    # Drift at time of promotion decision
+    drift_severity   = Column(String(20), nullable=True)   # none|low|medium|high|critical
+    drift_mae_delta  = Column(Float,      nullable=True)   # MAE change vs previous champion
+
+    notes            = Column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("idx_ae_model_active",  "is_active"),
+        Index("idx_ae_model_trained", "trained_at"),
+    )
+
+
+# ── 7. Prediction Logs (long-term monitoring dataset) ─────────────────────────
+
+class AEPredictionLog(Base):
+    """
+    Every prediction produced by the active model, stored for drift monitoring.
+
+    actual_delay_min is populated later when the flight completes and
+    ae_flight_dataset is updated — this is the reconciliation step.
+    prediction_error = actual_delay_min - predicted_delay_min (signed).
+    """
+    __tablename__ = "ae_prediction_logs"
+
+    id                   = Column(BigInteger, primary_key=True, autoincrement=True)
+
+    # Identity
+    flight_number        = Column(String(12),  nullable=False, index=True)
+    airline_iata         = Column(String(3),   nullable=True,  index=True)
+    dep_iata             = Column(String(3),   nullable=True,  index=True)
+    arr_iata             = Column(String(3),   nullable=True)
+    route                = Column(String(10),  nullable=True,  index=True)  # 'TUN→CDG'
+
+    # Prediction
+    predicted_delay_min  = Column(Integer,  nullable=False)
+    confidence           = Column(Float,    nullable=True)
+    prediction_timestamp = Column(TIMESTAMP,nullable=False, default=_now, index=True)
+    model_version        = Column(String(40), nullable=True, index=True)
+
+    # Actuals (backfilled when flight completes)
+    actual_delay_min     = Column(Integer,  nullable=True)
+    prediction_error     = Column(Float,    nullable=True)  # actual - predicted
+    reconciled_at        = Column(TIMESTAMP,nullable=True)
+
+    # Feature snapshot at prediction time (for drift analysis)
+    dep_hour             = Column(SmallInteger, nullable=True)
+    is_weekend           = Column(SmallInteger, nullable=True)
+    distance_km          = Column(Integer,      nullable=True)
+    duration_min         = Column(Integer,      nullable=True)
+    airline_enc          = Column(Integer,      nullable=True)
+    dep_airport_enc      = Column(Integer,      nullable=True)
+    arr_airport_enc      = Column(Integer,      nullable=True)
+
+    # Source (future_schedule | real_time | batch)
+    prediction_source    = Column(String(20), nullable=True, default="future_schedule")
+
+    __table_args__ = (
+        Index("idx_ae_predlog_flight",   "flight_number"),
+        Index("idx_ae_predlog_ts",       "prediction_timestamp"),
+        Index("idx_ae_predlog_model",    "model_version"),
+        Index("idx_ae_predlog_airline",  "airline_iata"),
+        Index("idx_ae_predlog_route",    "route"),
+        Index("idx_ae_predlog_reconcil", "reconciled_at"),
+    )

@@ -354,13 +354,10 @@ const fr = {
     alerts_aircraft: 'Avion',
     alerts_timeline: '📋 Chronologie du vol',
     alerts_get_alerts: 'Recevoir des alertes pour',
-    alerts_notification_desc: 'Choisissez comment vous souhaitez recevoir les notifications sur les changements de porte, les retards et l\'état d\'embarquement :',
-    alerts_sms: 'Notifications SMS',
     alerts_email: 'Notifications Email',
-    alerts_push: 'Notifications Push',
     alerts_subscribe_btn: '🔔 S\'abonner aux alertes',
     alerts_subscribed_title: 'Vous êtes abonné !',
-    alerts_subscribed_text: 'Nous vous notifierons par {channels} pour toute mise à jour du vol {flight}.',
+    alerts_subscribed_text: 'Nous vous notifierons par email pour toute mise à jour du vol {flight}.',
 
     /* Événements de la chronologie */
     alerts_checkin_opens: 'Ouverture de l\'enregistrement',

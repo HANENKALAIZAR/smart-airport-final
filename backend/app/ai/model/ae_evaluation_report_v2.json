@@ -1,0 +1,386 @@
+{
+  "version": "ae-v2-20260515-1314",
+  "trained_at": "2026-05-15T13:14:29.981715+00:00",
+  "notes": "CLI run \u2014 v2",
+  "training_mode": "multi_model_v2",
+  "metrics": {
+    "mae": 18.33,
+    "rmse": 28.19,
+    "r2": 0.0399
+  },
+  "dataset": {
+    "total_rows": 586,
+    "train_rows": 468,
+    "test_rows": 118,
+    "cutoff_date": "2026-05-14",
+    "feature_columns": [
+      "dep_hour",
+      "is_weekend",
+      "distance_km",
+      "duration_min",
+      "airline_enc",
+      "dep_airport_enc",
+      "arr_airport_enc",
+      "route_avg_delay_hist",
+      "airline_avg_delay_hist",
+      "hour_avg_delay_hist",
+      "route_flight_count",
+      "airline_flight_count",
+      "airport_departure_count",
+      "dep_month",
+      "dep_day_of_week"
+    ]
+  },
+  "winner": {
+    "name": "catboost",
+    "mae": 18.33,
+    "rmse": 28.19,
+    "r2": 0.0399,
+    "beats_baseline": true,
+    "improvement_pct": 5.3,
+    "cv_mae_mean": 13.44,
+    "cv_mae_std": 3.35
+  },
+  "all_models": [
+    {
+      "name": "xgboost",
+      "mae": 20.25,
+      "rmse": 31.02,
+      "r2": -0.1625,
+      "beats_baseline": false,
+      "improvement_pct": -4.7,
+      "cv_mae_mean": 13.96,
+      "cv_mae_std": 3.31,
+      "cv_folds": 5
+    },
+    {
+      "name": "lightgbm",
+      "mae": 21.32,
+      "rmse": 31.31,
+      "r2": -0.1847,
+      "beats_baseline": false,
+      "improvement_pct": -10.2,
+      "cv_mae_mean": 15.36,
+      "cv_mae_std": 4.12,
+      "cv_folds": 5
+    },
+    {
+      "name": "catboost",
+      "mae": 18.33,
+      "rmse": 28.19,
+      "r2": 0.0399,
+      "beats_baseline": true,
+      "improvement_pct": 5.3,
+      "cv_mae_mean": 13.44,
+      "cv_mae_std": 3.35,
+      "cv_folds": 5
+    },
+    {
+      "name": "random_forest",
+      "mae": 20.71,
+      "rmse": 30.41,
+      "r2": -0.1172,
+      "beats_baseline": false,
+      "improvement_pct": -7.0,
+      "cv_mae_mean": 13.27,
+      "cv_mae_std": 2.73,
+      "cv_folds": 5
+    }
+  ],
+  "baseline": {
+    "route_mae": 22.4,
+    "airline_mae": 19.35,
+    "global_mean_delay": 25.24
+  },
+  "calibration": {
+    "pct_within_5min": 28.8,
+    "pct_within_15min": 52.5,
+    "pct_within_30min": 85.6
+  },
+  "airline_errors": [
+    {
+      "group": "NO",
+      "n": 1,
+      "mae": 55.46,
+      "mean_actual": 97.0,
+      "mean_pred": 41.54
+    },
+    {
+      "group": "E4",
+      "n": 1,
+      "mae": 38.07,
+      "mean_actual": 1.0,
+      "mean_pred": 39.07
+    },
+    {
+      "group": "BJ",
+      "n": 18,
+      "mae": 33.31,
+      "mean_actual": 36.03,
+      "mean_pred": 27.06
+    },
+    {
+      "group": "QR",
+      "n": 1,
+      "mae": 32.17,
+      "mean_actual": 1.0,
+      "mean_pred": 33.17
+    },
+    {
+      "group": "WY",
+      "n": 1,
+      "mae": 31.72,
+      "mean_actual": 1.0,
+      "mean_pred": 32.72
+    },
+    {
+      "group": "WB",
+      "n": 1,
+      "mae": 31.12,
+      "mean_actual": 1.0,
+      "mean_pred": 32.12
+    },
+    {
+      "group": "AT",
+      "n": 1,
+      "mae": 28.76,
+      "mean_actual": 13.0,
+      "mean_pred": 41.76
+    },
+    {
+      "group": "X3",
+      "n": 2,
+      "mae": 28.71,
+      "mean_actual": 15.0,
+      "mean_pred": 43.71
+    },
+    {
+      "group": "GW",
+      "n": 2,
+      "mae": 27.97,
+      "mean_actual": 45.0,
+      "mean_pred": 32.91
+    },
+    {
+      "group": "TU",
+      "n": 19,
+      "mae": 26.44,
+      "mean_actual": 21.63,
+      "mean_pred": 36.31
+    },
+    {
+      "group": "O8",
+      "n": 1,
+      "mae": 24.31,
+      "mean_actual": 25.0,
+      "mean_pred": 0.69
+    },
+    {
+      "group": "RJ",
+      "n": 1,
+      "mae": 20.15,
+      "mean_actual": 0.0,
+      "mean_pred": 20.15
+    },
+    {
+      "group": "EK",
+      "n": 1,
+      "mae": 19.67,
+      "mean_actual": 48.0,
+      "mean_pred": 28.33
+    },
+    {
+      "group": "PU",
+      "n": 1,
+      "mae": 18.99,
+      "mean_actual": 21.0,
+      "mean_pred": 39.99
+    },
+    {
+      "group": "AF",
+      "n": 2,
+      "mae": 17.48,
+      "mean_actual": 12.0,
+      "mean_pred": 29.48
+    },
+    {
+      "group": "UG",
+      "n": 7,
+      "mae": 15.54,
+      "mean_actual": 10.43,
+      "mean_pred": 13.36
+    },
+    {
+      "group": "YL",
+      "n": 1,
+      "mae": 15.0,
+      "mean_actual": 5.0,
+      "mean_pred": 20.0
+    },
+    {
+      "group": "LG",
+      "n": 1,
+      "mae": 14.9,
+      "mean_actual": 8.0,
+      "mean_pred": 22.9
+    },
+    {
+      "group": "UZ",
+      "n": 4,
+      "mae": 14.82,
+      "mean_actual": 13.75,
+      "mean_pred": 3.81
+    },
+    {
+      "group": "",
+      "n": 6,
+      "mae": 14.78,
+      "mean_actual": 12.83,
+      "mean_pred": 19.11
+    }
+  ],
+  "route_errors": [
+    {
+      "group": "ALG->TUN",
+      "n": 1,
+      "mae": 141.65,
+      "mean_actual": 173.3,
+      "mean_pred": 31.65
+    },
+    {
+      "group": "MIR->FRA",
+      "n": 1,
+      "mae": 71.74,
+      "mean_actual": 95.0,
+      "mean_pred": 23.26
+    },
+    {
+      "group": "LYS->TUN",
+      "n": 1,
+      "mae": 55.46,
+      "mean_actual": 97.0,
+      "mean_pred": 41.54
+    },
+    {
+      "group": "MRS->TUN",
+      "n": 4,
+      "mae": 44.65,
+      "mean_actual": 43.82,
+      "mean_pred": 20.21
+    },
+    {
+      "group": "MIR->WAW",
+      "n": 1,
+      "mae": 38.07,
+      "mean_actual": 1.0,
+      "mean_pred": 39.07
+    },
+    {
+      "group": "DJE->FRA",
+      "n": 2,
+      "mae": 35.48,
+      "mean_actual": 10.0,
+      "mean_pred": 45.48
+    },
+    {
+      "group": "GVA->TUN",
+      "n": 2,
+      "mae": 34.74,
+      "mean_actual": 41.0,
+      "mean_pred": 75.74
+    },
+    {
+      "group": "DOH->TUN",
+      "n": 3,
+      "mae": 31.67,
+      "mean_actual": 1.0,
+      "mean_pred": 32.67
+    },
+    {
+      "group": "MIR->NCE",
+      "n": 1,
+      "mae": 30.25,
+      "mean_actual": 15.0,
+      "mean_pred": 45.25
+    },
+    {
+      "group": "MIR->GDN",
+      "n": 1,
+      "mae": 29.7,
+      "mean_actual": 0.0,
+      "mean_pred": 29.7
+    },
+    {
+      "group": "MIR->DJE",
+      "n": 2,
+      "mae": 29.5,
+      "mean_actual": 0.0,
+      "mean_pred": 29.5
+    },
+    {
+      "group": "IST->TUN",
+      "n": 3,
+      "mae": 29.35,
+      "mean_actual": 52.67,
+      "mean_pred": 23.32
+    },
+    {
+      "group": "CMN->TUN",
+      "n": 2,
+      "mae": 28.7,
+      "mean_actual": 36.5,
+      "mean_pred": 36.56
+    },
+    {
+      "group": "DJE->BOD",
+      "n": 1,
+      "mae": 28.55,
+      "mean_actual": 0.0,
+      "mean_pred": 28.55
+    },
+    {
+      "group": "MIR->LEJ",
+      "n": 1,
+      "mae": 26.86,
+      "mean_actual": 0.0,
+      "mean_pred": 26.86
+    },
+    {
+      "group": "BEN->TUN",
+      "n": 3,
+      "mae": 25.9,
+      "mean_actual": 19.67,
+      "mean_pred": 16.93
+    },
+    {
+      "group": "MRS->DJE",
+      "n": 1,
+      "mae": 25.5,
+      "mean_actual": 38.0,
+      "mean_pred": 12.5
+    },
+    {
+      "group": "FRA->DJE",
+      "n": 1,
+      "mae": 24.83,
+      "mean_actual": 20.0,
+      "mean_pred": 44.83
+    },
+    {
+      "group": "MIR->BER",
+      "n": 1,
+      "mae": 22.82,
+      "mean_actual": 0.0,
+      "mean_pred": 22.82
+    },
+    {
+      "group": "LGW->TUN",
+      "n": 1,
+      "mae": 22.41,
+      "mean_actual": 42.0,
+      "mean_pred": 64.41
+    }
+  ],
+  "leakage_check": "PASSED \u2014 delay_minutes not in feature set",
+  "split_method": "time-based (no random shuffle)"
+}

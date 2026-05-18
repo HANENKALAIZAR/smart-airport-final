@@ -10,7 +10,7 @@
 const { getFlightData, getAlternativeFlights } = require('./flightService');
 const { searchHotelsNearAirport } = require('./hotelsService');
 const { AIRPORTS } = require('./airports');
-const { chat } = require('./llm');
+const { chat, getProvider } = require('./llm');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AIRPORT NAME → IATA  (natural-language detection)
@@ -62,7 +62,10 @@ CORE RULES
 - NEVER say "I'm here to help", "I'm happy to help", or any filler phrase
 - Keep replies SHORT — max 2 sentences for general replies
 - NEVER invent flights, times, prices, or compensation amounts
+- If 'Rebooking' is listed in the rights data, explicitly mention: "Based on this delay/cancellation, you may be eligible for rerouting or an alternative flight at no extra cost."
+- NEVER claim they have free rerouting or compensation unless the rights data explicitly includes it.
 - If data is unavailable, say so honestly and tell the passenger where to verify
+- If hotel data_source is 'static_offline_fallback', explicitly state that live data is unavailable and you are showing saved/offline recommendations.
 - ALWAYS reply in the EXACT language the passenger used
 - For Arabic: mirror the passenger's style (Darija or MSA) exactly
 - Off-topic questions: one sentence redirect only
@@ -84,62 +87,6 @@ LANGUAGE
 - Never switch Arabic script/dialect from what the passenger used
 
 ═══════════════════════════════════════
-JSON SHAPES
-═══════════════════════════════════════
-
-// GENERAL
-{ "type": "general", "message": "1–2 sentences.", "actions": ["Flight Status", "Passenger Rights", "Airport Services"] }
-
-// FLIGHT STATUS
-{
-  "type": "flight",
-  "flight": {
-    "number": "TU741", "airline": "Tunisair",
-    "route": { "from": "Tunis (TUN)", "to": "Paris (CDG)" },
-    "status": "delayed", "delay": "3h 00min",
-    "scheduledDeparture": "14:30", "scheduledArrival": "17:10"
-  },
-  "message": null,
-  "suggestion": "Go to the Tunisair desk in Terminal 1 for assistance.",
-  "actions": ["Passenger Rights", "Alternative Flights", "Airport Services"],
-  "isFollowUp": false
-}
-
-// PASSENGER RIGHTS
-{
-  "type": "rights", "message": "Your rights for this delay:",
-  "rights": [
-    { "title": "Meal voucher", "detail": "Free meal after 2h — request at airline desk" },
-    { "title": "Hotel", "detail": "Free accommodation if overnight stay required" },
-    { "title": "Refund", "detail": "Full refund if delay exceeds 5 hours" },
-    { "title": "Compensation", "detail": "€250–€600 if departing from EU airport" }
-  ],
-  "suggestion": "Go to the airline desk now. Keep all receipts.",
-  "actions": ["Alternative Flights", "Airport Services", "Flight Status"],
-  "isFollowUp": false
-}
-
-// ALTERNATIVE FLIGHTS
-{
-  "type": "flights", "message": "Available flights on this route:",
-  "flights": [
-    { "flightNumber": "TU743", "departure": "18:30", "arrival": "21:10", "airline": "Tunisair", "status": "On time" }
-  ],
-  "suggestion": "Book at the airline desk.",
-  "actions": ["Passenger Rights", "Airport Services", "Flight Status"],
-  "isFollowUp": false
-}
-
-// AIRPORT SERVICES
-{
-  "type": "services", "message": "Available at your airport:",
-  "services": [{ "name": "Café Express", "location": "Terminal 2", "detail": "Open 05:00–23:00" }],
-  "suggestion": "Visit the information desk for live updates.",
-  "actions": ["Alternative Flights", "Passenger Rights", "Flight Status"],
-  "isFollowUp": false
-}
-
-═══════════════════════════════════════
 STRICT JSON RULES
 ═══════════════════════════════════════
 - Output ONLY the JSON object — starts with { ends with }
@@ -155,28 +102,30 @@ STRICT JSON RULES
 const sessions = new Map();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// INTENT DETECTION  (EN / FR / AR keywords)
+// MULTI-INTENT DETECTION  (EN / FR / AR keywords)
 // ─────────────────────────────────────────────────────────────────────────────
-function detectIntent(message) {
+function detectIntents(message) {
   const padMsg = ` ${message.toLowerCase().replace(/[.,!?:'"()\[\]{}]/g, ' ')} `;
+  const intents = new Set();
 
-  if (padMsg.match(/ (alternative|other flight|rebook|autre vol|vol alternatif|rebooker|طيران بديل|رحلة أخرى|vol de remplacement) /))
-    return 'alternative_flights';
+  if (padMsg.match(/ (alternative|other flight|another flight|rebook|autre vol|vol alternatif|rebooker|طيران بديل|رحلة أخرى|vol de remplacement) /))
+    intents.add('alternative_flights');
 
   if (padMsg.match(/ (right|rights|compensation|refund|indemnisation|remboursement|droit|droits|حق|حقوق|تعويض|استرداد) /))
-    return 'passenger_rights';
+    intents.add('passenger_rights');
 
   if (padMsg.match(/ (hotel|hotels|hôtel|hôtels|accommodation|hébergement|sleep|dormir|room|rooms|chambre|chambres|motel|hostel|stay|فندق|إقامة|نام|غرفة|نزل) /))
-    return 'hotels';
+    intents.add('hotels');
 
   if (padMsg.match(/ (service|services|lounge|food|restaurant|wifi|shop|boutique|nourriture|salon|مطعم|خدمة|صالة|eat|manger) /))
-    return 'airport_services';
+    intents.add('airport_services');
 
   if (padMsg.match(/[a-z]{2,3}\s?\d{1,4}/i) ||
     padMsg.match(/ (flight|flights|vol|vols|delay|retard|status|statut|track|تأخير|وضع|delayed|cancelled|annulé|رحلة|رحلات) /))
-    return 'flight_status';
+    intents.add('flight_status');
 
-  return 'general';
+  if (intents.size === 0) intents.add('general');
+  return Array.from(intents);
 }
 
 function extractFlightNumber(message) {
@@ -232,10 +181,10 @@ const tools = {
     };
   },
 
-  async getPassengerRights(delayMinutes, routeType = 'tunisia_to_eu') {
-    console.log(`🔧 [TOOL] getPassengerRights: ${delayMinutes}min, ${routeType}`);
+  async getPassengerRights(delayMinutes, routeType = 'tunisia_to_eu', status = 'delayed') {
+    console.log(`🔧 [TOOL] getPassengerRights: ${delayMinutes}min, ${routeType}, ${status}`);
     const { getPassengerRights: getRights } = require('./rights');
-    const data = getRights(routeType, delayMinutes, 'delayed');
+    const data = getRights(routeType, delayMinutes, status);
     const rights = [];
 
     if (data.compensation?.length > 0 && data.compensation[0].amount) {
@@ -328,6 +277,7 @@ async function runAgent(message, history = [], conversationId = 'default', selec
       flightNumber: null, status: null, origin: null,
       destination: null, delayMinutes: null, airline: null,
       selectedAirport: null, route_type: null,
+      pendingIntents: null,
     };
     let conversationHistory = sessions.get(conversationId + '_history') || [];
 
@@ -344,7 +294,18 @@ async function runAgent(message, history = [], conversationId = 'default', selec
 
     // Priority 3: flight number from message
     const flightMatch = message.match(/([A-Z]{2,3})\s?(\d{1,4})/i);
-    if (flightMatch) session.flightNumber = (flightMatch[1] + flightMatch[2]).toUpperCase();
+    if (flightMatch) {
+        const newFn = (flightMatch[1] + flightMatch[2]).toUpperCase();
+        if (newFn !== session.flightNumber) {
+            console.log(`🆕 [Session] New flight: ${newFn} (was: ${session.flightNumber || 'none'})`);
+            session.flightNumber = newFn;
+            session.status = null;
+            session.delayMinutes = 0;
+            session.airline = null;
+            session.origin = null;
+            session.destination = null;
+        }
+    }
 
     sessions.set(conversationId, session);
 
@@ -357,23 +318,35 @@ async function runAgent(message, history = [], conversationId = 'default', selec
       console.log(`🧹 [Session] Cleared ${conversationId}`);
     }, 30 * 60 * 1000));
 
-    // ── Intent ────────────────────────────────────────────────────────────────
-    let intent = detectIntent(message);
+    // ── Intents ────────────────────────────────────────────────────────────────
+    let intents = detectIntents(message);
 
-    if (session.pendingIntent && mentionedAirport) {
-      intent = session.pendingIntent;
-      session.pendingIntent = null;
+    if (intents.includes('alternative_flights') && !intents.includes('passenger_rights')) {
+      intents.push('passenger_rights');
+    }
+
+    if (session.pendingIntents && mentionedAirport) {
+      intents = [...new Set([...intents, ...session.pendingIntents])];
+      session.pendingIntents = null;
       sessions.set(conversationId, session);
     }
 
-    console.log(`🎯 [Intent] ${intent}`);
+    console.log(`🎯 [Intents] ${intents.join(', ')}`);
 
-    const noFlightNeeded = ['hotels', 'airport_services', 'passenger_rights', 'general'];
+    // ── Missing Context Checks ─────────────────────────────────────────────────
+    const needsFlight = intents.includes('alternative_flights') || 
+                        (intents.includes('flight_status') && intents.length === 1);
+    const needsAirportOnly = intents.some(i => ['hotels', 'airport_services'].includes(i)) && !needsFlight;
 
-    if (!flightMatch && !session.flightNumber && !noFlightNeeded.includes(intent)) {
+    if (needsFlight && !session.flightNumber) {
+      let askMsg = 'Please provide your flight number (e.g. TU741, AF1083) so I can assist you with your flight details.';
+      if (intents.includes('alternative_flights')) {
+        askMsg = 'To find relevant alternative flights and check your rights, please provide your current or original flight number (e.g. TU741, AF1083).';
+      }
+      
       const ask = {
         type: 'general',
-        message: 'Please provide your flight number (e.g. TU741, AF1083) so I can look it up.',
+        message: askMsg,
         actions: ['Airport Services', 'Passenger Rights'],
       };
       conversationHistory.push({ role: 'user', content: message });
@@ -381,186 +354,112 @@ async function runAgent(message, history = [], conversationId = 'default', selec
       sessions.set(conversationId + '_history', conversationHistory);
       return {
         reply: JSON.stringify(ask),
-        updatedHistory: [...history,
-        { role: 'user', content: message },
-        { role: 'assistant', content: JSON.stringify(ask) }],
+        updatedHistory: [...history, { role: 'user', content: message }, { role: 'assistant', content: JSON.stringify(ask) }],
+      };
+    }
+
+    if (needsAirportOnly && !session.selectedAirport && !session.origin) {
+      const ask = {
+        type: "general",
+        message: "Which airport are you inquiring about?",
+        actions: ["Tunis-Carthage", "Djerba", "Monastir", "Enfidha"],
+      };
+      session.pendingIntents = intents;
+      sessions.set(conversationId, session);
+      conversationHistory.push({ role: 'user', content: message });
+      conversationHistory.push({ role: 'assistant', content: JSON.stringify(ask) });
+      sessions.set(conversationId + '_history', conversationHistory);
+      return {
+        reply: JSON.stringify(ask),
+        updatedHistory: [...history, { role: 'user', content: message }, { role: 'assistant', content: JSON.stringify(ask) }],
       };
     }
 
     conversationHistory = [...conversationHistory.slice(-9), { role: 'user', content: message }];
 
-    // ── Tool execution → directReply (skips LLM) ─────────────────────────────
-    let toolData = null;
-    let directReply = null;
+    // ── Tool execution ─────────────────────────────────────────────────────────
+    let toolData = {};
+    let hasToolData = false;
 
-    if (intent === 'flight_status') {
-      const newFn = extractFlightNumber(message);
-      if (newFn && newFn !== session.flightNumber) {
-        console.log(`🆕 [Session] New flight: ${newFn} (was: ${session.flightNumber || 'none'})`);
-        session.flightNumber = newFn;
-        session.status = null;
-        session.delayMinutes = 0;
-        session.airline = null;
-        session.origin = null;
-        session.destination = null;
-        sessions.set(conversationId, session);
+    // Flight Status
+    if (intents.includes('flight_status') && session.flightNumber) {
+      const res = await tools.getFlightStatus(session.flightNumber, session);
+      if (res.type === 'general') {
+        toolData.flight_error = res.message;
+      } else {
+        toolData.flight = res;
       }
-      const fn = session.flightNumber;
-      if (fn) {
-        toolData = await tools.getFlightStatus(fn, session);
-        sessions.set(conversationId, session);
-        if (toolData?.type === 'general') directReply = toolData;
-      }
+      hasToolData = true;
+      sessions.set(conversationId, session);
+    }
 
-    } else if (intent === 'passenger_rights') {
+    // Alternative flights
+    if (intents.includes('alternative_flights') && session.origin && session.destination) {
+      const res = await tools.getAlternativeFlights(session.origin, session.destination);
+      if (res.type === 'general') {
+        toolData.flights_error = res.message;
+      } else {
+        toolData.flights = res.flights;
+      }
+      hasToolData = true;
+    }
+
+    // Hotels
+    if (intents.includes('hotels')) {
+      const code = session.selectedAirport || session.origin;
+      if (code) {
+        const { AIRPORTS } = require('./airports');
+        const airport = AIRPORTS[code];
+        if (airport) {
+          const hotels = await searchHotelsNearAirport(code);
+          if (hotels && hotels.length > 0) {
+            toolData.hotels = hotels.map(h => ({ 
+              name: h.name, 
+              stars: Math.round(h.rating || 3), 
+              pricePerNight: h.pricePerNight || 150,
+              data_source: h.source === 'google_places' ? 'live_google_places' : 'static_offline_fallback'
+            }));
+          } else {
+            toolData.hotels = (airport.hotels_nearby || []).map(h => ({ name: h.name, stars: h.stars || 3, pricePerNight: parseInt(h.approx_price) || 120 }));
+          }
+          hasToolData = true;
+        }
+      }
+    }
+
+    // Services
+    if (intents.includes('airport_services')) {
+      const code = session.selectedAirport || session.origin;
+      if (code) {
+        const sd = await tools.getAirportServices(code);
+        if (sd?.services) toolData.services = sd.services;
+        hasToolData = true;
+      }
+    }
+
+    // Rights
+    if (intents.includes('passenger_rights')) {
       const { getRouteType } = require('./airports');
       const dep = session.origin || session.selectedAirport || 'TUN';
       const arr = session.destination || 'CDG';
       const airCode = session.airline ? session.airline.substring(0, 2) : 'TU';
       const routeType = session.route_type || getRouteType(dep, arr, airCode);
       const mins = session.delayMinutes || 180;
-
-      const rd = await tools.getPassengerRights(mins, routeType);
-      if (rd?.rights) {
-        directReply = {
-          type: 'rights',
-          message: 'Your rights for this delay:',
-          rights: rd.rights,
-          suggestion: rd.lawNote || 'Contact your airline desk for assistance.',
-          actions: ['Alternative Flights', 'Airport Services', 'Flight Status'],
-          isFollowUp: history.length > 2,
-        };
-      }
-
-    } else if (intent === 'airport_services') {
-      const code = session.selectedAirport || session.origin;
-      if (!code) {
-        session.pendingIntent = 'airport_services';
-        sessions.set(conversationId, session);
-        directReply = {
-          type: "general",
-          message: "Which airport are you inquiring about?",
-          actions: ["Tunis-Carthage", "Djerba", "Monastir", "Enfidha"],
-          isFollowUp: history.length > 2
-        };
-      } else {
-        session.pendingIntent = null;
-        sessions.set(conversationId, session);
-        const sd = await tools.getAirportServices(code);
-        if (sd?.services) {
-        const { AIRPORTS } = require('./airports');
-        directReply = {
-          type: 'services',
-          message: `Available at ${AIRPORTS[code]?.name || code}:`,
-          services: sd.services,
-          suggestion: 'Visit the information desk for live updates.',
-          actions: ['Alternative Flights', 'Passenger Rights', 'Flight Status'],
-          isFollowUp: history.length > 2,
-        }
-      }
+      const status = session.status || 'delayed';
+      const rd = await tools.getPassengerRights(mins, routeType, status);
+      if (rd?.rights) toolData.rights = rd.rights;
+      hasToolData = true;
     }
 
-    } else if (intent === 'hotels') {
+    // ── LLM call ─────────────────────────────────────────────────────────────
+    const hasRebooking = toolData.rights && toolData.rights.some(r => r.title === 'Rebooking');
+    const reroutingPrompt = hasRebooking 
+      ? 'CRITICAL INSTRUCTION: You MUST explicitly mention: "Based on this delay/cancellation, you may be eligible for rerouting or an alternative flight at no extra cost."'
+      : 'CRITICAL INSTRUCTION: Do NOT mention free rerouting, free alternative flights, or compensation, as the current flight status does not guarantee it.';
 
-      const code = session.selectedAirport || session.origin;
-
-      if (!code) {
-        session.pendingIntent = 'hotels';
-        sessions.set(conversationId, session);
-        directReply = {
-          type: "general",
-          message: "Which airport do you need a hotel near?",
-          actions: ["Tunis-Carthage", "Djerba", "Monastir", "Enfidha"],
-          isFollowUp: history.length > 2
-        };
-      } else {
-        session.pendingIntent = null;
-        sessions.set(conversationId, session);
-        const { AIRPORTS } = require('./airports');
-        const airport = AIRPORTS[code];
-
-        if (!airport) {
-          directReply = {
-            type: "general",
-            message: "Airport not found.",
-            actions: ["Airport Services"]
-          };
-        } else {
-
-        // Call hotels service (Google Places with static fallback)
-        const hotels = await searchHotelsNearAirport(code);
-
-        if (hotels && hotels.length > 0) {
-          directReply = {
-            type: "hotels",
-            message: `Hotels near ${airport.name}:`,
-            hotels: hotels.map(hotel => ({
-              name: hotel.name,
-              stars: Math.round(hotel.rating || 3),
-              pricePerNight: hotel.pricePerNight || 150
-            })),
-            suggestion: hotels[0]?.source === 'google_places'
-              ? 'Book directly via the hotel website or Google Maps.'
-              : 'Live hotel data unavailable. Showing saved airport hotel list.',
-            actions: ["Passenger Rights", "Alternative Flights", "Airport Services"],
-            isFollowUp: history.length > 2
-          };
-
-        } else {
-
-          // Final fallback: static airport hotels
-          directReply = {
-            type: "hotels",
-            message: `Hotels near ${airport.name}:`,
-            hotels: (airport.hotels_nearby || []).map(h => ({
-              name: h.name,
-              stars: h.stars || 3,
-              pricePerNight: parseInt(h.approx_price) || 120
-            })),
-            suggestion: "Live hotel data unavailable. Showing saved airport hotel list.",
-            actions: ["Passenger Rights", "Alternative Flights", "Airport Services"],
-            isFollowUp: history.length > 2
-          };
-        }
-      }
-    }
-    } else if (intent === 'alternative_flights') {
-      if (session.origin && session.destination) {
-        toolData = await tools.getAlternativeFlights(session.origin, session.destination);
-        // toolData.type === 'general' means no alternatives found
-        if (toolData?.type === 'general') directReply = toolData;
-      } else {
-        directReply = {
-          type: 'general',
-          message: 'Please share your flight number so I can find alternatives on your route.',
-          actions: ['Flight Status'],
-        };
-      }
-    }
-
-    // ── Return direct reply ───────────────────────────────────────────────────
-    if (directReply) {
-      conversationHistory.push({ role: 'assistant', content: JSON.stringify(directReply) });
-      sessions.set(conversationId + '_history', conversationHistory);
-      return {
-        reply: JSON.stringify(directReply),
-        updatedHistory: [...history,
-        { role: 'user', content: message },
-        { role: 'assistant', content: JSON.stringify(directReply) }],
-      };
-    }
-
-    // ── LLM call (general intent or flight_status/alternatives with data) ─────
-    const SHAPES = {
-      flight_status:
-        `{"type":"flight","flight":{"number":"TU741","airline":"Tunisair","route":{"from":"Tunis (TUN)","to":"Paris (CDG)"},"status":"delayed","delay":"3h 0min","scheduledDeparture":"14:30","scheduledArrival":"17:10"},"message":null,"suggestion":"Go to the Tunisair desk.","actions":["Passenger Rights","Alternative Flights","Airport Services"],"isFollowUp":false}`,
-      alternative_flights:
-        `{"type":"flights","message":"Available flights on this route:","flights":[{"flightNumber":"TU743","departure":"18:30","arrival":"21:10","airline":"Tunisair","status":"On time"}],"suggestion":"Book at the airline desk.","actions":["Passenger Rights","Airport Services","Flight Status"],"isFollowUp":false}`,
-    };
-
-    const systemMessage = toolData
-      ? `${SYSTEM_PROMPT}\n\n═══════════════════════════════════════\nCURRENT REQUEST CONTEXT\n═══════════════════════════════════════\nRespond ONLY with a valid JSON object matching the shape for intent "${intent}".\nREAL DATA TO USE (Do not invent anything else): ${JSON.stringify(toolData)}\nRequired shape: ${SHAPES[intent] || ''}`
-      : SYSTEM_PROMPT;
+    const systemMessage = hasToolData
+      ? `${SYSTEM_PROMPT}\n\n═══════════════════════════════════════\nCURRENT REQUEST CONTEXT\n═══════════════════════════════════════\n${reroutingPrompt}\n\nRespond ONLY with a valid JSON object. Combine the following data into your JSON response using the SAME top-level keys. Write a conversational response addressing all queries in the 'message' field.\nREAL DATA TO USE (Do not invent anything else):\n${JSON.stringify(toolData)}\n\nYour response format must EXACTLY match this shape (exclude blocks if you have no data for them):\n{\n  "type": "multi",\n  "message": "Conversational reply covering all intents",\n  "flight": {...},\n  "rights": [...],\n  "flights": [...],\n  "hotels": [...],\n  "services": [...],\n  "suggestion": "Helpful next step.",\n  "actions": ["Action 1", "Action 2"],\n  "isFollowUp": false\n}`
+      : `${SYSTEM_PROMPT}\n\nYour response format must EXACTLY match this shape:\n{\n  "type": "general",\n  "message": "Conversational reply",\n  "actions": ["Flight Status", "Passenger Rights", "Airport Services"],\n  "isFollowUp": false\n}`;
 
     const llmMessages = [{ role: 'system', content: systemMessage }, ...conversationHistory];
     const llmResponse = await chat(llmMessages, []);
@@ -579,46 +478,18 @@ async function runAgent(message, history = [], conversationId = 'default', selec
 
     } catch (_) {
       console.log(`❌ [LLM] JSON parse failed — building fallback`);
-
-      if (toolData && intent === 'flight_status') {
-        parsed = {
-          type: 'flight',
-          flight: {
-            number: toolData.flightNumber,
-            airline: toolData.airline,
-            route: {
-              from: toolData.route.split(' → ')[0],
-              to: toolData.route.split(' → ')[1],
-            },
-            status: toolData.status,
-            delay: toolData.delay > 0
-              ? `${Math.floor(toolData.delay / 60)}h ${String(toolData.delay % 60).padStart(2, '0')}min`
-              : null,
-            scheduledDeparture: toolData.scheduledDeparture,
-            scheduledArrival: toolData.scheduledArrival,
-          },
-          message: null,
-          suggestion: null,
+      parsed = {
+          type: 'multi',
+          message: toolData.flight_error || toolData.flights_error || 'Here is the information I found:',
+          flight: toolData.flight,
+          rights: toolData.rights,
+          flights: toolData.flights,
+          hotels: toolData.hotels,
+          services: toolData.services,
+          suggestion: 'Check with the airline desk for more details.',
           actions: ['Passenger Rights', 'Alternative Flights', 'Airport Services'],
           isFollowUp: history.length > 2,
-        };
-      } else if (toolData && intent === 'alternative_flights' && toolData.flights) {
-        parsed = {
-          type: 'flights',
-          message: 'Available flights on this route:',
-          flights: toolData.flights,
-          suggestion: 'Book at the airline desk.',
-          actions: ['Passenger Rights', 'Airport Services', 'Flight Status'],
-          isFollowUp: history.length > 2,
-        };
-      } else {
-        parsed = {
-          type: 'general',
-          message: llmResponse.reply,
-          actions: [],
-          isFollowUp: history.length > 2,
-        };
-      }
+      };
     }
 
     conversationHistory.push({ role: 'assistant', content: JSON.stringify(parsed) });

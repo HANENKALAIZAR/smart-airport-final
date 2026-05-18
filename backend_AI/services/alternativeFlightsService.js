@@ -1,7 +1,15 @@
 /**
- * Alternative Flights Service
- * Provides rebooking suggestions and alternative flight options
- * Uses mock data for demonstration, would integrate with airline APIs in production
+ * alternativeFlightsService.js
+ * ─────────────────────────────────────────────────────────────────────────────
+ * ⚠️  DEAD CODE — THIS FILE IS NOT IMPORTED ANYWHERE.
+ *
+ * The real alternative flights service is in flightService.js:
+ *   const { getAlternativeFlights } = require('./flightService');
+ *
+ * This file contains hardcoded mock flight tables and Math.random() calls.
+ * It MUST NOT be imported or used in production. Kept only as a reference.
+ * DO NOT USE.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
 const { getFlightData } = require('./flightService');

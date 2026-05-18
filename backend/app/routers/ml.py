@@ -28,88 +28,47 @@ router = APIRouter(prefix="/api/ml", tags=["ML"])
 
 @router.post("/train")
 def trigger_training(
-    background_tasks: BackgroundTasks,
-    notes: str = Query(default="", description="Optional notes for this training run"),
     _user: User = Depends(require_super_admin),
 ):
     """
-    Trigger a full model training run as a background task.
-    Requires super_admin JWT.
+    ⚠️  Automatic retraining only.
+    Manual training has been disabled. The model is retrained automatically
+    by APScheduler every 7 days, or sooner if drift / dataset-growth thresholds
+    are met (see GET /api/ml/retraining-status for the live policy state).
 
-    The job: loads flight_features from DB → time-based split →
-    trains XGBoost classifier + regressor → builds SHAP explainer →
-    archives old model → saves new artifacts → writes model_metrics row →
-    hot-reloads prediction service.
+    Consultation endpoints:
+      GET /api/ml/retraining-status  — current policy evaluation
+      GET /api/ml/dashboard          — active model KPIs
+      GET /api/ml/models             — full model version history
+      GET /api/ml/drift-status       — live drift report
     """
-    def _train_task():
-        from app.database import SessionLocal
-        from app.ai.train_from_db import train_from_db
-        db2 = SessionLocal()
-        try:
-            result = train_from_db(db2, notes=notes)
-            logger.info(f"Background training result: {result.get('status')} — {result.get('version', '')}")
-        except Exception as e:
-            logger.exception(f"Background training failed: {e}")
-        finally:
-            db2.close()
-
-    background_tasks.add_task(_train_task)
-    return {
-        "status":  "training_started",
-        "message": "Training job queued. Check GET /api/ml/metrics for results.",
-        "triggered_by": _user.email,
-    }
+    raise HTTPException(
+        status_code=405,
+        detail=(
+            "Manual training is disabled. Retraining runs automatically via APScheduler. "
+            "Check GET /api/ml/retraining-status to see when the next run will be triggered."
+        ),
+    )
 
 
 # ── AE Dataset Training (production-grade, no leakage) ───────────────────
 
 @router.post("/train-ae")
 def trigger_ae_training(
-    background_tasks: BackgroundTasks,
-    notes: str = Query(default="", description="Optional notes for this training run"),
     _user: User = Depends(require_super_admin),
 ):
     """
-    Train a flight delay regression model from ae_flight_dataset.
-
-    Pipeline:
-      1. Load ae_flight_dataset (usable rows only, already FE-processed)
-      2. Leakage guard — blocks if forbidden columns detected
-      3. Time-based split (older → train, newer → test)
-      4. Compute baselines: route-mean and airline-mean delay
-      5. Train XGBoost regressor via sklearn Pipeline
-      6. Evaluate: MAE, RMSE, R², per-airline error, per-route error
-      7. Real-world validation sample (100 test flights with predicted vs actual)
-      8. Model verdict: better than baseline? recommend deploy/retrain/improve
-      9. Save model → app/ai/model/delay_prediction_model.pkl
-     10. Save JSON report → app/ai/model/ae_evaluation_report.json
-
-    Check GET /api/ml/train-ae/report for results after completion.
-    Requires super_admin JWT.
+    ⚠️  Automatic retraining only.
+    Manual AE training has been disabled. Use GET /api/ml/retraining-status
+    to inspect the current retraining policy state.
     """
-    def _task():
-        from app.database import SessionLocal
-        from app.ai.train_ae_dataset import train_ae_model
-        db2 = SessionLocal()
-        try:
-            result = train_ae_model(db2, notes=notes)
-            logger.info(
-                f"[AE Train] status={result.get('status')} "
-                f"version={result.get('version', '')} "
-                f"mae={result.get('metrics', {}).get('mae', 'n/a')}"
-            )
-        except Exception as e:
-            logger.exception(f"[AE Train] Failed: {e}")
-        finally:
-            db2.close()
-
-    background_tasks.add_task(_task)
-    return {
-        "status":       "training_started",
-        "message":      "AE training job queued. Check GET /api/ml/train-ae/report for results.",
-        "triggered_by": _user.email,
-        "note":         "Run POST /api/ae-dataset/rebuild-features first if encodings are stale.",
-    }
+    raise HTTPException(
+        status_code=405,
+        detail=(
+            "Manual AE training is disabled. Retraining runs automatically via APScheduler. "
+            "Check GET /api/ml/retraining-status for the live policy evaluation."
+        ),
+    )
 
 
 @router.get("/train-ae/report")
@@ -128,6 +87,47 @@ def get_ae_report(_user: User = Depends(require_admin)):
             status_code=404,
             detail="No AE evaluation report found. Run POST /api/ml/train-ae first.",
         )
+    try:
+        return json.loads(report_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not read report: {e}")
+
+
+# ── V2 Training (multi-model + rolling features) ───────────────────────────
+
+@router.post("/train-v2")
+def trigger_v2_training(
+    _user: User = Depends(require_super_admin),
+):
+    """
+    ⚠️  Automatic retraining only.
+    Manual V2 training has been disabled. The full multi-model V2 pipeline
+    (XGBoost, RandomForest, LightGBM, CatBoost + rolling features) is
+    triggered automatically by the APScheduler auto_retrain job.
+
+    Consultation endpoints:
+      GET /api/ml/retraining-status  — current policy evaluation
+      GET /api/ml/train-v2/report    — latest V2 evaluation report
+      GET /api/ml/dashboard          — active model KPIs
+      GET /api/ml/models             — full model version history
+    """
+    raise HTTPException(
+        status_code=405,
+        detail=(
+            "Manual V2 training is disabled. Retraining is fully automatic via APScheduler. "
+            "Check GET /api/ml/retraining-status to see when the next run will be triggered."
+        ),
+    )
+
+
+@router.get("/train-v2/report")
+def get_v2_report(_user: User = Depends(require_admin)):
+    """Return the latest V2 evaluation report."""
+    import json
+    from pathlib import Path
+    report_path = Path(__file__).resolve().parents[2] / "ai" / "model" / "ae_evaluation_report_v2.json"
+    if not report_path.exists():
+        raise HTTPException(status_code=404, detail="No V2 evaluation report found.")
     try:
         return json.loads(report_path.read_text(encoding="utf-8"))
     except Exception as e:
@@ -205,7 +205,105 @@ def trigger_batch_predictions(
     return {"status": "batch_started", "message": "Batch prediction job queued."}
 
 
+@router.post("/predict")
+def predict_from_ae_features(
+    features: dict,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_admin),
+):
+    """
+    Real-time inference using delay_prediction_model.pkl (AE model).
+
+    Accepts JSON body with the 7 required feature columns:
+      dep_hour, is_weekend, distance_km, duration_min,
+      airline_enc, dep_airport_enc, arr_airport_enc
+    And metadata columns for rolling features:
+      dep_iata, arr_iata, airline_iata, flight_date
+
+    Returns: predicted_delay_min, confidence, risk_level, model_path, features_used.
+    """
+    from pathlib import Path
+    import numpy as np
+    from app.ml.rolling_features import get_rolling_features_for_inference
+
+    FEATURE_COLUMNS = [
+        "dep_hour", "is_weekend", "distance_km", "duration_min",
+        "airline_enc", "dep_airport_enc", "arr_airport_enc",
+    ]
+    ROLLING_COLS = [
+        "route_avg_delay_hist", "airline_avg_delay_hist", "hour_avg_delay_hist",
+        "route_flight_count", "airline_flight_count", "airport_departure_count",
+        "dep_month", "dep_day_of_week",
+    ]
+    FORBIDDEN = {"delay_minutes", "is_delayed", "dep_delay_min", "arr_delay_min"}
+
+    model_path = Path(settings.MODEL_DIR).parent / "ai" / "model" / "delay_prediction_model.pkl"
+    if not model_path.exists():
+        model_path = Path(__file__).resolve().parents[1] / "ai" / "model" / "delay_prediction_model.pkl"
+
+    if not model_path.exists():
+        raise HTTPException(
+            status_code=503,
+            detail=f"Model not found. Run POST /api/ml/train-v2 first. Tried: {model_path}",
+        )
+
+    forbidden_in_request = set(features.keys()) & FORBIDDEN
+    if forbidden_in_request:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Leakage detected — forbidden features present: {forbidden_in_request}",
+        )
+
+    try:
+        import joblib
+        model = joblib.load(str(model_path))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Model load failed: {e}")
+
+    # Build base vector
+    base_values = [float(features.get(col, 0.0)) for col in FEATURE_COLUMNS]
+
+    # Fetch rolling features dynamically
+    rolling = get_rolling_features_for_inference(
+        dep_iata=features.get("dep_iata"),
+        arr_iata=features.get("arr_iata"),
+        airline_iata=features.get("airline_iata"),
+        dep_hour=features.get("dep_hour"),
+        flight_date=features.get("flight_date"),
+        db=db,
+    )
+    rolling_values = [float(rolling.get(k, 0.0)) for k in ROLLING_COLS]
+
+    full_vector = base_values + rolling_values
+    vec = np.array([full_vector], dtype=np.float32)
+
+    try:
+        predicted_delay = float(max(0.0, model.predict(vec)[0]))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Inference failed (check feature dims, V2 expects 15): {e}")
+
+    if predicted_delay < 5:   confidence = 0.92
+    elif predicted_delay < 15: confidence = 0.84
+    elif predicted_delay < 30: confidence = 0.75
+    elif predicted_delay < 60: confidence = 0.65
+    else:                      confidence = 0.55
+
+    risk = "High" if predicted_delay > 30 else ("Medium" if predicted_delay > 10 else "Low")
+
+    features_used = {col: features.get(col, 0.0) for col in FEATURE_COLUMNS}
+    features_used.update(rolling)
+
+    return {
+        "predicted_delay_min": int(round(predicted_delay)),
+        "confidence":          round(confidence, 3),
+        "risk_level":          risk,
+        "model_path":          str(model_path),
+        "features_used":       features_used,
+    }
+
+
 # ── Feature pipeline ──────────────────────────────────────────────────────
+
 
 @router.post("/run-features")
 def trigger_feature_pipeline(

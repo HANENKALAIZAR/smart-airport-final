@@ -42,7 +42,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 logger = logging.getLogger(__name__)
 
 # ── Tunisian airports to query ─────────────────────────────────────────────────
-_TUNISIAN_AIRPORTS = ["TUN", "MIR", "NBE", "DJE", "SFA", "GAF"]
+_TUNISIAN_AIRPORTS = ["TUN", "MIR", "NBE", "DJE"]  # Supported Tunisian airports
 _DIRECTIONS        = ["departure", "arrival"]
 
 

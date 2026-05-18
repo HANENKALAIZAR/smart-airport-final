@@ -64,17 +64,39 @@ def _load_model():
         return None, None
 
 
-def _row_to_vector(row) -> Optional[np.ndarray]:
-    """Build a (1, 7) float32 feature array from an AEFutureSchedule ORM row."""
-    values = []
+def _row_to_vector(row, db) -> Optional[np.ndarray]:
+    """Build a (1, 15) float32 feature array from an AEFutureSchedule ORM row + rolling features."""
+    from app.ml.rolling_features import get_rolling_features_for_inference
+
+    base_values = []
     for col in _FEATURE_COLUMNS:
         v = getattr(row, col, None)
-        values.append(float(v) if v is not None else 0.0)
+        base_values.append(float(v) if v is not None else 0.0)
 
     # Sanity check — all zeros means the row is unprocessed
-    if all(v == 0.0 for v in values):
+    if all(v == 0.0 for v in base_values):
         return None
-    return np.array([values], dtype=np.float32)
+
+    # Fetch rolling features dynamically
+    rolling = get_rolling_features_for_inference(
+        dep_iata=row.dep_iata,
+        arr_iata=row.arr_iata,
+        airline_iata=row.airline_iata,
+        dep_hour=row.dep_hour,
+        flight_date=row.scheduled_departure,
+        db=db,
+    )
+
+    ROLLING_COLS = [
+        "route_avg_delay_hist", "airline_avg_delay_hist", "hour_avg_delay_hist",
+        "route_flight_count", "airline_flight_count", "airport_departure_count",
+        "dep_month", "dep_day_of_week",
+    ]
+
+    rolling_values = [float(rolling.get(k, 0.0)) for k in ROLLING_COLS]
+    full_vector = base_values + rolling_values
+
+    return np.array([full_vector], dtype=np.float32)
 
 
 def _confidence(predicted_delay: float, model) -> float:
@@ -151,7 +173,7 @@ def predict_future_flights(
         batch = rows[i: i + batch_size]
         try:
             for row in batch:
-                vec = _row_to_vector(row)
+                vec = _row_to_vector(row, db)
                 if vec is None:
                     skipped += 1
                     continue

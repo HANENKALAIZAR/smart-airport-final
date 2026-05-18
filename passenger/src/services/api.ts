@@ -326,9 +326,8 @@ export async function getFlights(filters: FlightFilters = {}): Promise<Flight[]>
   const data = await fetchApi<ApiFlightList[]>(`/flights?${params}`);
   if (data) return data.map(adaptFlight);
 
-  // Fallback: importer mock data
-  const { flights } = await import('@/data/mockFlights');
-  return flights as unknown as Flight[];
+  // Backend unavailable — return empty list (honest)
+  return [];
 }
 
 /** Détail d'un vol par ID */
@@ -336,10 +335,8 @@ export async function getFlight(id: string): Promise<Flight | null> {
   const data = await fetchApi<ApiFlightDetail>(`/flights/${id}`);
   if (data) return adaptFlight(data);
 
-  // Fallback mock
-  const { flights } = await import('@/data/mockFlights');
-  const mock = flights.find(f => f.id === id);
-  return mock ? (mock as unknown as Flight) : null;
+  // Backend unavailable — return null (honest)
+  return null;
 }
 
 /** Prédiction ML pour un vol */
@@ -348,22 +345,55 @@ export async function getFlightPrediction(id: string): Promise<FlightPrediction 
   return adaptPrediction(data);
 }
 
-/** Vols en temps réel OpenSky près d'un aéroport */
-export async function getAirportLiveFlights(iata: string) {
-  return fetchApi(`/opensky/airport-flights/${iata}`);
+
+/** Get flights for a Tunisian airport — Aviation Edge, DB-first */
+export async function getPassengerFlights(
+  airport: string,
+  direction: 'departure' | 'arrival' | 'both' = 'both',
+): Promise<Flight[]> {
+  const url = `/passenger/flights?airport=${airport}&direction=${direction}`;
+
+  interface PassengerFlightListResponse {
+    flights: AEFlight[];
+  }
+
+  const data = await fetchApi<PassengerFlightListResponse>(url);
+  if (!data?.flights) return [];
+  return data.flights
+    .filter(f => f.flight_number && f.flight_number !== '—')
+    .map(adaptAEFlight);
 }
 
-/** États aériens dans une bounding box */
-export async function getOpenSkyStates(params?: {
-  lat_min?: number; lat_max?: number;
-  lon_min?: number; lon_max?: number;
-}) {
-  const query = params ? '?' + new URLSearchParams(params as unknown as Record<string, string>).toString() : '';
-  return fetchApi(`/opensky/states${query}`);
+/** Get a single flight by flight number — DB-first, AE fallback */
+export async function getPassengerFlight(flightNumber: string): Promise<Flight | null> {
+  const data = await fetchApi<AEFlight>(`/passenger/flights/${flightNumber}`);
+  if (!data) return null;
+  return adaptAEFlight(data);
 }
-// ── Types AviationStack ───────────────────────────────────────────────────
 
-interface AvStackFlight {
+/** Get ML prediction for a flight (Aviation Edge-based, XGBoost + SHAP) */
+export async function getPassengerPrediction(flightNumber: string): Promise<FlightPrediction | null> {
+  interface PredResponse {
+    prediction: ApiPrediction;
+  }
+  const data = await fetchApi<PredResponse>(`/passenger/flights/${flightNumber}/prediction`);
+  if (!data?.prediction) return null;
+  return adaptPrediction(data.prediction);
+}
+
+/** Get alternative flights on the same route */
+export async function getPassengerAlternatives(flightNumber: string): Promise<Flight[]> {
+  interface AltResponse {
+    alternatives: AEFlight[];
+  }
+  const data = await fetchApi<AltResponse>(`/passenger/flights/${flightNumber}/alternatives`);
+  if (!data?.alternatives) return [];
+  return data.alternatives.map(adaptAEFlight);
+}
+
+// ── Aviation Edge response type (from /api/passenger/* and /api/aviation-edge/*) ────
+
+interface AEFlight {
   id: string;
   flight_number: string;
   status: string;
@@ -375,25 +405,20 @@ interface AvStackFlight {
   dep_terminal: string | null;
   dep_gate: string | null;
   dep_scheduled: string;
-  dep_estimated: string;
+  dep_estimated: string | null;
   dep_actual: string | null;
   arr_iata: string;
   arr_airport: string;
   arr_terminal: string | null;
+  arr_gate: string | null;
   arr_scheduled: string;
   arr_estimated: string | null;
   arr_actual: string | null;
-  delay_minutes: number;
-  aircraft_type: string;
+  delay_minutes: number | null;
+  aircraft_type: string | null;
 }
 
-interface AvStackResponse {
-  airport: string;
-  total: number;
-  flights: AvStackFlight[];
-}
-
-// ── Real lat/lon for distance calculation (separate from map coords) ──────
+// ── Real lat/lon for distance calculation ────────────────────────────────────
 const AIRPORT_LATLON: Record<string, [number, number]> = {
   TUN: [36.851, 10.227], MIR: [35.758, 10.755], NBE: [36.076, 10.439], DJE: [33.875, 10.775],
   CDG: [49.009, 2.548],  ORY: [48.725, 2.360],  LHR: [51.477, -0.461], FRA: [50.033, 8.571],
@@ -402,8 +427,7 @@ const AIRPORT_LATLON: Record<string, [number, number]> = {
   AMM: [31.723, 35.993], CAI: [30.122, 31.406], JED: [21.679, 39.157], CMN: [33.368, -7.590],
   ALG: [36.691, 3.215],  GVA: [46.238, 6.109],  BRU: [50.901, 4.484],  VIE: [48.110, 16.570],
   MUC: [48.354, 11.786], DUS: [51.289, 6.767],  LYS: [45.726, 5.091],  NCE: [43.658, 7.217],
-  MRS: [43.436, 5.215],  MLA: [35.857, 14.477], DSS: [14.670, -17.073],YUL: [45.458, -73.749],
-  BHX: [52.453, -1.748],
+  MRS: [43.436, 5.215],  MLA: [35.857, 14.477], DSS: [14.670, -17.073], YUL: [45.458, -73.749],
 };
 
 function haversineKm(iata1: string, iata2: string): number {
@@ -418,9 +442,9 @@ function haversineKm(iata1: string, iata2: string): number {
   return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-// ── Adaptateur AviationStack → Flight ────────────────────────────────────
+// ── Aviation Edge → Flight adapter ───────────────────────────────────────────
 
-function adaptAvStackFlight(f: AvStackFlight): Flight {
+function adaptAEFlight(f: AEFlight): Flight {
   const depCoords = getCoords(f.dep_iata);
   const arrCoords = getCoords(f.arr_iata);
   const depTime = f.dep_actual ?? f.dep_estimated ?? f.dep_scheduled;
@@ -428,7 +452,6 @@ function adaptAvStackFlight(f: AvStackFlight): Flight {
   const durationMin = Math.round(
     (new Date(f.arr_scheduled).getTime() - new Date(f.dep_scheduled).getTime()) / 60000
   );
-
   const now = Date.now();
   const depTs = new Date(depTime).getTime();
   const arrTs = new Date(arrTime).getTime();
@@ -436,54 +459,37 @@ function adaptAvStackFlight(f: AvStackFlight): Flight {
   if (depTs < now && arrTs > now) progress = Math.min(1, (now - depTs) / (arrTs - depTs));
   else if (arrTs < now) progress = 1;
 
-  // Calculate real great-circle distance between the two airports
   const distanceKm = haversineKm(f.dep_iata, f.arr_iata);
-
-  let status: FlightStatus =
-    f.status === 'in_air' ? 'in_air' :
-      f.status === 'landed' ? 'landed' :
-        f.status === 'cancelled' ? 'cancelled' :
-          f.status === 'boarding' ? 'boarding' :
-            f.status === 'delayed' ? 'delayed' :
-              f.status === 'on_time' ? 'on_time' : 'scheduled';
-
-  // Force 'landed' if the API is lagging and the flight arrived more than 10 minutes ago
-  if ((status === 'scheduled' || status === 'on_time' || status === 'in_air') && arrTs < now - 10 * 60_000) {
-    status = 'landed';
-  }
-
-  // Resolve airport city name from iata code (fallback to raw airport name)
   const depCity = f.dep_airport && f.dep_airport !== f.dep_iata ? f.dep_airport : f.dep_iata;
   const arrCity = f.arr_airport && f.arr_airport !== f.arr_iata ? f.arr_airport : f.arr_iata;
 
+  let status: FlightStatus =
+    f.status === 'in_air'    ? 'in_air'    :
+    f.status === 'landed'    ? 'landed'    :
+    f.status === 'cancelled' ? 'cancelled' :
+    f.status === 'boarding'  ? 'boarding'  :
+    f.status === 'delayed'   ? 'delayed'   :
+    f.status === 'on_time'   ? 'on_time'   : 'scheduled';
+
+  // Auto-resolve landed if AE is lagging
+  if (['scheduled', 'on_time', 'in_air'].includes(status) && arrTs < now - 10 * 60_000) {
+    status = 'landed';
+  }
+
   return {
-    id: f.id,
+    id: f.id || f.flight_number,
     flightNumber: f.flight_number,
     airline: f.airline_name,
     airlineCode: f.airline_iata ?? '??',
-    airlineReliability: 0.85,
-    from: {
-      code: f.dep_iata,
-      city: depCity,
-      name: depCity,
-      country: '',
-      x: depCoords.x,
-      y: depCoords.y,
-    },
-    to: {
-      code: f.arr_iata,
-      city: arrCity,
-      name: arrCity,
-      country: '',
-      x: arrCoords.x,
-      y: arrCoords.y,
-    },
+    airlineReliability: 0, // Not available from Aviation Edge — not displayed
+    from: { code: f.dep_iata, city: depCity, name: depCity, country: '', x: depCoords.x, y: depCoords.y },
+    to:   { code: f.arr_iata, city: arrCity, name: arrCity, country: '', x: arrCoords.x, y: arrCoords.y },
     departureTime: depTime,
     arrivalTime: arrTime,
     scheduledDeparture: f.dep_scheduled,
     scheduledArrival: f.arr_scheduled,
-    actualDeparture: f.dep_actual,
-    actualArrival: f.arr_actual,
+    actualDeparture: f.dep_actual ?? null,
+    actualArrival: f.arr_actual ?? null,
     status,
     gate: (f.direction === 'arrival' ? f.arr_gate : f.dep_gate) ?? undefined,
     terminal: (f.direction === 'arrival' ? f.arr_terminal : f.dep_terminal) ?? undefined,
@@ -492,120 +498,25 @@ function adaptAvStackFlight(f: AvStackFlight): Flight {
     distanceKm,
     progress,
     delayMin: f.delay_minutes ?? null,
-    onTimeHistory: 85,
+    onTimeHistory: 0, // Not available from Aviation Edge
     prediction: null,
     passengerRights: null,
     delayCause: null,
   };
 }
 
-/** Vols AviationStack en temps réel pour un aéroport tunisien */
-export async function getAviationStackFlights(iata: string): Promise<Flight[]> {
-  const data = await fetchApi<AvStackResponse>(`/aviationstack/flights/${iata}`);
-  if (!data) return [];
-  return data.flights
-    .filter(f => f.flight_number && f.flight_number !== '—')
-    .map(adaptAvStackFlight);
-}
-
-/** Vols Aviation Edge — served from DB cache unless forceRefresh=true */
+// ── Legacy: getAviationEdgeFlights kept for admin dashboard compatibility ─────
+// Passenger pages must use getPassengerFlights() instead.
 export async function getAviationEdgeFlights(
   iata: string,
   direction: 'departure' | 'arrival' | 'both' = 'both',
   forceRefresh = false,
 ): Promise<Flight[]> {
   const url = `/aviation-edge/flights/${iata}?direction=${direction}${forceRefresh ? '&refresh=true' : ''}`;
-  const data = await fetchApi<AvStackResponse>(url);
+  interface AEResponse { flights: AEFlight[] }
+  const data = await fetchApi<AEResponse>(url);
   if (!data) return [];
   return data.flights
     .filter(f => f.flight_number && f.flight_number !== '—')
-    .map(adaptAvStackFlight);
-}
-
-
-// ── Types OpenSky Airport ─────────────────────────────────────────────────
-
-export interface OpenSkyAircraft {
-  icao24: string;
-  callsign: string;
-  origin_country: string;
-  lon: number;
-  lat: number;
-  alt: number | null;
-  on_ground: boolean;
-  velocity: number;
-  heading: number;
-  vertical_rate: number | null;
-  last_contact: number;
-  direction: 'arriving' | 'departing' | 'overflying' | 'ground';
-}
-
-export interface OpenSkyAirportResponse {
-  airport: string;
-  aircraft: OpenSkyAircraft[];
-}
-
-/** Adapte un avion OpenSky en Flight pour affichage dans le tableau */
-function adaptOpenSkyFlight(a: OpenSkyAircraft, airportIata: string): Flight {
-  const callsign = a.callsign?.trim() ?? 'UNKNOWN';
-  const isArrival = a.direction === 'arriving';
-  const isGround = a.direction === 'ground' || a.on_ground;
-  const airportCoords = getCoords(airportIata);
-  const lastSeen = new Date(a.last_contact * 1000).toISOString();
-
-
-  const status: FlightStatus =
-    isGround ? 'landed' :
-      a.direction === 'arriving' ? 'in_air' :
-        a.direction === 'departing' ? 'in_air' : 'scheduled';
-
-  return {
-    id: a.icao24,
-    flightNumber: callsign,
-    airline: a.origin_country,
-    airlineCode: callsign.substring(0, 2).toUpperCase(),
-    airlineReliability: 0.85,
-    from: isArrival
-      ? { code: '???', city: a.origin_country, name: a.origin_country, country: a.origin_country, x: 0.5, y: 0.3 }
-      : { code: airportIata, city: airportIata, name: airportIata, country: 'Tunisia', x: airportCoords.x, y: airportCoords.y },
-    to: isArrival
-      ? { code: airportIata, city: airportIata, name: airportIata, country: 'Tunisia', x: airportCoords.x, y: airportCoords.y }
-      : { code: '???', city: 'Destination', name: 'Destination', country: '', x: 0.5, y: 0.3 },
-    departureTime: lastSeen,
-    arrivalTime: lastSeen,
-    scheduledDeparture: lastSeen,
-    scheduledArrival: lastSeen,
-    status,
-    gate: undefined,
-    terminal: undefined,
-    aircraft: 'Unknown',
-    durationMin: 0,
-    distanceKm: 0,
-    progress: isGround ? 1 : 0.5,
-    delayMin: null,
-    onTimeHistory: 85,
-    prediction: null,
-    passengerRights: null,
-    delayCause: null,
-  };
-}
-
-/** Vols temps réel OpenSky pour un aéroport — arrivals + departures */
-export async function getOpenSkyAirportFlights(
-  iata: string,
-  direction: 'departures' | 'arrivals' | 'all' = 'all',
-  radius = 80
-): Promise<Flight[]> {
-  const data = await fetchApi<OpenSkyAirportResponse>(
-    `/opensky/airport-flights/${iata}?radius=${radius}`
-  );
-  if (!data) return [];
-
-  return data.aircraft
-    .filter(a => {
-      if (direction === 'departures') return a.direction === 'departing' || (a.on_ground && a.direction === 'ground');
-      if (direction === 'arrivals') return a.direction === 'arriving' || (a.on_ground && a.direction === 'ground');
-      return a.direction !== 'overflying';
-    })
-    .map(a => adaptOpenSkyFlight(a, iata));
+    .map(adaptAEFlight);
 }

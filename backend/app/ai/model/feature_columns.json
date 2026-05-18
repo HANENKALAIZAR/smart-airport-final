@@ -1,0 +1,9 @@
+[
+  "dep_hour",
+  "is_weekend",
+  "distance_km",
+  "duration_min",
+  "airline_enc",
+  "dep_airport_enc",
+  "arr_airport_enc"
+]

@@ -1,12 +1,12 @@
 {
-  "version": "ae-v20260513-1625",
-  "trained_at": "2026-05-13T16:25:11.350724+00:00",
-  "notes": "CLI run",
+  "version": "ae-v20260517-1548",
+  "trained_at": "2026-05-17T15:48:18.244636+00:00",
+  "notes": "auto-retrain: ['growth:1573 new rows']",
   "dataset": {
-    "total_rows": 271,
-    "train_rows": 216,
-    "test_rows": 55,
-    "cutoff_date": "2026-05-13",
+    "total_rows": 1446,
+    "train_rows": 1156,
+    "test_rows": 290,
+    "cutoff_date": "2026-05-17",
     "feature_columns": [
       "dep_hour",
       "is_weekend",
@@ -19,746 +19,1061 @@
     "target": "delay_minutes"
   },
   "metrics": {
-    "mae": 14.06,
-    "rmse": 21.92,
-    "r2": -0.2627
+    "mae": 19.82,
+    "rmse": 32.73,
+    "r2": -0.0597
   },
   "baseline": {
-    "route_mae": 13.66,
-    "airline_mae": 15.57,
-    "global_mean_delay": 21.74
+    "route_mae": 22.43,
+    "airline_mae": 21.01,
+    "global_mean_delay": 24.78
   },
   "verdict": {
-    "better_than_baseline": false,
-    "improvement_vs_baseline_pct": -2.9,
-    "mae_interpretation": "Good \u2014 predictions within 15 min on average",
+    "better_than_baseline": true,
+    "improvement_vs_baseline_pct": 5.6,
+    "mae_interpretation": "Acceptable \u2014 predictions within 30 min on average",
     "weaknesses": [
       "Low R\u00b2 \u2014 model explains little variance; more features needed",
-      "High error for airlines: ['TK', 'TU', 'AT']"
+      "High error for airlines: ['UG', 'L6', 'EW']"
     ],
-    "recommendation": "improve features \u2014 model below baseline"
+    "recommendation": "retrain \u2014 collect more data"
   },
   "airline_errors": [
     {
-      "group": "TK",
-      "n": 1,
-      "mae": 55.26,
-      "mean_actual": 0.0,
-      "mean_pred": 55.26
-    },
-    {
-      "group": "TU",
-      "n": 5,
-      "mae": 36.65,
-      "mean_actual": 30.6,
-      "mean_pred": 40.73
-    },
-    {
-      "group": "AT",
-      "n": 2,
-      "mae": 31.08,
-      "mean_actual": 42.5,
-      "mean_pred": 22.11
-    },
-    {
-      "group": "BJ",
-      "n": 6,
-      "mae": 26.69,
-      "mean_actual": 24.17,
-      "mean_pred": 12.9
-    },
-    {
-      "group": "T7",
-      "n": 1,
-      "mae": 26.3,
-      "mean_actual": 0.0,
-      "mean_pred": 26.3
-    },
-    {
-      "group": "WT",
-      "n": 1,
-      "mae": 25.5,
-      "mean_actual": 0.0,
-      "mean_pred": 25.5
-    },
-    {
-      "group": "D0",
-      "n": 1,
-      "mae": 23.48,
-      "mean_actual": 9.0,
-      "mean_pred": 32.48
-    },
-    {
-      "group": "YL",
-      "n": 2,
-      "mae": 21.66,
-      "mean_actual": 20.0,
-      "mean_pred": 2.54
-    },
-    {
-      "group": "X3",
-      "n": 1,
-      "mae": 15.97,
-      "mean_actual": 21.0,
-      "mean_pred": 36.97
-    },
-    {
-      "group": "UA",
-      "n": 2,
-      "mae": 8.39,
-      "mean_actual": 21.5,
-      "mean_pred": 29.89
-    },
-    {
-      "group": "HV",
-      "n": 8,
-      "mae": 8.29,
-      "mean_actual": 8.25,
-      "mean_pred": 7.59
-    },
-    {
-      "group": "UZ",
-      "n": 2,
-      "mae": 6.52,
-      "mean_actual": 0.0,
-      "mean_pred": 6.52
-    },
-    {
-      "group": "AZ",
-      "n": 3,
-      "mae": 6.47,
-      "mean_actual": 17.67,
-      "mean_pred": 24.14
-    },
-    {
-      "group": "NJ",
-      "n": 1,
-      "mae": 4.89,
-      "mean_actual": 0.0,
-      "mean_pred": 4.89
-    },
-    {
-      "group": "KQ",
-      "n": 1,
-      "mae": 4.47,
-      "mean_actual": 11.0,
-      "mean_pred": 15.47
-    },
-    {
-      "group": "DL",
-      "n": 6,
-      "mae": 4.11,
-      "mean_actual": 22.83,
-      "mean_pred": 21.99
-    },
-    {
-      "group": "KL",
-      "n": 4,
-      "mae": 3.6,
-      "mean_actual": 23.75,
-      "mean_pred": 22.38
+      "group": "UG",
+      "n": 17,
+      "mae": 47.28,
+      "mean_actual": 42.18,
+      "mean_pred": 13.4
     },
     {
       "group": "L6",
-      "n": 1,
-      "mae": 3.48,
-      "mean_actual": 22.0,
-      "mean_pred": 25.48
+      "n": 2,
+      "mae": 35.68,
+      "mean_actual": 0.0,
+      "mean_pred": 35.68
+    },
+    {
+      "group": "EW",
+      "n": 4,
+      "mae": 34.36,
+      "mean_actual": 62.5,
+      "mean_pred": 28.75
+    },
+    {
+      "group": "TU",
+      "n": 51,
+      "mae": 33.1,
+      "mean_actual": 34.63,
+      "mean_pred": 37.84
     },
     {
       "group": "NO",
-      "n": 1,
-      "mae": 2.93,
-      "mean_actual": 0.0,
-      "mean_pred": 2.93
+      "n": 4,
+      "mae": 31.85,
+      "mean_actual": 34.5,
+      "mean_pred": 66.35
     },
     {
-      "group": "H3",
+      "group": "KU",
+      "n": 2,
+      "mae": 30.27,
+      "mean_actual": 2.5,
+      "mean_pred": 32.77
+    },
+    {
+      "group": "SV",
+      "n": 2,
+      "mae": 30.19,
+      "mean_actual": 2.5,
+      "mean_pred": 32.69
+    },
+    {
+      "group": "EY",
+      "n": 2,
+      "mae": 30.15,
+      "mean_actual": 2.5,
+      "mean_pred": 32.65
+    },
+    {
+      "group": "TO",
       "n": 1,
-      "mae": 2.51,
-      "mean_actual": 3.0,
-      "mean_pred": 5.51
+      "mae": 24.94,
+      "mean_actual": 0.0,
+      "mean_pred": 24.94
+    },
+    {
+      "group": "R5",
+      "n": 4,
+      "mae": 24.16,
+      "mean_actual": 33.75,
+      "mean_pred": 31.29
+    },
+    {
+      "group": "HN",
+      "n": 2,
+      "mae": 24.06,
+      "mean_actual": 10.0,
+      "mean_pred": 34.06
+    },
+    {
+      "group": "X9",
+      "n": 2,
+      "mae": 24.04,
+      "mean_actual": 14.5,
+      "mean_pred": 38.54
+    },
+    {
+      "group": "4X",
+      "n": 2,
+      "mae": 23.87,
+      "mean_actual": 0.0,
+      "mean_pred": 23.87
+    },
+    {
+      "group": "Q4",
+      "n": 1,
+      "mae": 23.43,
+      "mean_actual": 5.0,
+      "mean_pred": 28.43
+    },
+    {
+      "group": "AT",
+      "n": 4,
+      "mae": 22.61,
+      "mean_actual": 9.25,
+      "mean_pred": 31.86
+    },
+    {
+      "group": "NB",
+      "n": 4,
+      "mae": 22.39,
+      "mean_actual": 1.25,
+      "mean_pred": 23.64
+    },
+    {
+      "group": "EK",
+      "n": 2,
+      "mae": 22.12,
+      "mean_actual": 22.5,
+      "mean_pred": 44.62
+    },
+    {
+      "group": "4D",
+      "n": 3,
+      "mae": 21.28,
+      "mean_actual": 30.0,
+      "mean_pred": 25.22
+    },
+    {
+      "group": "KQ",
+      "n": 2,
+      "mae": 19.42,
+      "mean_actual": 36.5,
+      "mean_pred": 17.08
+    },
+    {
+      "group": "",
+      "n": 4,
+      "mae": 19.07,
+      "mean_actual": 24.5,
+      "mean_pred": 40.07
     }
   ],
   "route_errors": [
     {
-      "group": "TUN\u2192NIM",
+      "group": "TUN\u2192TOE",
       "n": 1,
-      "mae": 66.3,
-      "mean_actual": 95.0,
-      "mean_pred": 28.7
+      "mae": 149.16,
+      "mean_actual": 150.0,
+      "mean_pred": 0.84
     },
     {
-      "group": "BCN\u2192TUN",
+      "group": "NIM\u2192TUN",
       "n": 1,
-      "mae": 61.15,
-      "mean_actual": 21.0,
-      "mean_pred": 82.15
+      "mae": 147.09,
+      "mean_actual": 154.0,
+      "mean_pred": 6.91
     },
     {
-      "group": "TUN\u2192IST",
+      "group": "TUN\u2192DJE",
+      "n": 6,
+      "mae": 99.07,
+      "mean_actual": 94.52,
+      "mean_pred": 27.78
+    },
+    {
+      "group": "TLS\u2192TUN",
       "n": 1,
-      "mae": 55.26,
+      "mae": 79.85,
       "mean_actual": 0.0,
-      "mean_pred": 55.26
+      "mean_pred": 79.85
     },
     {
-      "group": "NCE\u2192TUN",
+      "group": "TUN\u2192BRU",
       "n": 2,
-      "mae": 32.56,
-      "mean_actual": 26.0,
-      "mean_pred": 36.84
+      "mae": 78.84,
+      "mean_actual": 87.5,
+      "mean_pred": 13.32
     },
     {
-      "group": "TUN\u2192CMN",
+      "group": "DJE\u2192NTE",
+      "n": 1,
+      "mae": 70.97,
+      "mean_actual": 80.0,
+      "mean_pred": 9.03
+    },
+    {
+      "group": "BRU\u2192TUN",
       "n": 2,
-      "mae": 31.08,
-      "mean_actual": 42.5,
-      "mean_pred": 22.11
+      "mae": 70.82,
+      "mean_actual": 94.0,
+      "mean_pred": 23.18
     },
     {
-      "group": "NTE\u2192TUN",
+      "group": "TUN\u2192LGW",
       "n": 1,
-      "mae": 28.19,
-      "mean_actual": 35.0,
-      "mean_pred": 6.81
-    },
-    {
-      "group": "MRS\u2192TUN",
-      "n": 3,
-      "mae": 25.09,
-      "mean_actual": 3.0,
-      "mean_pred": 28.09
-    },
-    {
-      "group": "TUN\u2192SXB",
-      "n": 1,
-      "mae": 24.31,
-      "mean_actual": 6.0,
-      "mean_pred": 30.31
-    },
-    {
-      "group": "TUN\u2192LYS",
-      "n": 1,
-      "mae": 21.95,
-      "mean_actual": 4.0,
-      "mean_pred": 25.95
-    },
-    {
-      "group": "SXB\u2192TUN",
-      "n": 1,
-      "mae": 19.61,
-      "mean_actual": 27.0,
-      "mean_pred": 7.39
-    },
-    {
-      "group": "TUN\u2192MJI",
-      "n": 3,
-      "mae": 17.38,
-      "mean_actual": 13.33,
-      "mean_pred": 4.64
-    },
-    {
-      "group": "DJE\u2192HAJ",
-      "n": 1,
-      "mae": 15.97,
-      "mean_actual": 21.0,
-      "mean_pred": 36.97
-    },
-    {
-      "group": "TUN\u2192MRS",
-      "n": 1,
-      "mae": 13.0,
-      "mean_actual": 13.0,
-      "mean_pred": 0.0
-    },
-    {
-      "group": "ORY\u2192TUN",
-      "n": 2,
-      "mae": 12.14,
-      "mean_actual": 6.0,
-      "mean_pred": 18.14
-    },
-    {
-      "group": "TUN\u2192CDG",
-      "n": 11,
-      "mae": 9.55,
-      "mean_actual": 20.09,
-      "mean_pred": 14.65
-    },
-    {
-      "group": "FCO\u2192TUN",
-      "n": 4,
-      "mae": 8.39,
-      "mean_actual": 21.5,
-      "mean_pred": 29.89
-    },
-    {
-      "group": "TUN\u2192MAD",
-      "n": 1,
-      "mae": 5.43,
-      "mean_actual": 10.0,
-      "mean_pred": 15.43
-    },
-    {
-      "group": "MJI\u2192TUN",
-      "n": 2,
-      "mae": 4.54,
+      "mae": 68.62,
       "mean_actual": 0.0,
-      "mean_pred": 4.54
+      "mean_pred": 68.62
     },
     {
-      "group": "TUN\u2192ALG",
+      "group": "NTE\u2192DJE",
+      "n": 1,
+      "mae": 61.43,
+      "mean_actual": 85.0,
+      "mean_pred": 23.57
+    },
+    {
+      "group": "MXP\u2192TUN",
       "n": 2,
-      "mae": 3.49,
-      "mean_actual": 0.0,
-      "mean_pred": 3.49
+      "mae": 60.4,
+      "mean_actual": 25.5,
+      "mean_pred": 85.9
+    },
+    {
+      "group": "BLQ\u2192TUN",
+      "n": 2,
+      "mae": 54.44,
+      "mean_actual": 36.0,
+      "mean_pred": 47.05
+    },
+    {
+      "group": "TUN\u2192CKY",
+      "n": 1,
+      "mae": 54.06,
+      "mean_actual": 130.0,
+      "mean_pred": 75.94
+    },
+    {
+      "group": "TUN\u2192BCN",
+      "n": 1,
+      "mae": 50.09,
+      "mean_actual": 90.0,
+      "mean_pred": 39.91
+    },
+    {
+      "group": "MAD\u2192TUN",
+      "n": 1,
+      "mae": 45.46,
+      "mean_actual": 18.0,
+      "mean_pred": 63.46
+    },
+    {
+      "group": "TUN\u2192DUS",
+      "n": 2,
+      "mae": 43.91,
+      "mean_actual": 56.0,
+      "mean_pred": 26.45
     },
     {
       "group": "NKC\u2192TUN",
       "n": 1,
-      "mae": 3.48,
-      "mean_actual": 22.0,
-      "mean_pred": 25.48
+      "mae": 42.91,
+      "mean_actual": 0.0,
+      "mean_pred": 42.91
+    },
+    {
+      "group": "TUN\u2192JED",
+      "n": 3,
+      "mae": 41.73,
+      "mean_actual": 3.0,
+      "mean_pred": 44.73
+    },
+    {
+      "group": "TUN\u2192BLQ",
+      "n": 2,
+      "mae": 34.86,
+      "mean_actual": 43.0,
+      "mean_pred": 27.35
+    },
+    {
+      "group": "HAJ\u2192MIR",
+      "n": 2,
+      "mae": 32.83,
+      "mean_actual": 7.5,
+      "mean_pred": 40.33
+    },
+    {
+      "group": "TUN\u2192DXB",
+      "n": 2,
+      "mae": 32.71,
+      "mean_actual": 17.0,
+      "mean_pred": 49.71
     }
   ],
   "error_histogram": [
     {
       "bin_start": 0.0,
-      "bin_end": 6.6,
+      "bin_end": 15.6,
+      "count": 182
+    },
+    {
+      "bin_start": 15.6,
+      "bin_end": 31.3,
+      "count": 49
+    },
+    {
+      "bin_start": 31.3,
+      "bin_end": 46.9,
       "count": 30
     },
     {
-      "bin_start": 6.6,
-      "bin_end": 13.3,
+      "bin_start": 46.9,
+      "bin_end": 62.5,
+      "count": 11
+    },
+    {
+      "bin_start": 62.5,
+      "bin_end": 78.2,
+      "count": 9
+    },
+    {
+      "bin_start": 78.2,
+      "bin_end": 93.8,
+      "count": 3
+    },
+    {
+      "bin_start": 93.8,
+      "bin_end": 109.4,
+      "count": 0
+    },
+    {
+      "bin_start": 109.4,
+      "bin_end": 125.0,
+      "count": 0
+    },
+    {
+      "bin_start": 125.0,
+      "bin_end": 140.7,
+      "count": 1
+    },
+    {
+      "bin_start": 140.7,
+      "bin_end": 156.3,
       "count": 5
-    },
-    {
-      "bin_start": 13.3,
-      "bin_end": 19.9,
-      "count": 6
-    },
-    {
-      "bin_start": 19.9,
-      "bin_end": 26.5,
-      "count": 6
-    },
-    {
-      "bin_start": 26.5,
-      "bin_end": 33.2,
-      "count": 1
-    },
-    {
-      "bin_start": 33.2,
-      "bin_end": 39.8,
-      "count": 1
-    },
-    {
-      "bin_start": 39.8,
-      "bin_end": 46.4,
-      "count": 1
-    },
-    {
-      "bin_start": 46.4,
-      "bin_end": 53.0,
-      "count": 2
-    },
-    {
-      "bin_start": 53.0,
-      "bin_end": 59.7,
-      "count": 1
-    },
-    {
-      "bin_start": 59.7,
-      "bin_end": 66.3,
-      "count": 2
     }
   ],
   "sample_predictions": [
     {
-      "flight_id": "85",
-      "flight_number": "BJ520",
-      "predicted_delay": 4.6,
-      "actual_delay": 55.0,
-      "error": 50.4
+      "flight_id": "6067",
+      "flight_number": "EK747",
+      "predicted_delay": 39.3,
+      "actual_delay": 28.0,
+      "error": 11.3
     },
     {
-      "flight_id": "86",
-      "flight_number": "HV8285",
-      "predicted_delay": 0.2,
-      "actual_delay": 0.0,
-      "error": 0.2
+      "flight_id": "6066",
+      "flight_number": "TU147",
+      "predicted_delay": 39.3,
+      "actual_delay": 28.0,
+      "error": 11.3
     },
     {
-      "flight_id": "87",
-      "flight_number": "AT573",
-      "predicted_delay": 10.7,
+      "flight_id": "6135",
+      "flight_number": "SN3893",
+      "predicted_delay": 18.0,
+      "actual_delay": 16.0,
+      "error": 2.0
+    },
+    {
+      "flight_id": "6144",
+      "flight_number": "4X1006",
+      "predicted_delay": 31.3,
       "actual_delay": 0.0,
+      "error": 31.3
+    },
+    {
+      "flight_id": "6143",
+      "flight_number": "X92599",
+      "predicted_delay": 49.4,
+      "actual_delay": 15.0,
+      "error": 34.4
+    },
+    {
+      "flight_id": "6064",
+      "flight_number": "QR1399",
+      "predicted_delay": 18.2,
+      "actual_delay": 30.0,
+      "error": 11.8
+    },
+    {
+      "flight_id": "6068",
+      "flight_number": "UG3",
+      "predicted_delay": 14.0,
+      "actual_delay": 0.0,
+      "error": 14.0
+    },
+    {
+      "flight_id": "6062",
+      "flight_number": "WB1637",
+      "predicted_delay": 19.3,
+      "actual_delay": 30.0,
       "error": 10.7
     },
     {
-      "flight_id": "335",
-      "flight_number": "YL820",
-      "predicted_delay": 4.2,
+      "flight_id": "6060",
+      "flight_number": "BJ129",
+      "predicted_delay": 2.0,
       "actual_delay": 0.0,
-      "error": 4.2
+      "error": 2.0
     },
     {
-      "flight_id": "336",
-      "flight_number": "UA7781",
-      "predicted_delay": 22.8,
-      "actual_delay": 8.0,
-      "error": 14.8
+      "flight_id": "6137",
+      "flight_number": "BJ7471",
+      "predicted_delay": 4.9,
+      "actual_delay": 9.0,
+      "error": 4.1
     },
     {
-      "flight_id": "460",
-      "flight_number": "H3",
-      "predicted_delay": 5.5,
-      "actual_delay": 3.0,
-      "error": 2.5
+      "flight_id": "6065",
+      "flight_number": "R5101",
+      "predicted_delay": 42.9,
+      "actual_delay": 23.0,
+      "error": 19.9
     },
     {
-      "flight_id": "461",
-      "flight_number": "X36585",
-      "predicted_delay": 37.0,
-      "actual_delay": 21.0,
+      "flight_id": "6063",
+      "flight_number": "WY6110",
+      "predicted_delay": 19.0,
+      "actual_delay": 30.0,
+      "error": 11.0
+    },
+    {
+      "flight_id": "6110",
+      "flight_number": "HV8230",
+      "predicted_delay": 40.0,
+      "actual_delay": 24.0,
       "error": 16.0
     },
     {
-      "flight_id": "1329",
-      "flight_number": "AZ867",
-      "predicted_delay": 12.6,
-      "actual_delay": 10.0,
-      "error": 2.6
+      "flight_id": "7283",
+      "flight_number": "R5121",
+      "predicted_delay": 32.8,
+      "actual_delay": 73.0,
+      "error": 40.2
     },
     {
-      "flight_id": "1330",
-      "flight_number": "TU338",
-      "predicted_delay": 7.0,
-      "actual_delay": 0.0,
-      "error": 7.0
+      "flight_id": "7311",
+      "flight_number": "HV6878",
+      "predicted_delay": 23.4,
+      "actual_delay": 8.0,
+      "error": 15.4
     },
     {
-      "flight_id": "1331",
-      "flight_number": "YL821",
-      "predicted_delay": 0.9,
-      "actual_delay": 40.0,
+      "flight_id": "6130",
+      "flight_number": "4D542",
+      "predicted_delay": 20.9,
+      "actual_delay": 60.0,
       "error": 39.1
     },
     {
-      "flight_id": "1332",
-      "flight_number": "7A110",
-      "predicted_delay": 0.0,
+      "flight_id": "7310",
+      "flight_number": "UG31",
+      "predicted_delay": 1.7,
       "actual_delay": 0.0,
-      "error": 0.0
+      "error": 1.7
     },
     {
-      "flight_id": "1333",
-      "flight_number": "AH4003",
-      "predicted_delay": 0.0,
-      "actual_delay": 0.0,
-      "error": 0.0
-    },
-    {
-      "flight_id": "1334",
-      "flight_number": "HV8231",
-      "predicted_delay": 0.9,
-      "actual_delay": 0.0,
-      "error": 0.9
-    },
-    {
-      "flight_id": "5",
-      "flight_number": "TK6115",
-      "predicted_delay": 55.3,
-      "actual_delay": 0.0,
-      "error": 55.3
-    },
-    {
-      "flight_id": "26",
-      "flight_number": "HV8801",
-      "predicted_delay": 0.0,
-      "actual_delay": 13.0,
-      "error": 13.0
-    },
-    {
-      "flight_id": "52",
-      "flight_number": "AT571",
-      "predicted_delay": 33.5,
-      "actual_delay": 85.0,
-      "error": 51.5
-    },
-    {
-      "flight_id": "53",
-      "flight_number": "DL8317",
-      "predicted_delay": 25.7,
-      "actual_delay": 31.0,
-      "error": 5.3
-    },
-    {
-      "flight_id": "54",
-      "flight_number": "KL3593",
-      "predicted_delay": 25.3,
-      "actual_delay": 31.0,
-      "error": 5.7
-    },
-    {
-      "flight_id": "55",
-      "flight_number": "DL8333",
-      "predicted_delay": 25.7,
-      "actual_delay": 31.0,
-      "error": 5.3
-    },
-    {
-      "flight_id": "337",
-      "flight_number": "AZ866",
-      "predicted_delay": 22.8,
-      "actual_delay": 8.0,
-      "error": 14.8
-    },
-    {
-      "flight_id": "288",
-      "flight_number": "NJ411",
-      "predicted_delay": 4.9,
-      "actual_delay": 0.0,
-      "error": 4.9
-    },
-    {
-      "flight_id": "331",
-      "flight_number": "HV8230",
-      "predicted_delay": 18.6,
-      "actual_delay": 4.0,
-      "error": 14.6
-    },
-    {
-      "flight_id": "329",
-      "flight_number": "KL2174",
-      "predicted_delay": 20.5,
-      "actual_delay": 21.0,
-      "error": 0.5
-    },
-    {
-      "flight_id": "7",
-      "flight_number": "DL8318",
-      "predicted_delay": 15.9,
-      "actual_delay": 11.0,
-      "error": 4.9
-    },
-    {
-      "flight_id": "8",
-      "flight_number": "KL3562",
-      "predicted_delay": 15.5,
-      "actual_delay": 11.0,
-      "error": 4.5
-    },
-    {
-      "flight_id": "9",
-      "flight_number": "KQ3119",
-      "predicted_delay": 15.5,
-      "actual_delay": 11.0,
-      "error": 4.5
-    },
-    {
-      "flight_id": "10",
-      "flight_number": "DL8362",
-      "predicted_delay": 15.9,
-      "actual_delay": 11.0,
-      "error": 4.9
-    },
-    {
-      "flight_id": "11",
-      "flight_number": "AF1385",
-      "predicted_delay": 14.9,
-      "actual_delay": 11.0,
-      "error": 3.9
-    },
-    {
-      "flight_id": "12",
-      "flight_number": "BJ598",
-      "predicted_delay": 25.9,
-      "actual_delay": 4.0,
-      "error": 21.9
-    },
-    {
-      "flight_id": "13",
-      "flight_number": "BJ776",
-      "predicted_delay": 30.3,
-      "actual_delay": 6.0,
-      "error": 24.3
-    },
-    {
-      "flight_id": "14",
-      "flight_number": "BJ510",
-      "predicted_delay": 2.3,
+      "flight_id": "7309",
+      "flight_number": "TU607",
+      "predicted_delay": 63.5,
       "actual_delay": 18.0,
-      "error": 15.7
+      "error": 45.5
     },
     {
-      "flight_id": "70",
-      "flight_number": "TU606",
-      "predicted_delay": 15.4,
+      "flight_id": "6596",
+      "flight_number": "EW527",
+      "predicted_delay": 49.4,
+      "actual_delay": 100.0,
+      "error": 50.6
+    },
+    {
+      "flight_id": "6117",
+      "flight_number": "BJ587",
+      "predicted_delay": 31.7,
+      "actual_delay": 27.0,
+      "error": 4.7
+    },
+    {
+      "flight_id": "6594",
+      "flight_number": "HV8624",
+      "predicted_delay": 32.2,
       "actual_delay": 10.0,
-      "error": 5.4
+      "error": 22.2
     },
     {
-      "flight_id": "71",
-      "flight_number": "HV8223",
-      "predicted_delay": 5.1,
+      "flight_id": "6593",
+      "flight_number": "TU215",
+      "predicted_delay": 59.6,
+      "actual_delay": 15.0,
+      "error": 44.6
+    },
+    {
+      "flight_id": "6116",
+      "flight_number": "TU283",
+      "predicted_delay": 79.9,
       "actual_delay": 0.0,
-      "error": 5.1
+      "error": 79.9
     },
     {
-      "flight_id": "72",
-      "flight_number": "UZ316",
-      "predicted_delay": 7.5,
+      "flight_id": "6115",
+      "flight_number": "YL820",
+      "predicted_delay": 34.8,
       "actual_delay": 0.0,
-      "error": 7.5
+      "error": 34.8
     },
     {
-      "flight_id": "73",
-      "flight_number": "UZ144",
-      "predicted_delay": 5.6,
+      "flight_id": "6114",
+      "flight_number": "UG9",
+      "predicted_delay": 1.9,
       "actual_delay": 0.0,
-      "error": 5.6
+      "error": 1.9
     },
     {
-      "flight_id": "75",
-      "flight_number": "NO722",
-      "predicted_delay": 2.9,
+      "flight_id": "6113",
+      "flight_number": "UG1761",
+      "predicted_delay": 1.9,
       "actual_delay": 0.0,
-      "error": 2.9
+      "error": 1.9
     },
     {
-      "flight_id": "76",
-      "flight_number": "TU401",
-      "predicted_delay": 28.7,
-      "actual_delay": 95.0,
-      "error": 66.3
+      "flight_id": "6112",
+      "flight_number": "BJ731",
+      "predicted_delay": 35.5,
+      "actual_delay": 104.0,
+      "error": 68.5
     },
     {
-      "flight_id": "330",
-      "flight_number": "AF1184",
-      "predicted_delay": 19.8,
+      "flight_id": "6111",
+      "flight_number": "TU903",
+      "predicted_delay": 59.1,
       "actual_delay": 21.0,
-      "error": 1.2
+      "error": 38.1
     },
     {
-      "flight_id": "289",
-      "flight_number": "WT148",
-      "predicted_delay": 25.5,
+      "flight_id": "7285",
+      "flight_number": "HOT1301",
+      "predicted_delay": 67.8,
+      "actual_delay": 61.0,
+      "error": 6.8
+    },
+    {
+      "flight_id": "6069",
+      "flight_number": "NJ411",
+      "predicted_delay": 1.9,
       "actual_delay": 0.0,
-      "error": 25.5
+      "error": 1.9
     },
     {
-      "flight_id": "291",
-      "flight_number": "UA7779",
-      "predicted_delay": 37.0,
-      "actual_delay": 35.0,
-      "error": 2.0
-    },
-    {
-      "flight_id": "292",
-      "flight_number": "AZ864",
-      "predicted_delay": 37.0,
-      "actual_delay": 35.0,
-      "error": 2.0
-    },
-    {
-      "flight_id": "293",
-      "flight_number": "D0117",
-      "predicted_delay": 32.5,
-      "actual_delay": 9.0,
-      "error": 23.5
-    },
-    {
-      "flight_id": "294",
-      "flight_number": "T7117",
-      "predicted_delay": 26.3,
+      "flight_id": "6590",
+      "flight_number": "AH4002",
+      "predicted_delay": 8.8,
       "actual_delay": 0.0,
-      "error": 26.3
+      "error": 8.8
     },
     {
-      "flight_id": "295",
-      "flight_number": "DL8598",
-      "predicted_delay": 28.4,
-      "actual_delay": 32.0,
-      "error": 3.6
+      "flight_id": "6104",
+      "flight_number": "BJ247",
+      "predicted_delay": 48.7,
+      "actual_delay": 22.0,
+      "error": 26.7
     },
     {
-      "flight_id": "296",
-      "flight_number": "KL3563",
-      "predicted_delay": 28.4,
-      "actual_delay": 32.0,
-      "error": 3.6
+      "flight_id": "7635",
+      "flight_number": "BJ589",
+      "predicted_delay": 30.2,
+      "actual_delay": 25.0,
+      "error": 5.2
     },
     {
-      "flight_id": "302",
-      "flight_number": "HV8284",
-      "predicted_delay": 17.6,
-      "actual_delay": 8.0,
+      "flight_id": "6099",
+      "flight_number": "AT572",
+      "predicted_delay": 39.3,
+      "actual_delay": 17.0,
+      "error": 22.3
+    },
+    {
+      "flight_id": "6103",
+      "flight_number": "TK663",
+      "predicted_delay": 28.6,
+      "actual_delay": 19.0,
       "error": 9.6
     },
     {
-      "flight_id": "303",
-      "flight_number": "TU997",
-      "predicted_delay": 70.4,
-      "actual_delay": 27.0,
-      "error": 43.4
+      "flight_id": "6102",
+      "flight_number": "TU363",
+      "predicted_delay": 72.5,
+      "actual_delay": 7.0,
+      "error": 65.5
     },
     {
-      "flight_id": "304",
-      "flight_number": "BJ777",
-      "predicted_delay": 7.4,
-      "actual_delay": 27.0,
-      "error": 19.6
+      "flight_id": "6101",
+      "flight_number": "HOT",
+      "predicted_delay": 75.5,
+      "actual_delay": 13.0,
+      "error": 62.5
     },
     {
-      "flight_id": "324",
-      "flight_number": "BJ723",
-      "predicted_delay": 6.8,
-      "actual_delay": 35.0,
-      "error": 28.2
+      "flight_id": "6098",
+      "flight_number": "NB121",
+      "predicted_delay": 17.0,
+      "actual_delay": 0.0,
+      "error": 17.0
     },
     {
-      "flight_id": "325",
-      "flight_number": "TU515",
-      "predicted_delay": 82.2,
-      "actual_delay": 21.0,
-      "error": 61.2
+      "flight_id": "5977",
+      "flight_number": "TU756",
+      "predicted_delay": 29.4,
+      "actual_delay": 14.0,
+      "error": 15.4
     },
     {
-      "flight_id": "326",
-      "flight_number": "HV6220",
-      "predicted_delay": 3.3,
-      "actual_delay": 25.0,
-      "error": 21.7
+      "flight_id": "6105",
+      "flight_number": "BJ131",
+      "predicted_delay": 68.0,
+      "actual_delay": 105.0,
+      "error": 37.0
     },
     {
-      "flight_id": "327",
-      "flight_number": "AH4002",
+      "flight_id": "5976",
+      "flight_number": "BJ204",
+      "predicted_delay": 21.4,
+      "actual_delay": 7.0,
+      "error": 14.4
+    },
+    {
+      "flight_id": "7633",
+      "flight_number": "BJ509",
+      "predicted_delay": 19.5,
+      "actual_delay": 22.0,
+      "error": 2.5
+    },
+    {
+      "flight_id": "7581",
+      "flight_number": "UG11",
       "predicted_delay": 0.0,
       "actual_delay": 0.0,
       "error": 0.0
     },
     {
-      "flight_id": "328",
-      "flight_number": "DL8596",
-      "predicted_delay": 20.4,
-      "actual_delay": 21.0,
-      "error": 0.6
-    },
-    {
-      "flight_id": "290",
-      "flight_number": "L6300",
-      "predicted_delay": 25.5,
+      "flight_id": "7632",
+      "flight_number": "TU655",
+      "predicted_delay": 29.1,
       "actual_delay": 22.0,
-      "error": 3.5
+      "error": 7.1
     },
     {
-      "flight_id": "2563",
+      "flight_id": "7536",
       "flight_number": "HV8152",
-      "predicted_delay": 14.9,
+      "predicted_delay": 21.9,
       "actual_delay": 16.0,
+      "error": 5.9
+    },
+    {
+      "flight_id": "6140",
+      "flight_number": "HV8964",
+      "predicted_delay": 26.0,
+      "actual_delay": 27.0,
+      "error": 1.0
+    },
+    {
+      "flight_id": "7534",
+      "flight_number": "4D543",
+      "predicted_delay": 38.7,
+      "actual_delay": 30.0,
+      "error": 8.7
+    },
+    {
+      "flight_id": "5975",
+      "flight_number": "TU750",
+      "predicted_delay": 31.7,
+      "actual_delay": 105.0,
+      "error": 73.3
+    },
+    {
+      "flight_id": "6106",
+      "flight_number": "TU753",
+      "predicted_delay": 49.9,
+      "actual_delay": 68.0,
+      "error": 18.1
+    },
+    {
+      "flight_id": "6107",
+      "flight_number": "DL8596",
+      "predicted_delay": 46.2,
+      "actual_delay": 38.0,
+      "error": 8.2
+    },
+    {
+      "flight_id": "6108",
+      "flight_number": "KL2174",
+      "predicted_delay": 46.2,
+      "actual_delay": 38.0,
+      "error": 8.2
+    },
+    {
+      "flight_id": "7634",
+      "flight_number": "HV8496",
+      "predicted_delay": 23.3,
+      "actual_delay": 16.0,
+      "error": 7.3
+    },
+    {
+      "flight_id": "6134",
+      "flight_number": "HV8046",
+      "predicted_delay": 20.6,
+      "actual_delay": 11.0,
+      "error": 9.6
+    },
+    {
+      "flight_id": "6132",
+      "flight_number": "HV8965",
+      "predicted_delay": 6.8,
+      "actual_delay": 15.0,
+      "error": 8.2
+    },
+    {
+      "flight_id": "6131",
+      "flight_number": "BJ814",
+      "predicted_delay": 11.2,
+      "actual_delay": 15.0,
+      "error": 3.8
+    },
+    {
+      "flight_id": "6129",
+      "flight_number": "TU440",
+      "predicted_delay": 10.8,
+      "actual_delay": 12.0,
+      "error": 1.2
+    },
+    {
+      "flight_id": "6128",
+      "flight_number": "4X1005",
+      "predicted_delay": 16.4,
+      "actual_delay": 0.0,
+      "error": 16.4
+    },
+    {
+      "flight_id": "6127",
+      "flight_number": "X92598",
+      "predicted_delay": 27.7,
+      "actual_delay": 14.0,
+      "error": 13.7
+    },
+    {
+      "flight_id": "6126",
+      "flight_number": "BJ594",
+      "predicted_delay": 8.9,
+      "actual_delay": 10.0,
       "error": 1.1
+    },
+    {
+      "flight_id": "6125",
+      "flight_number": "BJ568",
+      "predicted_delay": 10.2,
+      "actual_delay": 6.0,
+      "error": 4.2
+    },
+    {
+      "flight_id": "6124",
+      "flight_number": "SN3894",
+      "predicted_delay": 4.7,
+      "actual_delay": 0.0,
+      "error": 4.7
+    },
+    {
+      "flight_id": "6123",
+      "flight_number": "LG942",
+      "predicted_delay": 26.4,
+      "actual_delay": 15.0,
+      "error": 11.4
+    },
+    {
+      "flight_id": "6122",
+      "flight_number": "TU250",
+      "predicted_delay": 13.8,
+      "actual_delay": 0.0,
+      "error": 13.8
+    },
+    {
+      "flight_id": "6121",
+      "flight_number": "HV8047",
+      "predicted_delay": 8.0,
+      "actual_delay": 11.0,
+      "error": 3.0
+    },
+    {
+      "flight_id": "6120",
+      "flight_number": "4D214",
+      "predicted_delay": 16.1,
+      "actual_delay": 0.0,
+      "error": 16.1
+    },
+    {
+      "flight_id": "6109",
+      "flight_number": "AF1184",
+      "predicted_delay": 45.9,
+      "actual_delay": 38.0,
+      "error": 7.9
+    },
+    {
+      "flight_id": "6133",
+      "flight_number": "BJ7482",
+      "predicted_delay": 15.5,
+      "actual_delay": 25.0,
+      "error": 9.5
+    },
+    {
+      "flight_id": "6141",
+      "flight_number": "BJ569",
+      "predicted_delay": 27.5,
+      "actual_delay": 37.0,
+      "error": 9.5
+    },
+    {
+      "flight_id": "5980",
+      "flight_number": "EW744",
+      "predicted_delay": 9.9,
+      "actual_delay": 22.0,
+      "error": 12.1
+    },
+    {
+      "flight_id": "6171",
+      "flight_number": "LG204",
+      "predicted_delay": 14.5,
+      "actual_delay": 10.0,
+      "error": 4.5
+    },
+    {
+      "flight_id": "6807",
+      "flight_number": "HV8704",
+      "predicted_delay": 34.3,
+      "actual_delay": 8.0,
+      "error": 26.3
+    },
+    {
+      "flight_id": "6090",
+      "flight_number": "BJ205",
+      "predicted_delay": 34.0,
+      "actual_delay": 24.0,
+      "error": 10.0
+    },
+    {
+      "flight_id": "6089",
+      "flight_number": "BJ511",
+      "predicted_delay": 24.1,
+      "actual_delay": 24.0,
+      "error": 0.1
+    },
+    {
+      "flight_id": "6088",
+      "flight_number": "TU757",
+      "predicted_delay": 94.4,
+      "actual_delay": 27.0,
+      "error": 67.4
+    },
+    {
+      "flight_id": "6072",
+      "flight_number": "AZ864",
+      "predicted_delay": 24.6,
+      "actual_delay": 15.0,
+      "error": 9.6
+    },
+    {
+      "flight_id": "6071",
+      "flight_number": "UA7779",
+      "predicted_delay": 23.8,
+      "actual_delay": 15.0,
+      "error": 8.8
+    },
+    {
+      "flight_id": "6880",
+      "flight_number": "TU682",
+      "predicted_delay": 21.5,
+      "actual_delay": 10.0,
+      "error": 11.5
+    },
+    {
+      "flight_id": "6070",
+      "flight_number": "L6300",
+      "predicted_delay": 42.9,
+      "actual_delay": 0.0,
+      "error": 42.9
+    },
+    {
+      "flight_id": "6229",
+      "flight_number": "X32711",
+      "predicted_delay": 23.2,
+      "actual_delay": 25.0,
+      "error": 1.8
+    },
+    {
+      "flight_id": "6232",
+      "flight_number": "BJ2973",
+      "predicted_delay": 31.8,
+      "actual_delay": 16.0,
+      "error": 15.8
+    },
+    {
+      "flight_id": "6231",
+      "flight_number": "BJ575",
+      "predicted_delay": 11.0,
+      "actual_delay": 45.0,
+      "error": 34.0
+    },
+    {
+      "flight_id": "5988",
+      "flight_number": "TK662",
+      "predicted_delay": 26.4,
+      "actual_delay": 50.0,
+      "error": 23.6
+    },
+    {
+      "flight_id": "5987",
+      "flight_number": "AF1085",
+      "predicted_delay": 11.9,
+      "actual_delay": 9.0,
+      "error": 2.9
+    },
+    {
+      "flight_id": "5986",
+      "flight_number": "KL2179",
+      "predicted_delay": 12.1,
+      "actual_delay": 9.0,
+      "error": 3.1
+    },
+    {
+      "flight_id": "6227",
+      "flight_number": "TU635",
+      "predicted_delay": 19.3,
+      "actual_delay": 51.0,
+      "error": 31.7
+    },
+    {
+      "flight_id": "6928",
+      "flight_number": "BJ705",
+      "predicted_delay": 23.6,
+      "actual_delay": 85.0,
+      "error": 61.4
+    },
+    {
+      "flight_id": "6931",
+      "flight_number": "MT763",
+      "predicted_delay": 18.2,
+      "actual_delay": 5.0,
+      "error": 13.2
+    },
+    {
+      "flight_id": "6932",
+      "flight_number": "UG10",
+      "predicted_delay": 48.5,
+      "actual_delay": 0.0,
+      "error": 48.5
+    },
+    {
+      "flight_id": "7533",
+      "flight_number": "TU441",
+      "predicted_delay": 36.9,
+      "actual_delay": 16.0,
+      "error": 20.9
+    },
+    {
+      "flight_id": "6598",
+      "flight_number": "BM406",
+      "predicted_delay": 25.2,
+      "actual_delay": 0.0,
+      "error": 25.2
+    },
+    {
+      "flight_id": "6342",
+      "flight_number": "TO8625",
+      "predicted_delay": 24.9,
+      "actual_delay": 0.0,
+      "error": 24.9
+    },
+    {
+      "flight_id": "5991",
+      "flight_number": "UA7778",
+      "predicted_delay": 21.6,
+      "actual_delay": 5.0,
+      "error": 16.6
+    },
+    {
+      "flight_id": "5990",
+      "flight_number": "R5122",
+      "predicted_delay": 21.0,
+      "actual_delay": 34.0,
+      "error": 13.0
+    },
+    {
+      "flight_id": "5989",
+      "flight_number": "NJ412",
+      "predicted_delay": 4.1,
+      "actual_delay": 0.0,
+      "error": 4.1
+    },
+    {
+      "flight_id": "5983",
+      "flight_number": "YL801",
+      "predicted_delay": 9.2,
+      "actual_delay": 8.0,
+      "error": 1.2
+    },
+    {
+      "flight_id": "5982",
+      "flight_number": "UZ144",
+      "predicted_delay": 0.0,
+      "actual_delay": 0.0,
+      "error": 0.0
+    },
+    {
+      "flight_id": "5981",
+      "flight_number": "HV8337",
+      "predicted_delay": 7.4,
+      "actual_delay": 0.0,
+      "error": 7.4
+    },
+    {
+      "flight_id": "5978",
+      "flight_number": "NO718",
+      "predicted_delay": 43.5,
+      "actual_delay": 15.0,
+      "error": 28.5
+    },
+    {
+      "flight_id": "5790",
+      "flight_number": "UG2",
+      "predicted_delay": 22.2,
+      "actual_delay": 178.5,
+      "error": 156.3
+    },
+    {
+      "flight_id": "5789",
+      "flight_number": "BJ510",
+      "predicted_delay": 9.4,
+      "actual_delay": 14.0,
+      "error": 4.6
     }
   ],
   "leakage_check": "PASSED \u2014 delay_minutes not in feature set",

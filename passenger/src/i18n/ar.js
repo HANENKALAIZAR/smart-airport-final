@@ -354,13 +354,10 @@ const ar = {
     alerts_aircraft: 'الطائرة',
     alerts_timeline: '📋 الجدول الزمني للرحلة',
     alerts_get_alerts: 'تلقي تنبيهات عن',
-    alerts_notification_desc: 'اختر كيف تريد تلقي الإشعارات حول تغييرات البوابة والتأخيرات وحالة الصعود:',
-    alerts_sms: 'إشعارات الرسائل القصيرة',
     alerts_email: 'إشعارات البريد الإلكتروني',
-    alerts_push: 'الإشعارات الفورية',
     alerts_subscribe_btn: '🔔 الاشتراك في التنبيهات',
     alerts_subscribed_title: 'تم الاشتراك!',
-    alerts_subscribed_text: 'سنخطرك عبر {channels} بأي تحديثات على الرحلة {flight}.',
+    alerts_subscribed_text: 'سنخطرك عبر البريد الإلكتروني بأي تحديثات على الرحلة {flight}.',
 
     /* أحداث الجدول الزمني */
     alerts_checkin_opens: 'فتح التسجيل',

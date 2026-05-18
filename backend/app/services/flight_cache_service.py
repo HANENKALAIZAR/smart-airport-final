@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # ── Cache TTL: min minutes between AE API calls per airport/direction ─────────
 CACHE_TTL_MINUTES: int = 10
-MONITORED_AIRPORTS = ["TUN", "MIR", "NBE", "DJE", "SFA", "GAF"]
+MONITORED_AIRPORTS = ["TUN", "MIR", "NBE", "DJE"]  # Supported Tunisian airports
 
 
 def _now_utc() -> datetime:
@@ -51,10 +51,26 @@ def get_cache_age_minutes(airport_iata: str, direction: str, db: Session) -> Opt
 
 
 def is_cache_fresh(airport_iata: str, direction: str, db: Session) -> bool:
-    """True if last successful sync is within CACHE_TTL_MINUTES."""
-    age = get_cache_age_minutes(airport_iata, direction, db)
-    if age is None:
+    """True if last successful sync is within CACHE_TTL_MINUTES and occurred on the same UTC date."""
+    last_sync = (
+        db.query(func.max(AESyncLog.finished_at))
+        .filter(
+            AESyncLog.airport_iata == airport_iata,
+            AESyncLog.direction == direction,
+            AESyncLog.status.in_(["ok", "partial"]),
+        )
+        .scalar()
+    )
+    if not last_sync:
         return False
+    if last_sync.tzinfo is None:
+        last_sync = last_sync.replace(tzinfo=timezone.utc)
+    
+    now = _now_utc()
+    if last_sync.date() != now.date():
+        return False  # UTC date changed, cache is stale
+    
+    age = (now - last_sync).total_seconds() / 60
     return age < CACHE_TTL_MINUTES
 
 
@@ -115,7 +131,7 @@ def _snapshot_to_api_dict(r: AEFlightSnapshot) -> dict:
 
 def get_cached_flights(airport_iata: str, db: Session) -> list[dict]:
     """Return today's flight snapshots from DB as normalised dicts."""
-    today = date.today()
+    today = datetime.now(timezone.utc).date()
     rows = (
         db.query(AEFlightSnapshot)
         .filter(

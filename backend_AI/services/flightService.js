@@ -60,7 +60,7 @@ function tomorrowUTC() {
 // ─────────────────────────────────────────────────────────────────────────────
 async function fetchFromDbCache(flightNumber) {
   const baseUrl = process.env.SMART_AIRPORT_API || 'http://localhost:8000';
-  const airports = ['TUN', 'MIR', 'DJE', 'NBE', 'SFA', 'GAF'];
+  const airports = ['TUN', 'MIR', 'DJE', 'NBE'];
 
   for (const iata of airports) {
     try {

@@ -96,11 +96,11 @@ logger = logging.getLogger(__name__)
 
 limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
 
-from app.routers import aviationstack, opensky
 from app.routers import aviation_edge
 from app.routers import alerts
 from app.routers import ae_dataset
 from app.routers import intelligence
+from app.routers import passenger as passenger_router
 
 # Ensure AE pipeline tables (including new intelligence tables) are registered
 import app.models.ae_models  # noqa: F401  (AEFlightSnapshot, AEFlightDataset, AEFutureSchedule, AEAviationStats)
@@ -230,12 +230,11 @@ app.add_middleware(SlowAPIMiddleware)
 for mod in _optional_routers:
     app.include_router(mod.router)
 
-app.include_router(opensky.router)
-app.include_router(aviationstack.router)
 app.include_router(aviation_edge.router)
 app.include_router(alerts.router)
 app.include_router(ae_dataset.router)
 app.include_router(intelligence.router)
+app.include_router(passenger_router.router)
 
 
 @app.get("/")

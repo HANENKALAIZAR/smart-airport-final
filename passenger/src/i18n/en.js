@@ -354,13 +354,10 @@ const en = {
     alerts_aircraft: 'Aircraft',
     alerts_timeline: '📋 Flight Timeline',
     alerts_get_alerts: 'Get Alerts for',
-    alerts_notification_desc: 'Choose how you want to receive notifications about gate changes, delays, and boarding status:',
-    alerts_sms: 'SMS Notifications',
     alerts_email: 'Email Notifications',
-    alerts_push: 'Push Notifications',
     alerts_subscribe_btn: '🔔 Subscribe to Alerts',
     alerts_subscribed_title: "You're subscribed!",
-    alerts_subscribed_text: "We'll notify you via {channels} for any updates to {flight}.",
+    alerts_subscribed_text: "We'll notify you via email for any updates to {flight}.",
 
     /* Timeline Events */
     alerts_checkin_opens: 'Check-in opens',

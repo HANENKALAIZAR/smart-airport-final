@@ -36,55 +36,36 @@ _REGRESSOR_PATH  = _MODEL_DIR / "delay_regressor.json"
 _EXPLAINER_PATH  = _MODEL_DIR / "shap_explainer.pkl"
 _FEAT_COLS_PATH  = _MODEL_DIR / "feature_columns.json"
 
-# ── Default feature columns (v10) — used if sidecar JSON missing ──────────
+# ── Default feature columns — MUST match train_ae_dataset.py AE_FEATURE_COLUMNS ──
 _DEFAULT_FEATURE_COLUMNS = [
-    "weather_severity",
-    "origin_weather_severity",
-    "dest_weather_severity",
-    "temperature_c",
-    "wind_speed_kmh",
-    "visibility_km",
-    "precipitation_mm",
-    "hour_of_day",
-    "day_of_week",
-    "month",
+    "dep_hour",
     "is_weekend",
-    "is_holiday",
-    "congestion_level",
-    "origin_congestion",
-    "dest_congestion",
-    "airline_reliability",
     "distance_km",
-    "historical_delay_rate",
+    "duration_min",
+    "airline_enc",
+    "dep_airport_enc",
+    "arr_airport_enc",
 ]
 
 FEATURE_LABELS = {
-    "weather_severity":           "Weather Severity",
-    "origin_weather_severity":    "Origin Weather",
-    "dest_weather_severity":      "Destination Weather",
-    "temperature_c":              "Temperature (°C)",
-    "wind_speed_kmh":             "Wind Speed (km/h)",
-    "visibility_km":              "Visibility (km)",
-    "precipitation_mm":           "Precipitation (mm)",
-    "hour_of_day":                "Time of Day",
-    "day_of_week":                "Day of Week",
-    "month":                      "Month",
-    "is_weekend":                 "Weekend",
-    "is_holiday":                 "Holiday",
-    "congestion_level":           "Congestion Level",
-    "origin_congestion":          "Origin Airport Congestion",
-    "dest_congestion":            "Destination Congestion",
-    "airline_reliability":        "Airline Reliability",
-    "distance_km":                "Flight Distance",
-    "historical_delay_rate":      "Route History",
+    "dep_hour":        "Time of Day",
+    "is_weekend":      "Weekend",
+    "distance_km":     "Flight Distance",
+    "duration_min":    "Flight Duration",
+    "airline_enc":     "Airline Reliability",
+    "dep_airport_enc": "Origin Airport",
+    "arr_airport_enc": "Destination Airport",
 }
 
 # ── Module-level state (guarded by _lock) ─────────────────────────────────
 _lock             = threading.Lock()
-_model            = None
+_model            = None   # sklearn Pipeline (StandardScaler + XGBRegressor)
 _explainer        = None
-_regressor        = None
 _feature_columns  = _DEFAULT_FEATURE_COLUMNS[:]
+
+# NOTE: _regressor is the sklearn Pipeline regression model (delay_prediction_model.pkl)
+# For the passenger passenger endpoint we use it to predict delay minutes directly.
+_regressor        = None
 
 # ── TTL prediction cache (5 min, 512 slots) ───────────────────────────────
 _prediction_cache: TTLCache = TTLCache(maxsize=512, ttl=300)
@@ -94,49 +75,61 @@ _prediction_cache: TTLCache = TTLCache(maxsize=512, ttl=300)
 
 def load_model():
     """
-    Load XGBoost model + SHAP explainer from disk.
+    Load the trained sklearn Pipeline (StandardScaler + XGBRegressor) from
+    delay_prediction_model.pkl — the model produced by train_ae_dataset.py.
+    Also loads the feature column list from feature_columns.json sidecar.
     Thread-safe — called at startup and after training (hot-reload).
     """
     global _model, _explainer, _regressor, _feature_columns
 
     with _lock:
-        if not _CLASSIFIER_PATH.exists():
-            logger.info(f"No model at {_CLASSIFIER_PATH} — using rule-based fallback")
+        # Priority 1: sklearn pipeline (7-column regression model)
+        _PKL_PATH = _MODEL_DIR / "delay_prediction_model.pkl"
+        if _PKL_PATH.exists():
+            try:
+                import joblib
+                _model = joblib.load(str(_PKL_PATH))
+                _regressor = _model  # same object — sklearn Pipeline has .predict()
+                logger.info(f"Sklearn pipeline loaded from {_PKL_PATH}")
+            except Exception as e:
+                logger.warning(f"sklearn pipeline loading failed: {e} — using rule-based")
+                _model = None
+                _regressor = None
+        elif _CLASSIFIER_PATH.exists():
+            # Fallback: XGBoost native format (older model)
+            try:
+                import xgboost as xgb
+                _model = xgb.XGBClassifier()
+                _model._estimator_type = "classifier"
+                _model.load_model(str(_CLASSIFIER_PATH))
+                logger.info(f"XGBoost classifier loaded from {_CLASSIFIER_PATH}")
+            except Exception as e:
+                logger.warning(f"XGBoost loading failed: {e} — using rule-based")
+                _model = None
+        else:
+            logger.info("No model file found — using rule-based fallback")
             return
 
-        try:
-            import xgboost as xgb
-            import joblib
-            from app.ai.ml_config import CLASSIFIER_PARAMS, REGRESSOR_PARAMS
-
-            _model = xgb.XGBClassifier(**CLASSIFIER_PARAMS)
-            _model._estimator_type = "classifier"
-            _model.load_model(str(_CLASSIFIER_PATH))
-
-            if _REGRESSOR_PATH.exists():
-                _regressor = xgb.XGBRegressor(**REGRESSOR_PARAMS)
-                _regressor._estimator_type = "regressor"
-                _regressor.load_model(str(_REGRESSOR_PATH))
-
-            if _EXPLAINER_PATH.exists():
+        if _EXPLAINER_PATH.exists():
+            try:
+                import joblib
                 _explainer = joblib.load(str(_EXPLAINER_PATH))
+            except Exception:
+                _explainer = None
 
-            if _FEAT_COLS_PATH.exists():
-                _feature_columns = json.loads(_FEAT_COLS_PATH.read_text(encoding="utf-8"))
-            else:
-                _feature_columns = _DEFAULT_FEATURE_COLUMNS[:]
+        if _FEAT_COLS_PATH.exists():
+            import json
+            _feature_columns = json.loads(_FEAT_COLS_PATH.read_text(encoding="utf-8"))
+        else:
+            _feature_columns = _DEFAULT_FEATURE_COLUMNS[:]
 
-            # Invalidate cache on reload
-            _prediction_cache.clear()
+        # Invalidate cache on reload
+        _prediction_cache.clear()
 
-            logger.info(
-                f"Model loaded: {len(_feature_columns)} features | "
-                f"regressor={'yes' if _regressor else 'no'} | "
-                f"SHAP={'yes' if _explainer else 'no'}"
-            )
-        except (OSError, ValueError, RuntimeError, ImportError) as e:
-            logger.warning(f"Model loading failed: {e} — using rule-based fallback")
-            _model = None
+        logger.info(
+            f"Model ready: {len(_feature_columns)} features | "
+            f"SHAP={'yes' if _explainer else 'no'}"
+        )
 
 
 # ── Feature extraction ────────────────────────────────────────────────────
@@ -195,61 +188,65 @@ def _rule_based(features: np.ndarray, cols: list) -> tuple[float, int, dict]:
     return risk, predicted_delay, contributions
 
 
-# ── ML prediction ─────────────────────────────────────────────────────────
-
 def _ml_prediction(features: np.ndarray, cols: list) -> tuple[float, int, dict]:
-    proba       = _model.predict_proba(features)[0]
-    risk_score  = float(proba[1]) * 100
+    """
+    Run the sklearn Pipeline or XGBoost model.
+    The sklearn Pipeline (delay_prediction_model.pkl) predicts delay_minutes directly
+    (regression). The risk score is derived from the delay estimate.
+    """
+    import joblib
+    from sklearn.pipeline import Pipeline as SklearnPipeline
 
-    predicted_delay = (
-        max(0, int(_regressor.predict(features)[0]))
-        if _regressor is not None
-        else int(risk_score * 1.5)
-    )
+    explanation = {"base_value": None, "feature_contributions": {}}
 
-    # Build enriched SHAP explanation
-    base_value   = None
-    contributions: dict = {}
+    if isinstance(_model, SklearnPipeline):
+        # Regression pipeline: predicts delay_minutes
+        delay_raw = float(max(0, _model.predict(features)[0]))
+        # Map delay minutes to a 0-100 risk score:
+        # 0 min → 0%, 15 min → 30%, 30 min → 55%, 60+ min → 85%+
+        risk_score = min(100.0, delay_raw / 60.0 * 85.0 + (5.0 if delay_raw > 0 else 0))
+        predicted_delay = int(round(delay_raw))
 
-    if _explainer is not None:
+        # Build simple importance-based explanation
         try:
-            shap_vals = _explainer.shap_values(features)
-            # For binary classifiers shap_values may return list[array] or single array
-            sv = shap_vals[1][0] if isinstance(shap_vals, list) else shap_vals[0]
-            base_value = float(
-                _explainer.expected_value[1]
-                if isinstance(_explainer.expected_value, (list, np.ndarray))
-                else _explainer.expected_value
-            )
-            for i, col in enumerate(cols):
-                label = FEATURE_LABELS.get(col, col)
-                raw   = float(features[0][i]) if not np.isnan(features[0][i]) else None
-                contributions[label] = {
-                    "shap":  round(float(sv[i]), 4),
-                    "value": round(raw, 4) if raw is not None else None,
-                }
-        except (ValueError, IndexError, RuntimeError, TypeError) as e:
-            logger.warning(f"SHAP explanation failed: {e}")
+            regressor = _model.named_steps.get("regressor")
+            if regressor is not None and hasattr(regressor, "feature_importances_"):
+                importances = regressor.feature_importances_
+                for i, col in enumerate(cols):
+                    label = FEATURE_LABELS.get(col, col)
+                    raw = float(features[0][i]) if not np.isnan(features[0][i]) else 0.0
+                    explanation["feature_contributions"][label] = {
+                        "shap": round(float(importances[i] * raw), 4),
+                        "value": round(raw, 4),
+                    }
+        except Exception as e:
+            logger.debug(f"Feature importance extraction failed: {e}")
+
     else:
-        # Fallback: use feature importances × feature values as proxy
-        importances = _model.feature_importances_
-        for i, col in enumerate(cols):
-            label = FEATURE_LABELS.get(col, col)
-            raw   = float(features[0][i]) if not np.isnan(features[0][i]) else 0.0
-            contributions[label] = {
-                "shap":  round(float(importances[i] * raw), 4),
-                "value": round(raw, 4),
-            }
+        # XGBoost classifier (legacy path — predict_proba)
+        proba = _model.predict_proba(features)[0]
+        risk_score = float(proba[1]) * 100
+        predicted_delay = int(risk_score * 1.5)
 
-    # Sort by abs(shap) descending
-    sorted_contribs = dict(
-        sorted(contributions.items(), key=lambda x: abs(x[1]["shap"]), reverse=True)
-    )
-
-    explanation = {
-        "base_value":            base_value,
-        "feature_contributions": sorted_contribs,
-    }
+        if _explainer is not None:
+            try:
+                shap_vals = _explainer.shap_values(features)
+                sv = shap_vals[1][0] if isinstance(shap_vals, list) else shap_vals[0]
+                base_value = float(
+                    _explainer.expected_value[1]
+                    if isinstance(_explainer.expected_value, (list, np.ndarray))
+                    else _explainer.expected_value
+                )
+                explanation["base_value"] = base_value
+                for i, col in enumerate(cols):
+                    label = FEATURE_LABELS.get(col, col)
+                    raw = float(features[0][i]) if not np.isnan(features[0][i]) else None
+                    explanation["feature_contributions"][label] = {
+                        "shap": round(float(sv[i]), 4),
+                        "value": round(raw, 4) if raw is not None else None,
+                    }
+            except Exception as e:
+                logger.warning(f"SHAP explanation failed: {e}")
 
     return risk_score, predicted_delay, explanation
 
@@ -306,8 +303,16 @@ def _run_prediction(
 
     with _lock:
         if _model is not None:
-            risk, delay, explanation = _ml_prediction(features, cols)
-            version = "xgboost-v10"
+            try:
+                risk, delay, explanation = _ml_prediction(features, cols)
+                version = "xgboost-v10"
+            except Exception as e:
+                logger.warning(f"ML prediction failed (shape mismatch?): {e} — falling back to rule-based")
+                risk, delay, contributions = _rule_based(features, cols)
+                explanation = {"base_value": None, "feature_contributions": {
+                    k: {"shap": v, "value": None} for k, v in contributions.items()
+                }}
+                version = "rule-based-v1-fallback"
         else:
             risk, delay, contributions = _rule_based(features, cols)
             explanation = {"base_value": None, "feature_contributions": {

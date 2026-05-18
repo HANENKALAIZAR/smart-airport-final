@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { addDays, format, formatDistanceToNow, isSameDay, subDays } from "date-fns";
 import {
   ArrowUpDown, ArrowDown, ArrowUp, Search, RotateCw, Plane,
   PlaneTakeoff, PlaneLanding, Radio, ChevronLeft, ChevronRight, Building2, Loader2,
-  RefreshCw, Database,
+  RefreshCw, Clock,
 } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PublicNav } from "@/components/PublicNav";
@@ -23,7 +23,7 @@ import {
 import { formatTime } from "@/lib/time";
 import { cn } from "@/lib/utils";
 import flightsHero from "@/assets/flights-hero.jpg";
-import { getAviationEdgeFlights, type Flight, type FlightStatus } from "@/services/api";
+import { getPassengerFlights, type Flight, type FlightStatus } from "@/services/api";
 import { TUNISIAN_AIRPORTS } from "@smart-airport/shared-core/constants/airports.js";
 
 type SortKey = "flightNumber" | "airline" | "from" | "to" | "scheduled" | "estimated" | "status";
@@ -61,13 +61,15 @@ const Flights = () => {
   const [sortKey, setSortKey] = useState<SortKey>("scheduled");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [page, setPage] = useState(1);
+  const lastAutoPagedKey = useRef<string>("");
 
 
   // Load flights from DB cache (no polling — data is kept fresh by backend scheduler)
   const loadFlights = useCallback(async (forceRefresh = false) => {
     if (forceRefresh) setRefreshing(true);
     else setLoading(true);
-    const data = await getAviationEdgeFlights(airportCode, 'both', forceRefresh);
+    // direction 'both' includes departures and arrivals
+    const data = await getPassengerFlights(airportCode, 'both');
     setAllFlights(data);
     setLastUpdated(new Date());
     setLoading(false);
@@ -81,8 +83,10 @@ const Flights = () => {
 
   const handleRefresh = () => loadFlights(true);
 
-  // Reset page quand les filtres changent
-  useEffect(() => { setPage(1); }, [airportCode, direction, query, status, date, sortKey, sortDir]);
+  // Reset page when search query, status filter or sort column changes
+  useEffect(() => { setPage(1); }, [query, status, sortKey, sortDir]);
+
+
 
   const selectedAirport = TUNISIAN_AIRPORTS.find(a => a.code === airportCode);
 
@@ -106,39 +110,17 @@ const Flights = () => {
       return true;
     });
 
-    // ── Smart real-time priority sort ──────────────────────────────────────
-    // When using the default sort ("scheduled" asc), apply priority ordering:
-    // 1. Boarding  2. Upcoming departures (soonest first)  3. In-air
-    // 4. Recently landed (closest to now)  5. Old / historical
-    // User can still override by clicking column headers.
+    // Chronological sorting of flights by scheduled time for the selected day
     if (sortKey === "scheduled") {
-      const STATUS_PRIORITY: Record<string, number> = {
-        boarding:  0,
-        delayed:   1,
-        on_time:   1,
-        scheduled: 1,
-        in_air:    2,
-        landed:    3,
-        cancelled: 4,
-      };
-
+      const dir = sortDir === "asc" ? 1 : -1;
       rows = [...rows].sort((a, b) => {
-        const pA = STATUS_PRIORITY[a.status] ?? 5;
-        const pB = STATUS_PRIORITY[b.status] ?? 5;
-        if (pA !== pB) return pA - pB;
-
-        // Within the same priority bucket, sort by proximity to now
-        const refA = new Date(a.departureTime ?? a.scheduledDeparture).getTime();
-        const refB = new Date(b.departureTime ?? b.scheduledDeparture).getTime();
-
-        if (pA <= 1) {
-          // Upcoming: sort ASC (earliest first, but only future/near flights)
-          return refA - refB;
-        } else if (pA === 3) {
-          // Landed: most recent first (closest to now DESC)
-          return refB - refA;
-        }
-        return refA - refB;
+        const refA = direction === "arrivals"
+          ? (a.scheduledArrival || a.arrivalTime)
+          : (a.scheduledDeparture || a.departureTime);
+        const refB = direction === "arrivals"
+          ? (b.scheduledArrival || b.arrivalTime)
+          : (b.scheduledDeparture || b.departureTime);
+        return (new Date(refA).getTime() - new Date(refB).getTime()) * dir;
       });
     } else {
       // Manual column sort
@@ -159,6 +141,59 @@ const Flights = () => {
     return rows;
   }, [allFlights, airportCode, direction, query, status, date, sortKey, sortDir]);
 
+  // Auto-pagination to the flight closest to the current time
+  useEffect(() => {
+    if (allFlights.length === 0) return;
+
+    // Construct the context key for first-load / airport / date / direction change
+    const contextKey = `${airportCode}_${direction}_${date ? format(date, "yyyy-MM-dd") : "any"}`;
+    if (lastAutoPagedKey.current === contextKey) {
+      return;
+    }
+
+    // Rule 14: If date is not today, open page 1 normally.
+    const today = new Date();
+    if (!date || !isSameDay(date, today)) {
+      setPage(1);
+      lastAutoPagedKey.current = contextKey;
+      return;
+    }
+
+    // Rule 8: If the user changes sort column manually, do not force the auto-page again.
+    if (sortKey !== "scheduled" || sortDir !== "asc") {
+      return;
+    }
+
+    const nowTime = today.getTime();
+    
+    // Find the index of the first flight whose time is greater than or equal to now
+    let firstUpcomingIndex = -1;
+    for (let i = 0; i < filtered.length; i++) {
+      const f = filtered[i];
+      const timeStr = direction === "arrivals"
+        ? (f.scheduledArrival || f.arrivalTime)
+        : (f.scheduledDeparture || f.departureTime);
+      const fTime = new Date(timeStr).getTime();
+      if (fTime >= nowTime) {
+        firstUpcomingIndex = i;
+        break;
+      }
+    }
+
+    if (firstUpcomingIndex !== -1) {
+      const targetPage = Math.floor(firstUpcomingIndex / PAGE_SIZE) + 1;
+      setPage(targetPage);
+    } else if (filtered.length > 0) {
+      const lastPage = Math.ceil(filtered.length / PAGE_SIZE);
+      setPage(lastPage);
+    } else {
+      setPage(1);
+    }
+
+    // Mark as auto-paged for this context
+    lastAutoPagedKey.current = contextKey;
+  }, [allFlights, airportCode, date, direction, filtered, sortKey, sortDir]);
+
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
@@ -166,21 +201,14 @@ const Flights = () => {
   const pageRows = filtered.slice(start, start + PAGE_SIZE);
 
   const toggleSort = (key: SortKey) => {
-    if (key === "scheduled") {
-      // Clicking Scheduled header resets to smart real-time sort
-      setSortKey("scheduled"); setSortDir("asc");
-    } else {
-      if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
-      else { setSortKey(key); setSortDir("asc"); }
-    }
+    if (sortKey === key) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
   };
 
-  // Reset = clear search/status filters only. Does NOT touch sort (smart sort stays).
+  // Reset = clear search/status filters only.
   const resetFilters = () => {
     setQuery(""); setStatus("all"); setDate(new Date()); setPage(1);
   };
-
-  const isSmartSorted = sortKey === "scheduled";
   const liveCount = filtered.filter(f => f.status === "in_air" || f.status === "boarding").length;
   const departuresCount = allFlights.filter(f => f.from.code === airportCode).length;
   const arrivalsCount = allFlights.filter(f => f.to.code === airportCode).length;
@@ -215,8 +243,8 @@ const Flights = () => {
               transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
               className="max-w-3xl mx-auto text-center">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[11px] uppercase tracking-[0.22em] text-white/90 mb-6">
-                <Database className="h-3 w-3 text-primary" />
-                Live · DB-cached · Auto-refreshed
+                <Radio className="h-3 w-3 text-primary animate-pulse" />
+                Real-time flight updates
               </div>
               <h1 className="font-display text-5xl sm:text-6xl md:text-7xl text-white leading-[0.98] drop-shadow-lg">
                 {t("explore_flights")}
@@ -287,24 +315,24 @@ const Flights = () => {
                     <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" />
                   </span>
                 )}
-                {refreshing ? "Refreshing…" : liveCount > 0 ? `${liveCount} live now` : "DB cache"}
+                {refreshing ? "Refreshing…" : liveCount > 0 ? `${liveCount} active flights` : "Board active"}
               </div>
               {lastUpdated && (
                 <span className="text-xs text-muted-foreground hidden sm:inline">
-                  <Database className="inline h-3 w-3 mr-1 opacity-60" />
+                  <Clock className="inline h-3 w-3 mr-1 opacity-60" />
                   {formatDistanceToNow(lastUpdated, { addSuffix: true })}
                 </span>
               )}
-              {/* Refresh = pull fresh data from Aviation Edge API */}
+              {/* Refresh flight list */}
               <Button
                 variant="outline" size="sm"
                 onClick={handleRefresh}
                 disabled={refreshing}
                 className="gap-2 rounded-full"
-                title="Pull latest data from Aviation Edge"
+                title="Refresh flight board with the latest updates"
               >
                 <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
-                {refreshing ? "Refreshing…" : "Live Refresh"}
+                {refreshing ? "Refreshing…" : "Refresh Flights"}
               </Button>
             </div>
           </div>
@@ -374,7 +402,7 @@ const Flights = () => {
                   </SelectContent>
                 </Select>
               </div>
-              {/* Reset filters — only clears search + status, smart sort is preserved */}
+              {/* Reset filters — only clears search + status */}
               <div className="md:col-span-1 flex items-center">
                 <Button
                   variant="ghost" size="sm"
@@ -405,19 +433,7 @@ const Flights = () => {
                     <Th col="airline" label={t("common.airline", "Airline")} />
                     <Th col="from" label={t("common.departure")} />
                     <Th col="to" label={t("common.arrival")} />
-                    <TableHead className="whitespace-nowrap">
-                      <button type="button" onClick={() => toggleSort("scheduled")}
-                        className="inline-flex items-center gap-1.5 text-xs uppercase tracking-wider hover:text-foreground transition-colors">
-                        {t("common.scheduled")}
-                        {isSmartSorted ? (
-                          <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-bold text-primary uppercase tracking-widest">
-                            <span className="h-1 w-1 rounded-full bg-primary animate-pulse inline-block" />LIVE
-                          </span>
-                        ) : (
-                          <SortIcon col="scheduled" />
-                        )}
-                      </button>
-                    </TableHead>
+                    <Th col="scheduled" label={t("common.scheduled")} />
                     <Th col="estimated" label={t("common.estimated", "Estimated")} />
                     <TableHead className="text-xs uppercase tracking-wider">{t("common.gate")}</TableHead>
                     <TableHead className="text-xs uppercase tracking-wider">{t("common.terminal")}</TableHead>

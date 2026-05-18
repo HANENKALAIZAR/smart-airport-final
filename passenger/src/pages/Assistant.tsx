@@ -1,59 +1,54 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { PublicNav } from "@/components/PublicNav";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Sparkles, Send, Plane, Luggage, Clock, MapPin, Bot, User, Scale, Hotel, PlaneTakeoff, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:3001";
 type Msg = { role: "user" | "assistant"; content: string; actions?: string[] };
 
-const SUGGESTIONS = [
-  { icon: Plane, label: "Track flight AF1234" },
-  { icon: Clock, label: "Will my flight be delayed?" },
-  { icon: Luggage, label: "Lost baggage — what do I do?" },
-  { icon: Scale, label: "What are my rights?" },
-  { icon: Hotel, label: "Hotels near the airport" },
-  { icon: PlaneTakeoff, label: "Find an alternative flight" },
-];
-
-const MOCK_REPLIES: Record<string, string> = {
-  default:
-    "I'm your Smart Airport AI assistant (demo mode). I can help with flight tracking, gate updates, lounges, dining and passenger rights.\n\nConnect Lovable Cloud to enable live AI responses.",
-  flight:
-    "Flight **AF1234** is currently **on time**, departing from **Gate B12** at **18:45**. Boarding starts at 18:10. I'll alert you the moment anything changes.",
-  delay:
-    "Based on weather, ATC and historical patterns, your flight has a **12% probability of delay**. Conditions look favorable — no action needed.",
-  baggage:
-    "If your bag is missing: 1) File a **PIR** at the airline desk before leaving the airport. 2) Keep your tag & boarding pass. 3) Save receipts for essentials — you may be reimbursed up to ~€1,800 under the Montreal Convention.",
-  rights:
-    "Under **EU 261/2004**, you may be entitled to **€250–€600** for delays of 3h+, cancellations with less than 14 days notice, or denied boarding — when the cause is within the airline's control. Visit **/passenger-rights** to run our free eligibility checker.",
-  hotels:
-    "Top-rated hotels near the airport:\n• **Sheraton Skyline** — 4★, 5 min shuttle, from €145\n• **Hilton Terminal 4** — 4★, connected walkway, from €189\n• **Premier Inn Airport** — 3★, 8 min shuttle, from €89\n\nIf your delay is the airline's fault and exceeds 6h overnight, the carrier must cover your stay.",
-  alternative:
-    "I found 3 alternative options for you:\n• **AF2210** — departs 20:15, same destination, 2 seats left\n• **KL5587** (codeshare) — departs 21:40, 1 stop via AMS\n• **BA8842** — tomorrow 06:30, direct\n\nWant me to request a rebooking with your airline?",
-};
-
-function pickMockReply(input: string): string {
-  const q = input.toLowerCase();
-  if (/right|compensat|eu\s?261|entitled/.test(q)) return MOCK_REPLIES.rights;
-  if (/hotel|stay|overnight|accommodation/.test(q)) return MOCK_REPLIES.hotels;
-  if (/alternative|rebook|another flight|other flight|reroute/.test(q)) return MOCK_REPLIES.alternative;
-  if (/bag|luggage|lost|missing|suitcase/.test(q)) return MOCK_REPLIES.baggage;
-  if (/delay|late|on.?time|weather/.test(q)) return MOCK_REPLIES.delay;
-  if (/flight|af\d|track|gate/.test(q)) return MOCK_REPLIES.flight;
-  return MOCK_REPLIES.default;
+function detectMsgLanguage(msg: string, fallback: string) {
+  if (!msg) return fallback;
+  if (/[\u0600-\u06FF]/.test(msg)) return 'ar';
+  if (/\b(vol|vols|retard|retardé|annulé|billet|aéroport|bonjour|merci|oui|non|s'il vous plaît|salut|français|bagage|bagages|près)\b/i.test(msg)) return 'fr';
+  if (/\b(flight|flights|delay|delayed|cancel|cancelled|ticket|airport|hello|thanks|yes|no|please|hi|english|baggage|luggage|near)\b/i.test(msg)) return 'en';
+  return fallback;
 }
 
 export default function Assistant() {
+  const { t, i18n } = useTranslation();
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
+  const suggLang = detectMsgLanguage(lastUserMsg, i18n.language);
+  const tSugg = i18n.getFixedT(suggLang);
+
+  const SUGGESTIONS = [
+    { icon: Plane, label: tSugg("assistant.sugg_track") },
+    { icon: Clock, label: tSugg("assistant.sugg_delay") },
+    { icon: Luggage, label: tSugg("assistant.sugg_baggage") },
+    { icon: Scale, label: tSugg("assistant.sugg_rights") },
+    { icon: Hotel, label: tSugg("assistant.sugg_hotels") },
+    { icon: PlaneTakeoff, label: tSugg("assistant.sugg_alt") },
+  ];
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLDivElement;
+    const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 50;
+    setShouldAutoScroll(isNearBottom);
+  };
+
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [messages, isTyping]);
+    if (shouldAutoScroll) {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    }
+  }, [messages, isTyping, shouldAutoScroll]);
 
   const sendMessage = async (text: string) => {
     const trimmed = text.trim();
@@ -63,6 +58,10 @@ export default function Assistant() {
     setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsTyping(true);
+    setShouldAutoScroll(true);
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    }, 50);
 
     try {
       const res = await fetch(`${AI_URL}/api/chat`, {
@@ -85,16 +84,16 @@ export default function Assistant() {
       if (parsed.flight) {
         const f = parsed.flight;
         const statusStr = f.status ? ` — **${f.status.toUpperCase()}**` : "";
-        const delayStr = f.delay && f.delay !== "0min" ? ` (${f.delay} delay)` : "";
-        reply += `Flight **${f.number}** (${f.airline})${statusStr}${delayStr}\n`;
+        const delayStr = f.delay && f.delay !== "0min" ? ` (${f.delay} ${t("common.delayed") || "delay"})` : "";
+        reply += `${t("common.flightNumber") || 'Flight'} **${f.number}** (${f.airline})${statusStr}${delayStr}\n`;
         if (f.route) reply += `Route: ${f.route.from || f.route} → ${f.route.to || ''}\n`;
-        if (f.scheduledDeparture) reply += `Departure: ${f.scheduledDeparture}\n`;
-        if (f.scheduledArrival) reply += `Arrival: ${f.scheduledArrival}\n`;
-        if (f.gate) reply += `Gate: ${f.gate}\n`;
+        if (f.scheduledDeparture) reply += `${t("common.departure")}: ${f.scheduledDeparture}\n`;
+        if (f.scheduledArrival) reply += `${t("common.arrival")}: ${f.scheduledArrival}\n`;
+        if (f.gate) reply += `${t("common.gate")}: ${f.gate}\n`;
       }
 
       if (!reply && !parsed.rights && !parsed.flights && !parsed.hotels && !parsed.services && !parsed.suggestion) {
-        reply = "I'm here to help!";
+        reply = t("assistant.title");
       }
 
       if (parsed.rights?.length) {
@@ -102,7 +101,7 @@ export default function Assistant() {
       }
       if (parsed.flights?.length) {
         reply += "\n\n" + parsed.flights.map((f: { flightNumber: string; airline: string; departure: string; status: string }) =>
-          `• **${f.flightNumber}** (${f.airline}) — departs ${f.departure} — ${f.status}`
+          `• **${f.flightNumber}** (${f.airline}) — ${t("common.departure") || "departs"} ${f.departure} — ${f.status}`
         ).join("\n");
       }
       if (parsed.hotels?.length) {
@@ -144,7 +143,7 @@ export default function Assistant() {
       setIsTyping(false);
       setMessages((prev) => [...prev, {
         role: "assistant",
-        content: "Sorry, I couldn't connect to the AI backend. Make sure it's running on port 3001.",
+        content: t("assistant.error_connect"),
       }]);
     }
   };
@@ -152,6 +151,13 @@ export default function Assistant() {
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     sendMessage(input);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage(input);
+    }
   };
 
   return (
@@ -178,7 +184,7 @@ export default function Assistant() {
                 className="gap-1.5 text-muted-foreground hover:text-foreground"
               >
                 <Plus className="h-4 w-4" />
-                <span className="hidden sm:inline">New chat</span>
+                <span className="hidden sm:inline">{t("assistant.new_chat")}</span>
               </Button>
               <Button
                 variant="ghost"
@@ -188,13 +194,13 @@ export default function Assistant() {
                 className="gap-1.5 text-muted-foreground hover:text-destructive"
               >
                 <Trash2 className="h-4 w-4" />
-                <span className="hidden sm:inline">Clear</span>
+                <span className="hidden sm:inline">{t("assistant.clear")}</span>
               </Button>
             </div>
           </div>
 
           {/* Messages */}
-          <div ref={scrollRef} className="flex-1 overflow-y-auto py-6 space-y-6">
+          <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto py-6 space-y-6">
             {messages.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center text-center gap-6">
                 <div className="h-16 w-16 rounded-2xl bg-gradient-amber grid place-items-center shadow-amber">
@@ -202,13 +208,13 @@ export default function Assistant() {
                 </div>
                 <div className="max-w-md">
                   <div className="text-xs uppercase tracking-[0.18em] text-primary mb-2">
-                    Your 24/7 Flight Support System
+                    {t("assistant.subtitle")}
                   </div>
                   <h2 className="font-display text-2xl text-foreground">
-                    How Can We Help You?
+                    {t("assistant.title")}
                   </h2>
                   <p className="text-sm text-muted-foreground mt-2">
-                    Select a quick action below or type your question in chat.
+                    {t("assistant.description")}
                   </p>
                 </div>
                 <div className="grid sm:grid-cols-2 gap-2 w-full max-w-xl">
@@ -244,14 +250,16 @@ export default function Assistant() {
 
           {/* Composer */}
           <Card className="p-2 bg-card border-border shadow-lg">
-            <form onSubmit={onSubmit} className="flex items-center gap-2">
-              <Input
+            <form onSubmit={onSubmit} className="flex items-end gap-2 relative">
+              <Textarea
                 id="chat-input"
                 name="message"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Ask the assistant anything…"
-                className="border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
+                onKeyDown={handleKeyDown}
+                placeholder={t("assistant.placeholder")}
+                rows={1}
+                className="min-h-[44px] max-h-32 resize-none border-0 bg-transparent py-3 focus-visible:ring-0 focus-visible:ring-offset-0 text-base"
               />
               <Button
                 type="submit"

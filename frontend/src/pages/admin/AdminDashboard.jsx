@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plane, Clock, TrendingUp, AlertTriangle, RefreshCw, ArrowDown, ArrowUp } from 'lucide-react';
 import KPICard from '../../components/admin/KPICard';
 import FlightDetailsModal from '../../components/admin/FlightDetailsModal';
+import FlightAIModal from '../../components/admin/FlightAIModal';
 import FilterBar from '../../components/admin/FilterBar';
 import Pagination from '../../components/admin/Pagination';
 import AirportAdminAIAlerts from './AirportAdminAIAlerts';
@@ -60,19 +61,7 @@ function formatTime(iso) {
 
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-/* ── Mock fallback flights (used when API is unavailable) ── */
-function buildMockFlights(iata) {
-    return [
-        { id: 1, flight_number: `TU721`, airline_name: 'Tunisair', direction: 'departure', dep_iata: iata, arr_iata: 'CDG', arr_airport: 'Paris Charles de Gaulle', dep_scheduled: new Date(Date.now() - 3600000).toISOString(), dep_gate: 'B3', dep_terminal: '1', arr_gate: null, arr_terminal: null, status: 'delayed', delay_minutes: 45 },
-        { id: 2, flight_number: `TU302`, airline_name: 'Tunisair', direction: 'departure', dep_iata: iata, arr_iata: 'FCO', arr_airport: 'Rome Fiumicino', dep_scheduled: new Date(Date.now() + 1800000).toISOString(), dep_gate: 'A7', dep_terminal: '1', arr_gate: null, arr_terminal: null, status: 'on_time', delay_minutes: 0 },
-        { id: 3, flight_number: `AF1234`, airline_name: 'Air France', direction: 'arrival', dep_iata: 'CDG', arr_iata: iata, dep_airport: 'Paris CDG', arr_scheduled: new Date(Date.now() + 2700000).toISOString(), arr_gate: 'C2', arr_terminal: '2', dep_gate: null, dep_terminal: null, status: 'boarding', delay_minutes: 0 },
-        { id: 4, flight_number: `LH490`, airline_name: 'Lufthansa', direction: 'arrival', dep_iata: 'FRA', arr_iata: iata, dep_airport: 'Frankfurt', arr_scheduled: new Date(Date.now() + 5400000).toISOString(), arr_gate: 'D1', arr_terminal: '2', dep_gate: null, dep_terminal: null, status: 'delayed', delay_minutes: 20 },
-        { id: 5, flight_number: `TU505`, airline_name: 'Tunisair', direction: 'departure', dep_iata: iata, arr_iata: 'LHR', arr_airport: 'London Heathrow', dep_scheduled: new Date(Date.now() + 7200000).toISOString(), dep_gate: 'B9', dep_terminal: '1', arr_gate: null, arr_terminal: null, status: 'scheduled', delay_minutes: 0 },
-        { id: 6, flight_number: `IB3456`, airline_name: 'Iberia', direction: 'arrival', dep_iata: 'MAD', arr_iata: iata, dep_airport: 'Madrid Barajas', arr_scheduled: new Date(Date.now() - 900000).toISOString(), arr_gate: 'A3', arr_terminal: '1', dep_gate: null, dep_terminal: null, status: 'landed', delay_minutes: 0 },
-        { id: 7, flight_number: `TU801`, airline_name: 'Tunisair', direction: 'departure', dep_iata: iata, arr_iata: 'DUS', arr_airport: 'Dusseldorf', dep_scheduled: new Date(Date.now() + 10800000).toISOString(), dep_gate: 'C5', dep_terminal: '1', arr_gate: null, arr_terminal: null, status: 'cancelled', delay_minutes: 0 },
-        { id: 8, flight_number: `VY1234`, airline_name: 'Vueling', direction: 'arrival', dep_iata: 'BCN', arr_iata: iata, dep_airport: 'Barcelona', arr_scheduled: new Date(Date.now() + 3600000).toISOString(), arr_gate: 'B6', arr_terminal: '2', dep_gate: null, dep_terminal: null, status: 'departed', delay_minutes: 0 },
-    ];
-}
+/* buildMockFlights REMOVED — no fake data. API errors show empty state. */
 
 export default function AdminDashboard({ selectedDate }) {
     const { selectedAirport, role } = useAirport();
@@ -100,17 +89,12 @@ export default function AdminDashboard({ selectedDate }) {
             const json = await res.json();
             const rawList = json.flights || [];
             const fetched = rawList.map((f) => ({ ...f, status: normalizeFlightStatus(f.status) }));
-            if (fetched.length > 0) {
-                setFlights(fetched);
-            } else {
-                // API returned empty — use mock data for demo
-                setFlights(buildMockFlights(selectedAirport.iata));
-            }
+            setFlights(fetched);
             setLastUpdated(new Date());
         } catch (err) {
-            console.warn('AdminDashboard: API unavailable, using mock data:', err.message);
-            setError(null); // don't show error, just use mock
-            setFlights(buildMockFlights(selectedAirport.iata));
+            console.warn('AdminDashboard: AviationStack API unavailable:', err.message);
+            setError(`Live feed unavailable: ${err.message}`);
+            setFlights([]);
             setLastUpdated(new Date());
         } finally {
             setLoading(false);
@@ -310,7 +294,7 @@ export default function AdminDashboard({ selectedDate }) {
                                     {paginated.length === 0 && (
                                         <tr>
                                             <td colSpan={9} style={{ textAlign: 'center', padding: '2rem', color: 'rgba(255,255,255,0.3)' }}>
-                                                No flights found for this filter.
+                                                {error ? 'Live feed unavailable — check backend or API key.' : 'No flights found for this filter.'}
                                             </td>
                                         </tr>
                                     )}
@@ -344,21 +328,10 @@ export default function AdminDashboard({ selectedDate }) {
             </div>
 
 
-            {/* Flight Details Modal */}
+            {/* Flight Details Modal — opens FlightAIModal for real AI intelligence */}
             {selectedFlight && (
-                <FlightDetailsModal
-                    flight={{
-                        ...selectedFlight,
-                        flightNumber: selectedFlight.flight_number,
-                        airline: selectedFlight.airline_name,
-                        origin: selectedFlight.dep_iata,
-                        destination: selectedFlight.arr_iata,
-                        scheduledTime: formatTime(selectedFlight.dep_scheduled),
-                        status: STATUS_LABEL[selectedFlight.status] || selectedFlight.status,
-                        predictedDelay: selectedFlight.delay_minutes,
-                        riskLevel: selectedFlight.delay_minutes > 60 ? 'High' : selectedFlight.delay_minutes > 15 ? 'Medium' : 'Low',
-                    }}
-                    isOpen={!!selectedFlight}
+                <FlightAIModal
+                    flight={selectedFlight}
                     onClose={() => setSelectedFlight(null)}
                 />
             )}

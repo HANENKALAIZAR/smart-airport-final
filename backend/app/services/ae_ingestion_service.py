@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 _LATLON: dict[str, tuple[float, float]] = {
     "TUN": (36.851, 10.227), "MIR": (35.758, 10.755),
     "NBE": (36.076, 10.439), "DJE": (33.875, 10.775),
-    "SFA": (34.718, 10.691), "GAF": (33.877, 10.041),
     "TOE": (33.939, 8.110),
     "CDG": (49.009, 2.548),  "ORY": (48.725, 2.360),
     "LHR": (51.477, -0.461), "FRA": (50.033, 8.571),
@@ -403,7 +402,7 @@ async def run_full_ingestion(db: Session) -> dict:
     Run ingestion for all Tunisian airports × both directions.
     Called by the scheduler job.
     """
-    airports = ["TUN", "MIR", "NBE", "DJE", "SFA", "GAF"]
+    airports = ["TUN", "MIR", "NBE", "DJE"]  # Supported Tunisian airports
     directions = ["departure", "arrival"]
     totals = {
         "fetched": 0,

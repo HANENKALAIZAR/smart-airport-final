@@ -134,6 +134,23 @@ const en = {
     journey_body: "Whether you\u2019re catching a redeye or guiding a family through a busy terminal, the app keeps every detail in your pocket.",
     footer_tag: "Built for the modern traveler.",
   },
+  explore_flights: "Live Flights",
+  explore_flights_desc: "Real-time departures & arrivals with AI delay prediction",
+  assistant: {
+    title: "How Can We Help You?",
+    subtitle: "Your 24/7 Flight Support System",
+    description: "Select a quick action below or type your question in chat.",
+    placeholder: "Ask the assistant anything…",
+    new_chat: "New chat",
+    clear: "Clear",
+    error_connect: "Sorry, I couldn't connect to the AI backend. Make sure it's running on port 3001.",
+    sugg_track: "Track flight AF1234",
+    sugg_delay: "Will my flight be delayed?",
+    sugg_baggage: "Lost baggage — what do I do?",
+    sugg_rights: "What are my rights?",
+    sugg_hotels: "Hotels near the airport",
+    sugg_alt: "Find an alternative flight"
+  }
 };
 
 const fr = {
@@ -268,6 +285,23 @@ const fr = {
     journey_body: "Que vous preniez un vol de nuit ou guidiez une famille dans un terminal animé, l'app garde chaque détail dans votre poche.",
     footer_tag: "Conçu pour le voyageur moderne.",
   },
+  explore_flights: "Vols en direct",
+  explore_flights_desc: "Départs & arrivées en temps réel avec prédiction IA des retards",
+  assistant: {
+    title: "Comment pouvons-nous vous aider ?",
+    subtitle: "Votre système d'assistance vol 24/7",
+    description: "Sélectionnez une action rapide ci-dessous ou posez votre question.",
+    placeholder: "Demandez n'importe quoi à l'assistant...",
+    new_chat: "Nouveau chat",
+    clear: "Effacer",
+    error_connect: "Désolé, impossible de se connecter au backend IA. Assurez-vous qu'il fonctionne.",
+    sugg_track: "Suivre le vol AF1234",
+    sugg_delay: "Mon vol sera-t-il retardé ?",
+    sugg_baggage: "Bagages perdus — que faire ?",
+    sugg_rights: "Quels sont mes droits ?",
+    sugg_hotels: "Hôtels près de l'aéroport",
+    sugg_alt: "Trouver un vol alternatif"
+  }
 };
 
 const ar = {
@@ -402,6 +436,23 @@ const ar = {
     journey_body: "سواء كنت تسافر في رحلة ليلية أو ترشد عائلة عبر محطة مزدحمة، يحفظ سكاي بورت كل التفاصيل في جيبك.",
     footer_tag: "صُمم للمسافر العصري.",
   },
+  explore_flights: "الرحلات المباشرة",
+  explore_flights_desc: "المغادرات والوصول في الوقت الفعلي مع توقعات التأخير بالذكاء الاصطناعي",
+  assistant: {
+    title: "كيف يمكننا مساعدتك؟",
+    subtitle: "نظام دعم الرحلات الخاص بك على مدار الساعة",
+    description: "حدد إجراءً سريعًا أدناه أو اكتب سؤالك في الدردشة.",
+    placeholder: "اسأل المساعد عن أي شيء...",
+    new_chat: "محادثة جديدة",
+    clear: "مسح",
+    error_connect: "عذرًا، تعذر الاتصال بالخادم. تأكد من أنه يعمل.",
+    sugg_track: "تتبع الرحلة AF1234",
+    sugg_delay: "هل ستتأخر رحلتي؟",
+    sugg_baggage: "فقدان الأمتعة — ماذا أفعل؟",
+    sugg_rights: "ما هي حقوقي؟",
+    sugg_hotels: "فنادق بالقرب من المطار",
+    sugg_alt: "البحث عن رحلة بديلة"
+  }
 };
 
 i18n

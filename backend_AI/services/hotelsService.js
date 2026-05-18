@@ -35,29 +35,6 @@ const AIRPORT_COORDS = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Tiny HTTPS POST helper that returns parsed JSON.
- */
-function httpsPost(hostname, path, headers, body) {
-  return new Promise((resolve, reject) => {
-    const payload = JSON.stringify(body);
-    const req = https.request(
-      { hostname, path, method: 'POST', headers: { ...headers, 'Content-Length': Buffer.byteLength(payload) } },
-      (res) => {
-        let data = '';
-        res.on('data', chunk => (data += chunk));
-        res.on('end', () => {
-          try { resolve(JSON.parse(data)); }
-          catch (e) { reject(new Error(`JSON parse failed: ${data.slice(0, 120)}`)); }
-        });
-      }
-    );
-    req.on('error', reject);
-    req.write(payload);
-    req.end();
-  });
-}
-
-/**
  * Convert Google Places price level (0-4) to our internal labels.
  */
 function mapPriceLevel(level) {
@@ -88,59 +65,6 @@ function haversineMetres(lat1, lng1, lat2, lng2) {
   const dλ = ((lng2 - lng1) * Math.PI) / 180;
   const a = Math.sin(dφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(dλ / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// GOOGLE PLACES API (NEW) — NEARBY SEARCH
-// POST https://places.googleapis.com/v1/places:searchNearby
-// Docs: https://developers.google.com/maps/documentation/places/web-service/nearby-search
-// ─────────────────────────────────────────────────────────────────────────────
-async function searchGooglePlacesNearby(lat, lng, radiusMetres, apiKey) {
-  const fieldMask = [
-    'places.id',
-    'places.displayName',
-    'places.formattedAddress',
-    'places.location',
-    'places.rating',
-    'places.userRatingCount',
-    'places.priceLevel',
-    'places.websiteUri',
-    'places.nationalPhoneNumber',
-    'places.regularOpeningHours',
-    'places.types',
-    'places.goodForGroups',
-    'places.servesMeal',
-  ].join(',');
-
-  const body = {
-    includedTypes: ['hotel', 'lodging'],
-    maxResultCount: 10,
-    locationRestriction: {
-      circle: {
-        center: { latitude: lat, longitude: lng },
-        radius: radiusMetres,
-      },
-    },
-    rankPreference: 'DISTANCE',
-  };
-
-  const result = await httpsPost(
-    'places.googleapis.com',
-    '/v1/places:searchNearby',
-    {
-      'Content-Type': 'application/json',
-      'X-Goog-Api-Key': apiKey,
-      'X-Goog-FieldMask': fieldMask,
-    },
-    body
-  );
-
-  // Google returns { places: [...] } or { error: {...} }
-  if (result.error) {
-    throw new Error(`Google Places error ${result.error.code}: ${result.error.message}`);
-  }
-
-  return result.places || [];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -213,7 +137,7 @@ function getMockHotels(airportIata) {
       shuttleService: typeof hotel.distance === 'string' && hotel.distance.includes('km')
         && parseInt(hotel.distance) <= 5,
       airportIata,
-      rating: 3.5 + Math.random() * 1.5,
+      rating: null, // No live rating available — Google Places API offline
       source: 'static_fallback',
       bookingUrl: `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(hotel.name)}`,
     }));

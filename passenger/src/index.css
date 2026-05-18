@@ -249,6 +249,10 @@
     color: transparent;
     animation: shimmer 4s linear infinite;
   }
+
+  .timeline-progress {
+    width: var(--progress-width, 0%);
+  }
 }
 
 /* RTL flips for directional icons */

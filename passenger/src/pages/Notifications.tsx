@@ -33,33 +33,32 @@ const toneFor = (k: NotifKind) =>
   : k === "service" ? "bg-success/10 text-success"
   : "bg-muted text-muted-foreground";
 
-// Génère des notifications à partir des vrais vols
+// Build notifications from REAL flight statuses only — no static fake items
 function buildNotifications(flights: Flight[]): AppNotification[] {
   const notifs: AppNotification[] = [];
-  flights.forEach((f, i) => {
+  const now = Date.now();
+
+  flights.forEach((f) => {
     if (f.status === "boarding") {
+      const depMs = new Date(f.departureTime).getTime();
+      const minutesAgo = Math.max(0, Math.round((now - (depMs - 40 * 60 * 1000)) / 60000));
       notifs.push({
         id: `board-${f.id}`, kind: "boarding",
-        title: `Embarquement ouvert — ${f.flightNumber}`,
-        message: `Vol ${f.from.city} → ${f.to.city} · Porte ${f.gate ?? "—"}`,
-        flight: f.flightNumber, unread: i < 2, minutesAgo: 5 + i * 3,
+        title: `Boarding open — ${f.flightNumber}`,
+        message: `${f.from.city} → ${f.to.city} · Gate ${f.gate ?? "—"}`,
+        flight: f.flightNumber, unread: minutesAgo < 15, minutesAgo,
       });
     }
-    if (f.status === "delayed" && f.delayMin > 0) {
+    if (f.status === "delayed" && f.delayMin != null && f.delayMin > 0) {
+      const minutesAgo = 0; // delay was just detected (real-time)
       notifs.push({
         id: `delay-${f.id}`, kind: "delay",
-        title: `Retard signalé — ${f.flightNumber}`,
-        message: `Vol ${f.from.city} → ${f.to.city} retardé de ${f.delayMin} minutes.`,
-        flight: f.flightNumber, unread: i < 3, minutesAgo: 10 + i * 5,
+        title: `Delay reported — ${f.flightNumber}`,
+        message: `${f.from.city} → ${f.to.city} delayed by ${f.delayMin} min.`,
+        flight: f.flightNumber, unread: true, minutesAgo,
       });
     }
   });
-
-  // Notifications statiques de service
-  notifs.push(
-    { id: "svc-1", kind: "service", title: "Lounge ouvert 24h/24", message: "Le salon Business Lounge au Terminal A est disponible.", unread: false, minutesAgo: 120 },
-    { id: "svc-2", kind: "info",    title: "Contrôle de sécurité renforcé", message: "Prévoir 20 min supplémentaires au contrôle ce soir.", unread: false, minutesAgo: 200 },
-  );
 
   return notifs.sort((a, b) => a.minutesAgo - b.minutesAgo);
 }

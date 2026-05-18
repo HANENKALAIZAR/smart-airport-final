@@ -23,22 +23,20 @@ logger = logging.getLogger(__name__)
 _TRAINING_FEATURES = [
     "dep_hour", "is_weekend", "distance_km", "duration_min",
     "airline_enc", "dep_airport_enc", "arr_airport_enc",
+    "route_avg_delay_hist", "airline_avg_delay_hist", "hour_avg_delay_hist",
+    "route_flight_count", "airline_flight_count", "airport_departure_count",
+    "dep_month", "dep_day_of_week",
 ]
-_INFERENCE_FEATURES = [
-    "dep_hour", "is_weekend", "distance_km", "duration_min",
-    "airline_enc", "dep_airport_enc", "arr_airport_enc",
-]
-_FE_FEATURES = [
-    "dep_hour", "is_weekend", "distance_km", "duration_min",
-    "airline_enc", "dep_airport_enc", "arr_airport_enc",
-]
+_INFERENCE_FEATURES = list(_TRAINING_FEATURES)
+_FE_FEATURES = list(_TRAINING_FEATURES)
+
 _FORBIDDEN_IN_FEATURES = {
     "delay_minutes", "is_delayed", "dep_delay_min", "arr_delay_min",
     "dep_estimated", "arr_estimated", "dep_actual", "arr_actual",
     "final_status", "status_enc",
 }
 _MODEL_PATH  = Path(__file__).resolve().parent / "model" / "delay_prediction_model.pkl"
-_REPORT_PATH = Path(__file__).resolve().parent / "model" / "ae_evaluation_report.json"
+_REPORT_PATH = Path(__file__).resolve().parent / "model" / "ae_evaluation_report_v2.json"
 _ENCODER_DIR = Path(__file__).resolve().parents[1] / "ai" / "model" / "encoders"
 
 
@@ -79,8 +77,8 @@ def check_feature_consistency() -> list[dict]:
         critical=True,
     ))
     results.append(_check(
-        "FEAT-04: feature count == 7",
-        len(_TRAINING_FEATURES) == 7,
+        "FEAT-04: feature count == 15",
+        len(_TRAINING_FEATURES) == 15,
         f"count={len(_TRAINING_FEATURES)}",
     ))
     return results
@@ -98,7 +96,7 @@ def check_artifacts() -> list[dict]:
         critical=True,
     ))
     results.append(_check(
-        "ART-02: ae_evaluation_report.json exists",
+        "ART-02: ae_evaluation_report_v2.json exists",
         _REPORT_PATH.exists(),
         str(_REPORT_PATH),
     ))
@@ -207,6 +205,9 @@ def check_evaluation_report() -> list[dict]:
     ))
 
     verdict = report.get("verdict", {})
+    if not verdict and "winner" in report:
+        verdict = {"recommendation": "v2 winner selected"}
+
     results.append(_check(
         "RPT-10: verdict present",
         bool(verdict),
@@ -351,15 +352,40 @@ def check_prediction_simulation(db) -> list[dict]:
         out_of_range = 0
 
         for row in sample_rows:
-            vec_vals = [
+            # Base features (7)
+            base_vals = [
                 float(getattr(row, col, None) or 0.0)
-                for col in _INFERENCE_FEATURES
+                for col in [
+                    "dep_hour", "is_weekend", "distance_km", "duration_min",
+                    "airline_enc", "dep_airport_enc", "arr_airport_enc"
+                ]
             ]
-            if all(v == 0.0 for v in vec_vals):
+            if all(v == 0.0 for v in base_vals):
                 null_inputs += 1
                 continue
 
-            vec = np.array([vec_vals], dtype=np.float32)
+            # Rolling features (8) — fetch via intelligence helper
+            from app.ml.rolling_features import get_rolling_features_for_inference
+            rolling = get_rolling_features_for_inference(
+                dep_iata=row.dep_iata,
+                arr_iata=row.arr_iata,
+                airline_iata=row.airline_iata,
+                dep_hour=row.dep_hour,
+                flight_date=row.scheduled_departure,
+                db=db
+            )
+            rolling_vals = [
+                float(rolling.get(k, 0.0))
+                for k in [
+                    "route_avg_delay_hist", "airline_avg_delay_hist", "hour_avg_delay_hist",
+                    "route_flight_count", "airline_flight_count", "airport_departure_count",
+                    "dep_month", "dep_day_of_week"
+                ]
+            ]
+
+            full_vec = base_vals + rolling_vals
+            vec = np.array([full_vec], dtype=np.float32)
+
             pred = float(max(0.0, model.predict(vec)[0]))
             if pred > 480:
                 out_of_range += 1
@@ -477,10 +503,10 @@ def check_api_consistency() -> list[dict]:
     """Static checks — verifies router files export the expected endpoints."""
     results = []
     router_checks = [
-        ("routers/ml.py",           ["/train-ae", "/train-ae/report"]),
+        ("routers/ml.py",           ["/train-ae", "/train-ae/report", "/train-v2", "/train-v2/report"]),
         ("routers/intelligence.py", ["/fetch-future", "/compute-stats",
                                          "/predict-future", "/run-all",
-                                         "/future-schedules", "/stats"]),
+                                         "/future-schedules", "/stats", "/operational-report"]),
         ("routers/ae_dataset.py",   ["/rebuild-features", "/health"]),
     ]
     base = Path(__file__).resolve().parents[1]

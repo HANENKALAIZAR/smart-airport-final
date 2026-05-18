@@ -1,0 +1,514 @@
+"""
+Passenger Router (Aviation Edge Only)
+======================================
+All passenger-facing flight endpoints. Strict rules:
+  - Aviation Edge is the ONLY external data source.
+  - DB (AEFlightSnapshot) is checked first — AE API called only when stale.
+  - No AviationStack. No OpenSky. No mock data.
+
+Endpoints:
+  GET  /api/passenger/flights                         – Airport flight board
+  GET  /api/passenger/flights/{flight_number}         – Single flight (DB→AE)
+  GET  /api/passenger/flights/{flight_number}/prediction
+  GET  /api/passenger/flights/{flight_number}/rights
+  GET  /api/passenger/flights/{flight_number}/alternatives
+  POST /api/passenger/alerts/subscribe
+"""
+
+import logging
+from datetime import datetime, timezone
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.database import get_db
+from app.models.ae_models import AEFlightSnapshot
+from app.models.models import PassengerAlertSubscription, PassengerAlertLog
+from app.services.flight_cache_service import get_flights_smart, _snapshot_to_api_dict
+from app.services.passenger_rights import get_applicable_rights
+from app.config import settings
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/passenger", tags=["passenger"])
+
+SUPPORTED_AIRPORTS = ["TUN", "MIR", "NBE", "DJE"]  # Supported Tunisian airports
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _snapshot_to_passenger_dict(snap: AEFlightSnapshot) -> dict:
+    """Convert AEFlightSnapshot ORM row to the normalised passenger dict."""
+    return _snapshot_to_api_dict(snap)
+
+
+async def _lookup_flight_snapshot(
+    flight_number: str,
+    db: Session,
+) -> Optional[AEFlightSnapshot]:
+    """
+    Search AEFlightSnapshot for a flight by number.
+    Checks all supported airports. Returns the most recently collected snapshot.
+    """
+    fn = flight_number.upper()
+    today = _now_utc().date()
+
+    row = (
+        db.query(AEFlightSnapshot)
+        .filter(
+            AEFlightSnapshot.flight_number == fn,
+            AEFlightSnapshot.snapshot_date == today,
+        )
+        .order_by(AEFlightSnapshot.collected_at.desc())
+        .first()
+    )
+    if row:
+        return row
+
+    # Not in today's cache — try triggering a live refresh via AE API
+    try:
+        from app.api_clients.aviation_edge_client import fetch_all_flights
+        from app.services.ae_ingestion_service import ingest_airport
+        # Refresh all supported airports (background refresh, pick up result from DB)
+        for iata in SUPPORTED_AIRPORTS:
+            await ingest_airport(iata, "departure", db)
+            await ingest_airport(iata, "arrival", db)
+        # Note: NBE Aviation Edge returns limited flights (~4 per sync)
+        # due to reduced commercial traffic. This is real API data, not a bug.
+        # Re-query after refresh
+        row = (
+            db.query(AEFlightSnapshot)
+            .filter(
+                AEFlightSnapshot.flight_number == fn,
+                AEFlightSnapshot.snapshot_date == today,
+            )
+            .order_by(AEFlightSnapshot.collected_at.desc())
+            .first()
+        )
+    except Exception as e:
+        logger.error(f"[Passenger] AE refresh failed for {fn}: {e}")
+
+    return row
+
+
+# ── Endpoints ──────────────────────────────────────────────────────────────────
+
+@router.get("/flights")
+async def list_passenger_flights(
+    airport: str = Query("TUN", description="Tunisian airport IATA code"),
+    direction: str = Query("both", description="departure | arrival | both"),
+    db: Session = Depends(get_db),
+):
+    """
+    Flight board for a Tunisian airport.
+    Served from DB cache (Aviation Edge snapshots). AE API called only when stale.
+    """
+    iata = airport.upper()
+    if iata not in SUPPORTED_AIRPORTS:
+        raise HTTPException(404, f"Airport '{iata}' not supported. Use: {', '.join(SUPPORTED_AIRPORTS)}")
+    if direction not in ("both", "departure", "arrival"):
+        raise HTTPException(400, "direction must be 'both', 'departure', or 'arrival'")
+
+    all_flights: list[dict] = []
+    directions = ["departure", "arrival"] if direction == "both" else [direction]
+
+    for d in directions:
+        flights, from_api, age = await get_flights_smart(iata, d, db)
+        seen = {(f["flight_number"], f["direction"]) for f in all_flights}
+        for f in flights:
+            if (f["flight_number"], f["direction"]) not in seen:
+                all_flights.append(f)
+
+    return {
+        "airport": iata,
+        "total": len(all_flights),
+        "source": "aviation_edge",
+        "flights": all_flights,
+    }
+
+
+@router.get("/flights/{flight_number}")
+async def get_passenger_flight(
+    flight_number: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Lookup a specific flight by IATA number.
+    Priority: DB snapshot → Aviation Edge API refresh.
+    """
+    snap = await _lookup_flight_snapshot(flight_number, db)
+    if snap is None:
+        raise HTTPException(404, f"Flight '{flight_number.upper()}' not found. It may not operate today.")
+
+    return _snapshot_to_passenger_dict(snap)
+
+
+@router.get("/flights/{flight_number}/prediction")
+async def get_passenger_prediction(
+    flight_number: str,
+    db: Session = Depends(get_db),
+):
+    """
+    ML delay prediction for a flight using Aviation Edge data.
+    Uses AEFlightSnapshot as input to live_feature_builder + XGBoost model.
+    """
+    fn = flight_number.upper()
+    snap = await _lookup_flight_snapshot(fn, db)
+
+    if snap is None:
+        raise HTTPException(404, f"Flight '{fn}' not found — cannot generate prediction.")
+
+    flight_dict = _snapshot_to_passenger_dict(snap)
+
+    try:
+        from app.services.live_feature_builder import build_features
+        from app.services.prediction_service import predict_from_dict
+        features   = build_features(flight_dict, db=db)
+        prediction = predict_from_dict(features, db=db, flight_number=fn)
+    except Exception as e:
+        logger.error(f"[Passenger/Prediction] {fn}: {e}")
+        raise HTTPException(503, "ML prediction service temporarily unavailable.")
+
+    return {
+        "flight_number": fn,
+        "prediction": {
+            "risk_score":          float(prediction.risk_score),
+            "predicted_delay_min": int(prediction.predicted_delay_min),
+            "confidence":          float(prediction.confidence),
+            "shap_explanation":    prediction.shap_explanation,
+            "model_version":       prediction.model_version,
+            "predicted_at":        prediction.predicted_at.isoformat() if prediction.predicted_at else None,
+        },
+    }
+
+
+@router.get("/flights/{flight_number}/rights")
+async def get_passenger_rights(
+    flight_number: str,
+    delay_minutes: int = Query(0, ge=0),
+    dep_region: str = Query("OTHER"),
+    arr_region: str = Query("OTHER"),
+    distance_km: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """
+    Applicable passenger rights for a flight.
+    If the flight exists in DB, use its actual delay. Otherwise use query params.
+    Rights are fetched from the passenger_rights table (real DB data).
+    """
+    from app.models.models import PassengerRight
+
+    fn = flight_number.upper()
+    snap = await _lookup_flight_snapshot(fn, db)
+
+    # Use real delay from snapshot if available
+    actual_delay = delay_minutes
+    actual_distance = distance_km
+    regions: set[str] = set()
+
+    if snap:
+        actual_delay = snap.delay_minutes or 0
+        regions_from_snap = {dep_region, arr_region}
+        # Resolve regions from dep/arr IATA — best-effort
+        # EU airports (Tunisia → EU routes)
+        EU_IATAS = {"CDG", "ORY", "LHR", "FRA", "FCO", "MAD", "BCN", "AMS", "BRU", "VIE", "MUC", "GVA", "LYS", "NCE", "MRS", "MLA"}
+        if snap.arr_iata in EU_IATAS or snap.dep_iata in EU_IATAS:
+            regions.add("EU")
+        regions.update(regions_from_snap - {"OTHER"})
+
+    if not regions:
+        regions.add("OTHER")
+
+    rights = (
+        db.query(PassengerRight)
+        .filter(
+            PassengerRight.region.in_(regions),
+            PassengerRight.delay_threshold_min <= actual_delay,
+        )
+        .order_by(PassengerRight.delay_threshold_min)
+        .all()
+    )
+
+    # Filter by distance
+    applicable = []
+    for r in rights:
+        if r.distance_min_km and actual_distance < r.distance_min_km:
+            continue
+        if r.distance_max_km and actual_distance > r.distance_max_km:
+            continue
+        applicable.append({
+            "region":               r.region,
+            "regulation_name":      r.regulation_name,
+            "delay_threshold_min":  r.delay_threshold_min,
+            "right_type":           r.right_type,
+            "description":          r.description_fr or r.description_en,
+            "compensation_amount":  r.compensation_amount,
+        })
+
+    return {
+        "flight_number": fn,
+        "delay_minutes": actual_delay,
+        "rights": applicable,
+    }
+
+
+@router.get("/flights/{flight_number}/alternatives")
+async def get_passenger_alternatives(
+    flight_number: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Alternative flights on the same route using Aviation Edge timetable.
+    Returns upcoming scheduled flights departing from the same airport to the same destination.
+    No mock data — empty list if nothing found.
+    """
+    fn = flight_number.upper()
+    snap = await _lookup_flight_snapshot(fn, db)
+
+    if snap is None:
+        return {"flight_number": fn, "alternatives": [], "message": "Original flight not found."}
+
+    dep_iata = snap.dep_iata
+    arr_iata = snap.arr_iata
+
+    if not dep_iata or not arr_iata:
+        return {"flight_number": fn, "alternatives": [], "message": "Route information unavailable."}
+
+    # Search AEFlightSnapshot for same-route alternatives today
+    today = _now_utc().date()
+    alts = (
+        db.query(AEFlightSnapshot)
+        .filter(
+            AEFlightSnapshot.dep_iata == dep_iata,
+            AEFlightSnapshot.arr_iata == arr_iata,
+            AEFlightSnapshot.snapshot_date == today,
+            AEFlightSnapshot.flight_number != fn,
+            AEFlightSnapshot.status.notin_(["cancelled", "landed"]),
+        )
+        .order_by(AEFlightSnapshot.dep_scheduled)
+        .limit(5)
+        .all()
+    )
+
+    # If DB has nothing, try a live AE timetable fetch
+    if not alts:
+        try:
+            from app.api_clients.aviation_edge_client import fetch_timetable
+            raw = await fetch_timetable(dep_iata, "departure")
+            alternatives = [
+                f for f in raw
+                if f.get("arr_iata") == arr_iata
+                and f.get("flight_number") != fn
+                and f.get("status") not in ("cancelled", "landed")
+            ][:5]
+            return {
+                "flight_number": fn,
+                "alternatives": alternatives,
+                "source": "aviation_edge_live",
+            }
+        except Exception as e:
+            logger.error(f"[Passenger/Alternatives] AE timetable fetch failed: {e}")
+            return {"flight_number": fn, "alternatives": [], "message": "Alternative flight data temporarily unavailable."}
+
+    return {
+        "flight_number": fn,
+        "alternatives": [_snapshot_to_passenger_dict(a) for a in alts],
+        "source": "db_cache",
+    }
+
+
+# ── Alert Subscription ─────────────────────────────────────────────────────────
+
+class AlertSubscribeRequest(BaseModel):
+    email: str
+    flight_number: str
+    dep_iata: str = ""
+    arr_iata: str = ""
+    airline: str = ""
+    scheduled_departure: str = ""
+
+
+def _send_confirmation_email(
+    email: str,
+    flight_number: str,
+    dep_iata: str,
+    arr_iata: str,
+    airline: str,
+    scheduled_departure: str,
+) -> bool:
+    """Send subscription confirmation email via SMTP."""
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        logger.warning("SMTP not configured — skipping passenger alert confirmation")
+        return False
+
+    try:
+        dt_display = scheduled_departure
+        try:
+            dt = datetime.fromisoformat(scheduled_departure.replace("Z", "+00:00"))
+            dt_display = dt.strftime("%A, %b %d · %H:%M UTC")
+        except Exception:
+            pass
+
+        year = datetime.utcnow().year
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/><title>Flight Alert Confirmed</title></head>
+<body style="margin:0;padding:0;background:#0F172A;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:40px 16px;">
+      <table width="600" style="background:#1E293B;border-radius:20px;overflow:hidden;
+             box-shadow:0 8px 40px rgba(0,0,0,0.4);max-width:600px;border:1px solid rgba(255,255,255,0.08);">
+        <tr><td style="background:linear-gradient(135deg,#1e3a5f 0%,#0ea5e9 100%);padding:36px 40px;text-align:center;">
+          <div style="font-size:36px;margin-bottom:10px;">✈️</div>
+          <h1 style="color:#fff;margin:0;font-size:1.4rem;font-weight:700;">Smart Airport · Tunisia</h1>
+          <p style="color:rgba(255,255,255,0.75);margin:8px 0 0;font-size:0.88rem;">Flight Alert Confirmed</p>
+        </td></tr>
+        <tr><td style="padding:36px 40px 28px;">
+          <p style="color:#94A3B8;font-size:0.88rem;margin:0 0 20px;text-transform:uppercase;letter-spacing:0.12em;">You're now tracking</p>
+          <div style="background:rgba(14,165,233,0.08);border:1px solid rgba(14,165,233,0.3);border-radius:14px;padding:24px 28px;">
+            <div style="font-size:2rem;font-weight:800;color:#fff;font-family:monospace;">{flight_number}</div>
+            <div style="color:#94A3B8;font-size:0.88rem;margin-top:4px;">{airline or 'your airline'}</div>
+            <div style="margin-top:16px;color:#CBD5E1;font-size:0.88rem;">
+              <strong style="color:#fff;">{dep_iata}</strong> → <strong style="color:#fff;">{arr_iata}</strong>
+            </div>
+            <div style="margin-top:8px;color:#CBD5E1;font-size:0.88rem;">🕐 {dt_display}</div>
+          </div>
+          <p style="color:#CBD5E1;font-size:0.92rem;margin:24px 0 0;line-height:1.7;">
+            You'll receive email notifications for delays, gate changes, boarding calls, and cancellations.
+          </p>
+        </td></tr>
+        <tr><td style="background:rgba(0,0,0,0.2);border-top:1px solid rgba(255,255,255,0.06);
+                       padding:18px 40px;text-align:center;">
+          <p style="margin:0;font-size:0.72rem;color:#475569;">
+            © {year} Smart Airport Operations · Tunisia<br/>
+            <span style="color:#334155;">Reply STOP to unsubscribe.</span>
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"✈ Alert activated for {flight_number} ({dep_iata} → {arr_iata})"
+        msg["From"]    = f"Smart Airport Alerts <{settings.SMTP_USER}>"
+        msg["To"]      = email
+        msg.attach(MIMEText(f"Alert activated for {flight_number} ({dep_iata}→{arr_iata}). Departure: {dt_display}.", "plain"))
+        msg.attach(MIMEText(html, "html"))
+
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as srv:
+            srv.ehlo()
+            srv.starttls()
+            srv.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            srv.sendmail(settings.SMTP_USER, [email], msg.as_string())
+
+        logger.info(f"[PassengerAlert] Confirmation sent → {email} / {flight_number}")
+        return True
+
+    except Exception as exc:
+        logger.error(f"[PassengerAlert] Email failed for {email}: {exc}")
+        return False
+
+
+@router.post("/alerts/subscribe")
+async def subscribe_passenger_alert(
+    req: AlertSubscribeRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Subscribe a passenger email to flight status alerts.
+    - Persists subscription to DB (unique per email+flight).
+    - Sends a confirmation email immediately in the background.
+    - Idempotent: re-subscribing an existing active subscription returns 200.
+    """
+    email = req.email.strip().lower()
+    if not email or "@" not in email:
+        raise HTTPException(422, "A valid email address is required.")
+
+    fn = req.flight_number.strip().upper()
+    if not fn:
+        raise HTTPException(422, "flight_number is required.")
+
+    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        raise HTTPException(503, "Email alerts are not configured on this server. Contact support.")
+
+    # Upsert subscription
+    existing = (
+        db.query(PassengerAlertSubscription)
+        .filter(
+            PassengerAlertSubscription.email == email,
+            PassengerAlertSubscription.flight_number == fn,
+        )
+        .first()
+    )
+
+    dep_ts = None
+    if req.scheduled_departure:
+        try:
+            dep_ts = datetime.fromisoformat(req.scheduled_departure.replace("Z", "+00:00"))
+        except Exception:
+            pass
+
+    if existing:
+        existing.is_active = True
+        existing.dep_iata  = req.dep_iata or existing.dep_iata
+        existing.arr_iata  = req.arr_iata or existing.arr_iata
+        existing.airline   = req.airline  or existing.airline
+        if dep_ts:
+            existing.scheduled_departure = dep_ts
+        sub = existing
+    else:
+        sub = PassengerAlertSubscription(
+            email               = email,
+            flight_number       = fn,
+            dep_iata            = req.dep_iata.upper() if req.dep_iata else None,
+            arr_iata            = req.arr_iata.upper() if req.arr_iata else None,
+            airline             = req.airline or None,
+            scheduled_departure = dep_ts,
+            is_active           = True,
+        )
+        db.add(sub)
+
+    db.commit()
+    db.refresh(sub)
+
+    # Log the subscription event
+    log_entry = PassengerAlertLog(
+        subscription_id = sub.id,
+        flight_number   = fn,
+        email           = email,
+        event_type      = "confirmed",
+        new_value       = "subscribed",
+        email_sent      = False,
+    )
+    db.add(log_entry)
+    db.commit()
+
+    # Send confirmation email in background
+    background_tasks.add_task(
+        _send_confirmation_email,
+        email=email,
+        flight_number=fn,
+        dep_iata=req.dep_iata.upper() if req.dep_iata else "—",
+        arr_iata=req.arr_iata.upper() if req.arr_iata else "—",
+        airline=req.airline or "",
+        scheduled_departure=req.scheduled_departure,
+    )
+
+    return {
+        "ok": True,
+        "subscription_id": sub.id,
+        "message": f"Alert activated. Confirmation email sent to {email}.",
+        "flight": fn,
+    }

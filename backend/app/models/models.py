@@ -408,3 +408,58 @@ class ModelMetrics(Base):
     hyperparams       = Column(JSON, nullable=True)  # includes confusion matrix
     notes             = Column(Text, nullable=True)
     is_active         = Column(SmallInteger, nullable=False, default=0)
+
+
+# ── Passenger Alert Subscriptions ────────────────────────────────────────────
+
+class PassengerAlertSubscription(Base):
+    """
+    One row per passenger email + flight_number subscription.
+    UNIQUE on (email, flight_number) — no duplicate subscriptions.
+    """
+    __tablename__ = "passenger_alert_subscriptions"
+
+    id                  = Column(Integer, primary_key=True, autoincrement=True)
+    email               = Column(String(255), nullable=False, index=True)
+    flight_number       = Column(String(12),  nullable=False, index=True)
+    dep_iata            = Column(String(3),   nullable=True)
+    arr_iata            = Column(String(3),   nullable=True)
+    airline             = Column(String(120), nullable=True)
+    scheduled_departure = Column(DateTime,    nullable=True)
+    is_active           = Column(Boolean,     nullable=False, default=True)
+    created_at          = Column(TIMESTAMP,   default=_now)
+
+    logs = relationship("PassengerAlertLog", back_populates="subscription")
+
+    __table_args__ = (
+        Index("idx_pas_active", "is_active"),
+        Index("idx_pas_dedup", "email", "flight_number", unique=True),
+    )
+
+
+class PassengerAlertLog(Base):
+    """
+    Every email event sent for a subscription.
+    Used by the background job to detect state changes and avoid duplicate emails.
+    last_status / last_gate / last_delay are the last-notified values.
+    """
+    __tablename__ = "passenger_alert_logs"
+
+    id              = Column(Integer,     primary_key=True, autoincrement=True)
+    subscription_id = Column(Integer,     ForeignKey("passenger_alert_subscriptions.id", ondelete="CASCADE"), nullable=False, index=True)
+    flight_number   = Column(String(12),  nullable=False, index=True)
+    email           = Column(String(255), nullable=False)
+    event_type      = Column(String(40),  nullable=False)   # confirmed|delay|gate_change|status_change|boarding|cancelled
+    old_value       = Column(String(200), nullable=True)
+    new_value       = Column(String(200), nullable=True)
+    email_sent      = Column(Boolean,     nullable=False, default=False)
+    sent_at         = Column(TIMESTAMP,   nullable=True)
+    created_at      = Column(TIMESTAMP,   default=_now)
+
+    subscription = relationship("PassengerAlertSubscription", back_populates="logs")
+
+    __table_args__ = (
+        Index("idx_pal_sub", "subscription_id"),
+        Index("idx_pal_sent", "sent_at"),
+    )
+

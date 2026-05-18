@@ -15,14 +15,14 @@ async function getHotelsNearAirport(lat, lng, radiusMetres = 12000) {
                         },
                         radius: radiusMetres
                     }
-                },
-                rankPreference: 'DISTANCE',
+                }
             },
             {
                 headers: {
                     "Content-Type": "application/json",
                     "X-Goog-Api-Key": process.env.GOOGLE_PLACES_KEY,
-                    "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.priceLevel,places.websiteUri,places.nationalPhoneNumber,places.regularOpeningHours,places.types,places.goodForGroups,places.servesMeal"
+                    "X-Goog-FieldMask": "places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.priceLevel,places.websiteUri,places.nationalPhoneNumber,places.regularOpeningHours,places.types",
+                    "Referer": "http://localhost:8082"
                 }
             }
         );
@@ -30,8 +30,14 @@ async function getHotelsNearAirport(lat, lng, radiusMetres = 12000) {
         return response.data.places || [];
 
     } catch (error) {
-        console.error("❌ Google Places API Error:", error.response?.data || error.message);
-        throw error;
+        const errorDetails = error.response?.data?.error;
+        if (errorDetails) {
+            console.error(`❌ Google Places API Error: [${errorDetails.status}] ${errorDetails.message}`);
+            throw new Error(`Google Places API Error: ${errorDetails.message}`);
+        } else {
+            console.error("❌ Google Places API Error:", error.message);
+            throw error;
+        }
     }
 }
 

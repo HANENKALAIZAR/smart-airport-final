@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { runAgent } = require("./services/agent");
+const rateLimit = require("express-rate-limit");
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -12,12 +13,30 @@ app.use(express.json());
 // In-memory session store (replace with Redis for production)
 const sessions = {};
 
+// Rate limiter for /api/chat: 30 requests per 15 minutes per IP
+const chatLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({
+      reply: JSON.stringify({
+        type: "general",
+        message: "You have sent too many requests. Please wait a few minutes before trying again.",
+        actions: []
+      }),
+      sessionId: req.body.sessionId || req.body.conversationId || "rate-limited"
+    });
+  }
+});
+
 /**
  * POST /api/chat
  * Body: { sessionId: string, message: string }
  * Returns: { reply: string, sessionId: string }
  */
-app.post("/api/chat", async (req, res) => {
+app.post("/api/chat", chatLimiter, async (req, res) => {
   const { sessionId, message, conversationId, airportCode } = req.body;
 
   if (!message?.trim()) {
@@ -62,6 +81,6 @@ app.get("/api/health", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Airport AI Agent running on http://localhost:${PORT}`);
-  console.log(`Anthropic key: ${process.env.ANTHROPIC_API_KEY ? "✓ set" : "✗ missing"}`);
-  console.log(`AviationStack key: ${process.env.AVIATIONSTACK_KEY ? "✓ set (live data)" : "— not set (using mock data)"}`);
+  console.log(`Groq key: ${process.env.GROQ_API_KEY ? "✓ set" : "✗ missing"}`);
+  console.log(`Aviation Edge key: ${process.env.AVIATION_EDGE_KEY ? "✓ set (live data)" : "— not set"}`);
 });

@@ -284,6 +284,192 @@ def get_stats_for_flight(
     return get_stats_for_flight(db, dep_iata, arr_iata, airline_iata, dep_hour)
 
 
+@router.get("/airport-kpis")
+def get_airport_kpis(
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_admin),
+):
+    """
+    Per-airport KPIs derived from ae_aviation_stats + ae_future_schedules.
+    Returns one row per Tunisian airport with real stats: on_time_rate,
+    avg_delay_min, total_flights, reliability_score, upcoming_predictions.
+    No mock data — all values come from ae_aviation_stats.
+    """
+    from app.models.ae_models import AEAviationStats, AEFutureSchedule
+    from sqlalchemy import func
+
+    TUNISIAN_AIRPORTS = {
+        "TUN": "Tunis-Carthage",
+        "MIR": "Monastir",
+        "DJE": "Djerba-Zarzis",
+        "NBE": "Enfidha-Hammamet",
+    }
+
+    # Load all airport stats in one query
+    airport_stats = {
+        r.entity_key: r
+        for r in db.query(AEAviationStats)
+            .filter(AEAviationStats.stat_type == "airport")
+            .all()
+    }
+
+    # Count upcoming predicted flights per departure airport
+    future_counts = dict(
+        db.query(AEFutureSchedule.dep_iata, func.count(AEFutureSchedule.id))
+        .filter(AEFutureSchedule.predicted_at.isnot(None))
+        .group_by(AEFutureSchedule.dep_iata)
+        .all()
+    )
+
+    # Average predicted delay per airport
+    future_delays = dict(
+        db.query(
+            AEFutureSchedule.dep_iata,
+            func.avg(AEFutureSchedule.predicted_delay_min)
+        )
+        .filter(AEFutureSchedule.predicted_at.isnot(None))
+        .group_by(AEFutureSchedule.dep_iata)
+        .all()
+    )
+
+    result = []
+    for iata, name in TUNISIAN_AIRPORTS.items():
+        s = airport_stats.get(iata)
+        on_time_rate   = float(s.on_time_rate)   if s and s.on_time_rate   is not None else None
+        avg_delay      = float(s.avg_delay_min)   if s and s.avg_delay_min  is not None else None
+        total_flights  = int(s.total_flights)     if s and s.total_flights  is not None else 0
+        reliability    = float(s.reliability_score) if s and s.reliability_score is not None else None
+        delay_rate     = float(s.delay_rate)      if s and s.delay_rate     is not None else None
+
+        # Risk level: derived from on_time_rate (no fake values)
+        if on_time_rate is None:
+            risk = "Unknown"
+        elif on_time_rate >= 0.80:
+            risk = "Low"
+        elif on_time_rate >= 0.60:
+            risk = "Medium"
+        else:
+            risk = "High"
+
+        result.append({
+            "iata":                   iata,
+            "name":                   name,
+            "on_time_rate":           round(on_time_rate * 100, 1) if on_time_rate is not None else None,
+            "avg_delay_min":          round(avg_delay, 1) if avg_delay is not None else None,
+            "total_historical_flights": total_flights,
+            "reliability_score":      round(reliability, 3) if reliability is not None else None,
+            "delay_rate":             round(delay_rate * 100, 1) if delay_rate is not None else None,
+            "risk_level":             risk,
+            "upcoming_predicted_flights": future_counts.get(iata, 0),
+            "upcoming_avg_predicted_delay": round(float(future_delays[iata]), 1)
+                if iata in future_delays and future_delays[iata] is not None else None,
+            "has_data":               s is not None,
+        })
+
+    # Global summary
+    total_all = sum(r["total_historical_flights"] for r in result)
+    on_time_vals = [r["on_time_rate"] for r in result if r["on_time_rate"] is not None]
+    global_otp = round(sum(on_time_vals) / len(on_time_vals), 1) if on_time_vals else None
+    high_risk = sum(1 for r in result if r["risk_level"] == "High")
+
+    return {
+        "airports": result,
+        "global": {
+            "total_airports_with_data": sum(1 for r in result if r["has_data"]),
+            "total_historical_flights": total_all,
+            "global_on_time_rate":      global_otp,
+            "high_risk_airports":       high_risk,
+        },
+    }
+
+
+@router.get("/flight-predict/{schedule_id}")
+def predict_single_future_flight(
+    schedule_id: int,
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_admin),
+):
+    """
+    Run real model inference for one ae_future_schedules row (by id).
+    Returns: flight details + real ML prediction + route/airline stats.
+    Uses delay_prediction_model.pkl — no mocks.
+    """
+    from app.models.ae_models import AEFutureSchedule
+    from app.ai.future_predictions import _load_model, _row_to_vector, _confidence
+    from app.ai.historical_ingestion import get_stats_for_flight
+    import numpy as np
+
+    row = db.query(AEFutureSchedule).filter(AEFutureSchedule.id == schedule_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Future schedule id={schedule_id} not found")
+
+    model, model_path = _load_model()
+    if model is None:
+        raise HTTPException(
+            status_code=503,
+            detail="ML model not yet trained. Run POST /api/ml/train-ae first.",
+        )
+
+    vec = _row_to_vector(row)
+    if vec is None:
+        raise HTTPException(
+            status_code=422,
+            detail="Row has insufficient features for prediction (dep_hour/encodings missing).",
+        )
+
+    predicted_delay = float(max(0.0, model.predict(vec)[0]))
+    confidence      = _confidence(predicted_delay, model)
+
+    # Fetch intelligence stats from ae_aviation_stats
+    stats = get_stats_for_flight(db, row.dep_iata, row.arr_iata, row.airline_iata, row.dep_hour)
+
+    return {
+        "schedule_id":          row.id,
+        "flight_number":        row.flight_number,
+        "airline_iata":         row.airline_iata,
+        "airline_name":         row.airline_name,
+        "dep_iata":             row.dep_iata,
+        "arr_iata":             row.arr_iata,
+        "dep_airport":          row.dep_airport,
+        "arr_airport":          row.arr_airport,
+        "scheduled_departure":  str(row.scheduled_departure) if row.scheduled_departure else None,
+        "scheduled_arrival":    str(row.scheduled_arrival)   if row.scheduled_arrival   else None,
+        "prediction": {
+            "predicted_delay_min": int(round(predicted_delay)),
+            "confidence":          round(confidence, 3),
+            "model_path":          model_path,
+            "risk_level":          "High" if predicted_delay > 30 else ("Medium" if predicted_delay > 10 else "Low"),
+        },
+        "intelligence": stats,
+        "features_used": {
+            "dep_hour":        row.dep_hour,
+            "is_weekend":      row.is_weekend,
+            "distance_km":     row.distance_km,
+            "duration_min":    row.duration_min,
+            "airline_enc":     row.airline_enc,
+            "dep_airport_enc": row.dep_airport_enc,
+            "arr_airport_enc": row.arr_airport_enc,
+        }
+    }
+
+
+@router.get("/operational-report")
+def get_ops_report(
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_admin),
+):
+    """
+    Returns real-time operational intelligence report.
+    Derived from AEAviationStats historical aggregates.
+    """
+    from app.ai.operational_intelligence import get_operational_intelligence
+    try:
+        return get_operational_intelligence(db)
+    except Exception as e:
+        logger.exception(f"Operational report failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/validate")
 def validate_system(
     db: Session = Depends(get_db),

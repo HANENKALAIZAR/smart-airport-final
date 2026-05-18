@@ -35,8 +35,6 @@ AIRPORTS = {
     "DJE": "Djerba–Zarzis International Airport",
     "NBE": "Enfidha–Hammamet International Airport",
     "MIR": "Monastir Habib Bourguiba International Airport",
-    "SFA": "Sfax–Thyna International Airport",
-    "GAF": "Gafsa–Ksar International Airport",
 }
 
 

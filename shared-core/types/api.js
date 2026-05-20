@@ -44,7 +44,7 @@
 /**
  * Status values returned by the backend:
  *  - DB flights:         'scheduled' | 'on_time' | 'delayed' | 'cancelled'
- *  - AviationStack live: adds 'landed' | 'boarding' | 'departed'
+ *  - Aviation Edge live: adds 'landed' | 'boarding' | 'departed'
  * @typedef {'scheduled'|'on_time'|'delayed'|'cancelled'|'boarding'|'landed'|'departed'} ApiFlightStatus
  */
 

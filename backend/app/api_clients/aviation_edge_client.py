@@ -37,7 +37,7 @@ def _get_key() -> str:
 
 
 def normalize_ae_flight(raw: dict, direction: str, airport_iata: str) -> dict:
-    """Normalize an Aviation Edge flight object to the same shape as aviationstack_client."""
+    """Normalize an Aviation Edge flight object to the standard normalized format."""
     dep = raw.get("departure") or {}
     arr = raw.get("arrival") or {}
     airline = raw.get("airline") or {}
@@ -200,6 +200,44 @@ async def fetch_timetable(airport_iata: str, direction: str = "departure") -> li
 
     except Exception as e:
         logger.error(f"[AE Timetable] {airport_iata}/{direction} error: {e}")
+        return []
+
+
+async def fetch_flights_history(airport_iata: str, direction: str, date_from: str, date_to: str) -> list[dict]:
+    """
+    Fetch historical flights from Aviation Edge API.
+    GET /v2/public/flightsHistory?key=KEY&code=TUN&type=departure&date_from=2026-04-01&date_to=2026-04-05
+    """
+    apiKey = _get_key()
+    if not apiKey:
+        logger.warning("AVIATION_EDGE_KEY not set — skipping history fetch")
+        return []
+
+    params = {
+        "key":       apiKey,
+        "code":      airport_iata,
+        "type":      direction,
+        "date_from": date_from,
+        "date_to":   date_to,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(f"{AVIATION_EDGE_BASE}/flightsHistory", params=params)
+            resp.raise_for_status()
+            data = resp.json()
+
+            if isinstance(data, dict) and data.get("error"):
+                logger.warning(f"[AE History] {airport_iata}: {data}")
+                return []
+
+            if not isinstance(data, list):
+                return []
+
+            return [normalize_ae_flight(f, direction, airport_iata) for f in data]
+
+    except Exception as e:
+        logger.error(f"[AE History] {airport_iata}/{direction} error: {e}")
         return []
 
 

@@ -65,9 +65,7 @@ def _load_model():
 
 
 def _row_to_vector(row, db) -> Optional[np.ndarray]:
-    """Build a (1, 15) float32 feature array from an AEFutureSchedule ORM row + rolling features."""
-    from app.ml.rolling_features import get_rolling_features_for_inference
-
+    """Build a (1, 7) float32 feature array from an AEFutureSchedule ORM row."""
     base_values = []
     for col in _FEATURE_COLUMNS:
         v = getattr(row, col, None)
@@ -77,26 +75,7 @@ def _row_to_vector(row, db) -> Optional[np.ndarray]:
     if all(v == 0.0 for v in base_values):
         return None
 
-    # Fetch rolling features dynamically
-    rolling = get_rolling_features_for_inference(
-        dep_iata=row.dep_iata,
-        arr_iata=row.arr_iata,
-        airline_iata=row.airline_iata,
-        dep_hour=row.dep_hour,
-        flight_date=row.scheduled_departure,
-        db=db,
-    )
-
-    ROLLING_COLS = [
-        "route_avg_delay_hist", "airline_avg_delay_hist", "hour_avg_delay_hist",
-        "route_flight_count", "airline_flight_count", "airport_departure_count",
-        "dep_month", "dep_day_of_week",
-    ]
-
-    rolling_values = [float(rolling.get(k, 0.0)) for k in ROLLING_COLS]
-    full_vector = base_values + rolling_values
-
-    return np.array([full_vector], dtype=np.float32)
+    return np.array([base_values], dtype=np.float32)
 
 
 def _confidence(predicted_delay: float, model) -> float:
@@ -169,6 +148,8 @@ def predict_future_flights(
     predicted = skipped = errors = 0
     model_ver = f"delay_prediction_model @ {datetime.now(timezone.utc).strftime('%Y-%m-%d')}"
 
+    from app.ai.mlops_controller import log_prediction
+
     for i in range(0, len(rows), batch_size):
         batch = rows[i: i + batch_size]
         try:
@@ -178,7 +159,9 @@ def predict_future_flights(
                     skipped += 1
                     continue
 
-                pred_delay = float(max(0.0, model.predict(vec)[0]))
+                # Predict delay, ensuring it is clamped and realistic (min 0 min, max 300 min)
+                raw_pred = float(model.predict(vec)[0])
+                pred_delay = float(max(0.0, min(300.0, raw_pred)))
                 conf       = _confidence(pred_delay, model)
 
                 row.predicted_delay_min = int(round(pred_delay))
@@ -186,6 +169,27 @@ def predict_future_flights(
                 row.predicted_at        = now
                 row.model_version       = model_ver
                 predicted += 1
+
+                # Write log atomically (commit=False)
+                log_prediction(
+                    db,
+                    flight_number=row.flight_number,
+                    airline_iata=row.airline_iata,
+                    dep_iata=row.dep_iata,
+                    arr_iata=row.arr_iata,
+                    predicted_delay_min=row.predicted_delay_min,
+                    confidence=row.confidence,
+                    model_version=row.model_version,
+                    source="future_schedule",
+                    dep_hour=row.dep_hour,
+                    is_weekend=row.is_weekend,
+                    distance_km=row.distance_km,
+                    duration_min=row.duration_min,
+                    airline_enc=row.airline_enc,
+                    dep_airport_enc=row.dep_airport_enc,
+                    arr_airport_enc=row.arr_airport_enc,
+                    commit=False,
+                )
 
             db.commit()
             logger.debug(f"[FuturePredictions] Committed batch [{i}–{i+len(batch)}]")

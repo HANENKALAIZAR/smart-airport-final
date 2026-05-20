@@ -19,9 +19,19 @@ function statusColor(status) {
 }
 
 function riskPct(delay) {
+    // Gauge shows overall delay probability: 12% baseline for on-time, scaling up with delay
     if (!delay || delay <= 0) return 12;
-    if (delay >= 120) return 95;
-    return Math.min(95, Math.round(12 + (delay / 120) * 83));
+    if (delay >= 120) return 92;
+    return Math.min(92, Math.round(12 + (delay / 120) * 80));
+}
+
+// Compute a realistic risk factor percentage for a named factor
+// Baseline (delay=0): low values. Scales proportionally with delay.
+function factorPct(baseMin, baseMax, delayScale, delay) {
+    const base = Math.round(baseMin + Math.random() * (baseMax - baseMin));
+    if (!delay || delay <= 0) return base;
+    const scaled = Math.round(base + (delay / 120) * delayScale);
+    return Math.min(95, scaled);
 }
 
 /* ── Circular Gauge (SVG) ────────────────────────── */
@@ -105,22 +115,41 @@ export default function FlightDetailsModal({ flight, isOpen, onClose }) {
     const gate = flight.dep_gate || flight.arr_gate || '—';
     const aircraft = flight.aircraftType || 'Boeing 737-800';
 
-    /* Risk analysis factors (derived from delay/risk) */
-    const safeDelay = delay || 0;
+    /* Risk analysis factors — realistic, delay-proportional values
+     * On-time (delay=0): low baseline risk (8–18%)
+     * Delayed: risk grows proportionally with delay minutes, capped at 90%
+     */
+    const safeDelay = Math.max(0, delay || 0);
     const riskFactors = [
-        { label: 'Weather Conditions', pct: Math.min(95, 48 + safeDelay), color: '#0EA5E9' },
-        { label: 'Air Traffic Congestion', pct: Math.min(92, 35 + safeDelay * 0.8), color: '#0EA5E9' },
-        { label: 'Aircraft Turnaround Time', pct: Math.min(88, 22 + safeDelay * 0.6), color: '#0EA5E9' },
-        { label: 'Historical Performance', pct: Math.min(80, 30 + safeDelay * 0.5), color: '#0EA5E9' },
+        {
+            label: 'Weather Conditions',
+            pct: safeDelay <= 0 ? 10 : Math.min(90, Math.round(10 + (safeDelay / 120) * 60)),
+            color: safeDelay > 30 ? '#EF4444' : safeDelay > 10 ? '#F59E0B' : '#22C55E',
+        },
+        {
+            label: 'Air Traffic Congestion',
+            pct: safeDelay <= 0 ? 14 : Math.min(85, Math.round(14 + (safeDelay / 120) * 52)),
+            color: '#0EA5E9',
+        },
+        {
+            label: 'Aircraft Turnaround Time',
+            pct: safeDelay <= 0 ? 8 : Math.min(80, Math.round(8 + (safeDelay / 120) * 45)),
+            color: '#0EA5E9',
+        },
+        {
+            label: 'Historical Route Performance',
+            pct: safeDelay <= 0 ? 18 : Math.min(82, Math.round(18 + (safeDelay / 120) * 48)),
+            color: '#A5B4FC',
+        },
     ];
 
     /* Timeline events */
     const isDelayed = delay !== null && delay > 0;
     const timeline = [
         { label: 'Flight scheduled', time: sched, done: true, active: false },
-        { label: 'Boarding started', time: sched ? `${sched}` : '—', done: isDelayed, active: !isDelayed },
-        { label: isDelayed ? 'Weather delay reported' : 'Ready for departure', time: '—', done: isDelayed, active: false },
-        { label: 'Estimated departure', time: isDelayed ? `+${delay}min` : sched, done: false, active: isDelayed },
+        { label: 'Check-in & boarding', time: sched ? `${sched}` : '—', done: isDelayed, active: !isDelayed },
+        { label: isDelayed ? `Delay reported (+${delay} min)` : 'Ready for departure', time: '—', done: isDelayed, active: false },
+        { label: 'Estimated departure', time: isDelayed ? `+${delay} min` : sched, done: false, active: isDelayed },
         { label: 'Estimated arrival', time: '—', done: false, active: false },
     ];
 

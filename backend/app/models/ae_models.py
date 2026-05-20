@@ -157,6 +157,11 @@ class AEFlightDataset(Base):
     completeness    = Column(Float, nullable=True)   # 0.0-1.0 fraction of non-null cols
     usable_for_ml   = Column(Boolean, nullable=False, default=True)
 
+    # ── Data lineage ──────────────────────────────────────────────────────────
+    # 'aviation_edge'        — real flight from Aviation Edge API (live timetable / tracker)
+    # 'augmented_training'   — statistically generated training row (clearly NOT production data)
+    data_source     = Column(String(30), nullable=False, default="aviation_edge", index=True)
+
     # ── Metadata ─────────────────────────────────────────────────────────────
     created_at      = Column(TIMESTAMP, nullable=False, default=_now)
     updated_at      = Column(TIMESTAMP, nullable=False, default=_now, onupdate=_now)

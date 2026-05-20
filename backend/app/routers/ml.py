@@ -339,7 +339,7 @@ def trigger_weather_collection(
     _user: User = Depends(require_admin),
 ):
     """Manually trigger a weather collection run for all airports."""
-    from app.routers.aviationstack import AIRPORTS
+    from app.routers.aviation_edge import AIRPORTS
 
     async def _weather_task():
         from app.database import SessionLocal

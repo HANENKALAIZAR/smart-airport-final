@@ -1,5 +1,17 @@
 """
-Smart Airport Operations – XGBoost Model Training
+[DEPRECATED — kept for reference only]
+===========================================================
+This file trained on a CSV dataset (data/flights_dataset.csv) using a
+classification+regression pipeline with weather/congestion features.
+
+It has been SUPERSEDED by:
+  → app/ai/train_ae_dataset.py  (production AE pipeline, 100% real data)
+
+DO NOT invoke this file in production. The active APScheduler auto-retrain
+job calls train_ae_model() from train_ae_dataset.py exclusively.
+===========================================================
+
+Smart Airport Operations – XGBoost Model Training (Legacy CSV)
 ====================================================
 Trains a delay prediction model using the generated dataset.
 

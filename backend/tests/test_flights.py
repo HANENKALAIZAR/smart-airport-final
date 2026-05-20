@@ -98,4 +98,4 @@ class TestFlights:
     def test_health_check(self, client):
         resp = client.get("/health")
         assert resp.status_code == 200
-        assert resp.json()["status"] == "healthy"
+        assert resp.json()["data"]["status"] == "healthy"

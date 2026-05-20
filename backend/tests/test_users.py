@@ -186,4 +186,4 @@ class TestUserManagement:
             headers={"Authorization": f"Bearer {super_admin_token}"},
         )
         assert resp.status_code == 403
-        assert resp.json()["detail"] == "Super admin cannot delete their own account."
+        assert resp.json()["error"] == "Super admin cannot delete their own account."

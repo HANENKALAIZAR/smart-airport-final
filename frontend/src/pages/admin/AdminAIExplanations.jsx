@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { BrainCircuit, Layers, BarChart3, Zap, GitBranch, RefreshCw, CheckCircle, AlertTriangle } from 'lucide-react';
+import { BrainCircuit, Layers, BarChart3, Zap, GitBranch, RefreshCw, CheckCircle, AlertTriangle, Shield, TrendingUp, Database, Clock, Activity } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 
 const BASE = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000') + '/api';
@@ -55,13 +55,45 @@ const FEATURE_COLUMNS = [
     { name: 'arr_airport_enc',  label: 'Arr Airport Encoding', desc: 'Ordinal-encoded arrival IATA' },
 ];
 
-function MetricBox({ label, value, unit = '', ok }) {
-    const color = ok === true ? '#22C55E' : ok === false ? '#EF4444' : '#A5B4FC';
+function MetricBox({ label, value, unit = '', ok, highlight }) {
+    const color = ok === true ? '#22C55E' : ok === false ? '#EF4444' : highlight ? '#A5B4FC' : '#E2E8F0';
     return (
-        <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '1rem', textAlign: 'center', border: '1px solid rgba(255,255,255,0.06)' }}>
+        <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: 10, padding: '1rem', textAlign: 'center', border: `1px solid ${ok === true ? 'rgba(34,197,94,0.15)' : ok === false ? 'rgba(239,68,68,0.15)' : 'rgba(255,255,255,0.06)'}` }}>
             <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 6 }}>{label}</div>
-            <div style={{ fontSize: '1.4rem', fontWeight: 800, color }}>
+            <div style={{ fontSize: '1.4rem', fontWeight: 800, color, lineHeight: 1.2 }}>
                 {value != null ? `${value}${unit}` : <span style={{ color: 'rgba(255,255,255,0.2)' }}>—</span>}
+            </div>
+        </div>
+    );
+}
+
+function DriftBadge({ severity }) {
+    const map = {
+        none:     { label: 'No Drift',      color: '#22C55E', bg: 'rgba(34,197,94,0.1)',    border: 'rgba(34,197,94,0.25)' },
+        low:      { label: 'Low Drift',      color: '#A3E635', bg: 'rgba(163,230,53,0.1)',   border: 'rgba(163,230,53,0.25)' },
+        medium:   { label: 'Medium Drift',   color: '#F59E0B', bg: 'rgba(245,158,11,0.1)',   border: 'rgba(245,158,11,0.25)' },
+        high:     { label: 'High Drift',     color: '#F97316', bg: 'rgba(249,115,22,0.1)',   border: 'rgba(249,115,22,0.25)' },
+        critical: { label: 'Critical Drift', color: '#EF4444', bg: 'rgba(239,68,68,0.1)',    border: 'rgba(239,68,68,0.25)' },
+    };
+    const cfg = map[severity] ?? map.none;
+    return (
+        <span style={{ padding: '3px 10px', borderRadius: 6, background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, fontWeight: 700, fontSize: '0.78rem' }}>
+            {cfg.label}
+        </span>
+    );
+}
+
+function KpiRow({ icon, label, value, note, ok }) {
+    const valueColor = ok === true ? '#22C55E' : ok === false ? '#EF4444' : '#E2E8F0';
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ color: 'rgba(255,255,255,0.3)' }}>{icon}</span>
+                <span style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.55)' }}>{label}</span>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+                <div style={{ fontWeight: 700, color: valueColor, fontSize: '0.88rem' }}>{value ?? '—'}</div>
+                {note && <div style={{ fontSize: '0.68rem', color: 'rgba(255,255,255,0.3)', marginTop: 1 }}>{note}</div>}
             </div>
         </div>
     );
@@ -126,10 +158,12 @@ export default function AdminAIExplanations() {
                     Active Model Performance — Real Training Results
                     {loading && <RefreshCw size={13} style={{ color: 'rgba(255,255,255,0.3)', animation: 'spin 1s linear infinite' }} />}
                 </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12 }}>
                     <MetricBox label="Model Version" value={loading ? '…' : (dashboard?.current_model_version ?? null)} />
                     <MetricBox label="Training MAE" value={loading ? '…' : dashboard?.current_mae_training} unit=" min"
-                        ok={dashboard?.current_mae_training != null && dashboard?.current_mae_training < 15} />
+                        ok={dashboard?.current_mae_training != null && dashboard?.current_mae_training < 20} />
+                    <MetricBox label="Live MAE" value={loading ? '…' : dashboard?.live_mae} unit=" min"
+                        ok={dashboard?.live_mae != null && dashboard?.live_mae < 20} />
                     <MetricBox label="R² Score" value={loading ? '…' : dashboard?.r2_score} />
                     <MetricBox label="vs Baseline" value={loading ? '…' : (dashboard?.improvement_vs_baseline ?? null)} />
                     <MetricBox label="Model Age" value={loading ? '…' : dashboard?.model_age_days} unit=" days"
@@ -137,22 +171,102 @@ export default function AdminAIExplanations() {
                     <MetricBox label="Drift"
                         value={loading ? '…' : (dashboard?.drift_severity ?? null)}
                         ok={dashboard?.drift_severity === 'none' || dashboard?.drift_severity === 'low'} />
+                    <MetricBox label="Current Dataset" value={loading ? '…' : dashboard?.current_dataset_size} unit=" rows" />
                     <MetricBox label="Total Predictions" value={loading ? '…' : dashboard?.total_predictions_logged} />
+                    <MetricBox label="Reconciled Preds" value={loading ? '…' : dashboard?.reconciled_predictions} />
+                    <MetricBox label="Retrain Rec"
+                        value={loading ? '…' : (dashboard?.retraining_recommended ? "Recommended" : "No")}
+                        ok={dashboard?.retraining_recommended === false} />
                 </div>
 
-                {activeModel && (
-                    <div style={{ marginTop: 12, fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                        <span>Dataset: {activeModel.dataset_size} rows</span>
-                        <span>Train: {activeModel.train_rows ?? '—'} | Test: {activeModel.test_rows ?? '—'}</span>
-                        <span>Trained: {activeModel.trained_at ? new Date(activeModel.trained_at).toLocaleDateString() : '—'}</span>
-                        <span style={{ color: activeModel.better_than_baseline ? '#22C55E' : '#EF4444', fontWeight: 600 }}>
-                            {activeModel.better_than_baseline
-                                ? <><CheckCircle size={11} style={{ display: 'inline', marginRight: 3 }} />Beats baseline</>
-                                : <><AlertTriangle size={11} style={{ display: 'inline', marginRight: 3 }} />Below baseline</>
-                            }
-                        </span>
+                <div style={{ marginTop: 15, fontSize: '0.75rem', color: 'rgba(255,255,255,0.4)', display: 'flex', gap: 18, flexWrap: 'wrap', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: 12 }}>
+                    <span><strong>Last Training:</strong> {dashboard?.last_training_date ? new Date(dashboard.last_training_date).toLocaleString() : '—'}</span>
+                    <span><strong>Training Dataset Size:</strong> {dashboard?.dataset_size_at_last_training ?? '—'} rows</span>
+                    <span><strong>Next Retraining Check:</strong> {dashboard?.next_retraining_check ? new Date(dashboard.next_retraining_check).toLocaleString() : '6-hour interval check'}</span>
+                    <span><strong>Retrain Reason:</strong> <em>{dashboard?.last_retraining_reason ?? '—'}</em></span>
+                </div>
+            </div>
+
+            {/* ── MLOps Lifecycle Status ── */}
+            <div className="admin-card">
+                <h3 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Shield size={17} style={{ color: '#0EA5E9' }} />
+                    MLOps Lifecycle Status
+                    {loading && <RefreshCw size={13} style={{ color: 'rgba(255,255,255,0.3)', animation: 'spin 1s linear infinite' }} />}
+                </h3>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+                    {/* Left column: champion info */}
+                    <div>
+                        <KpiRow
+                            icon={<BrainCircuit size={14} />}
+                            label="Champion Model"
+                            value={dashboard?.current_model_version ?? '—'}
+                            note="Currently active in production"
+                        />
+                        <KpiRow
+                            icon={<Clock size={14} />}
+                            label="Last Training Date"
+                            value={dashboard?.last_training_date ? new Date(dashboard.last_training_date).toLocaleString() : '—'}
+                        />
+                        <KpiRow
+                            icon={<Database size={14} />}
+                            label="Dataset at Last Training"
+                            value={dashboard?.dataset_size_at_last_training ? `${dashboard.dataset_size_at_last_training.toLocaleString()} rows` : '—'}
+                            note="Real Aviation Edge flights only"
+                            ok={dashboard?.dataset_size_at_last_training > 1000}
+                        />
+                        <KpiRow
+                            icon={<Database size={14} />}
+                            label="Current Dataset Size"
+                            value={dashboard?.current_dataset_size ? `${dashboard.current_dataset_size.toLocaleString()} rows` : '—'}
+                            note="Actively growing via AE ingestion"
+                        />
+                        <KpiRow
+                            icon={<Activity size={14} />}
+                            label="Total Reconciled Predictions"
+                            value={dashboard?.reconciled_predictions ?? '—'}
+                            note={dashboard?.total_predictions_logged ? `of ${dashboard.total_predictions_logged} logged` : undefined}
+                            ok={dashboard?.reconciled_predictions > 50}
+                        />
                     </div>
-                )}
+                    {/* Right column: performance & policy */}
+                    <div>
+                        <KpiRow
+                            icon={<TrendingUp size={14} />}
+                            label="Training MAE"
+                            value={dashboard?.training_mae ? `${dashboard.training_mae} min` : '—'}
+                            note="On held-out test set"
+                            ok={dashboard?.training_mae != null && dashboard.training_mae < 20}
+                        />
+                        <KpiRow
+                            icon={<TrendingUp size={14} />}
+                            label="Live MAE"
+                            value={dashboard?.live_mae ? `${dashboard.live_mae} min` : '—'}
+                            note="From recent reconciled predictions"
+                            ok={dashboard?.live_mae != null && dashboard.live_mae < 20}
+                        />
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span style={{ color: 'rgba(255,255,255,0.3)' }}><AlertTriangle size={14} /></span>
+                                <span style={{ fontSize: '0.82rem', color: 'rgba(255,255,255,0.55)' }}>Drift Severity</span>
+                            </div>
+                            {loading ? <span style={{ color: 'rgba(255,255,255,0.2)' }}>…</span> : <DriftBadge severity={dashboard?.drift_severity} />}
+                        </div>
+                        <KpiRow
+                            icon={<CheckCircle size={14} />}
+                            label="Retraining Recommended"
+                            value={dashboard?.retraining_recommended ? 'Yes — Triggered' : 'No — Stable'}
+                            note={dashboard?.retraining_recommended ? 'Policy trigger fired' : '24h cooldown + policy check active'}
+                            ok={!dashboard?.retraining_recommended}
+                        />
+                        <KpiRow
+                            icon={<Clock size={14} />}
+                            label="Next Retraining Check"
+                            value={dashboard?.next_retraining_check ? new Date(dashboard.next_retraining_check).toLocaleTimeString() : 'Every 6 hours'}
+                            note="APScheduler auto_retrain job"
+                        />
+                    </div>
+                </div>
             </div>
 
             {/* ── Feature Inputs ── */}

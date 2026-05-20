@@ -329,3 +329,60 @@ def dataset_health(db: Session = Depends(get_db)):
         raise HTTPException(status_code=422, detail=str(exc))
 
     return report
+
+
+@router.post("/historical-backfill")
+def historical_backfill(
+    background_tasks: BackgroundTasks,
+    days: int = Query(90, ge=7, le=365, description="Calendar days to backfill"),
+    target_min: int = Query(5000, ge=500, le=50000, description="Minimum dataset target"),
+    daily_cap: int = Query(120, ge=10, le=500, description="Max augmented rows per day"),
+):
+    """
+    [DEPRECATED — DO NOT USE in production]
+
+    This endpoint generated statistically-augmented rows tagged as
+    data_source='augmented_training'. It was used during the early dataset
+    bootstrapping phase when real data was insufficient.
+
+    The ae_flight_dataset now contains 7,616+ real Aviation Edge rows.
+    The production XGBoost model (train_ae_dataset.py) filters to ONLY
+    data_source='aviation_edge' rows and will NEVER train on augmented data.
+
+    This endpoint is retained for reference only and returns a 405 error
+    to prevent accidental activation.
+    """
+    raise HTTPException(
+        status_code=405,
+        detail=(
+            "Historical synthetic backfill is disabled. "
+            "The production dataset now contains 7,616+ real Aviation Edge flights. "
+            "Use GET /api/ae/dataset/stats to inspect the current dataset."
+        ),
+    )
+
+
+@router.post("/fix-incomplete")
+def fix_incomplete(background_tasks: BackgroundTasks):
+    """
+    Fix the 260 rows in ae_flight_dataset that are missing dep_hour, distance_km,
+    or airline_enc. Recalculates distance_km from known coordinates, and marks rows
+    without dep_hour as unusable for ML.
+
+    Safe to run multiple times. Runs as a background task.
+    """
+    def _fix_task():
+        from app.database import SessionLocal
+        from app.ai.historical_backfill import fix_incomplete_rows
+        _db = SessionLocal()
+        try:
+            result = fix_incomplete_rows(_db)
+            logger.info(f"[Fix Incomplete API] {result}")
+        except Exception as e:
+            logger.exception(f"[Fix Incomplete API] Failed: {e}")
+        finally:
+            _db.close()
+
+    background_tasks.add_task(_fix_task)
+    return {"message": "Fix incomplete rows triggered", "status": "running"}
+

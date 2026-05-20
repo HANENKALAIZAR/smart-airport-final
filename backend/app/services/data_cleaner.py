@@ -1,7 +1,7 @@
 """
 Data Cleaner Service (v10)
 ===========================
-Strict ML validation layer. Ensures no dirty telemetry from AviationStack
+Strict ML validation layer. Ensures no dirty telemetry from Aviation Edge
 gets passed into the ML models.
 """
 

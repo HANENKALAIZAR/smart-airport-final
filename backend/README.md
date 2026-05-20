@@ -18,7 +18,7 @@ cd backend
 cp .env.example .env
 # Edit .env with your actual values:
 #   - DB_PASS, SECRET_KEY (generate with: python -c "import secrets; print(secrets.token_hex(32))")
-#   - AVIATIONSTACK_KEY (from https://aviationstack.com)
+#   - AVIATION_EDGE_KEY (from https://aviation-edge.com)
 #   - SMTP_USER, SMTP_PASSWORD (Gmail App Password)
 ```
 
@@ -120,8 +120,7 @@ backend/
 │   │   ├── predictions.py   # AI predictions
 │   │   ├── dashboard.py     # Analytics and KPIs
 │   │   ├── airports.py      # Airport/airline reference data
-│   │   ├── aviationstack.py # Real-time flight data from AviationStack
-│   │   └── opensky.py       # Live radar from OpenSky Network
+│   │   ├── aviation_edge.py # Real-time flight data from Aviation Edge
 │   ├── services/
 │   │   ├── prediction_service.py  # XGBoost + SHAP inference
 │   │   ├── email_service.py       # Gmail SMTP welcome emails

@@ -76,6 +76,15 @@ def register_model_version(db, training_result: dict, model_path: str) -> object
         (best_baseline - (metrics.get("mae") or 0)) / max(best_baseline, 1) * 100, 2
     )
 
+    # Fetch live drift status at the time of registration
+    drift_severity = "none"
+    try:
+        from app.ai.drift_detection import compute_drift_report
+        drift = compute_drift_report(db, window_days=7)
+        drift_severity = drift["overall_severity"]
+    except Exception:
+        pass
+
     row = AEModelVersion(
         model_version        = training_result.get("version", "unknown"),
         trained_at           = datetime.now(timezone.utc).replace(tzinfo=None),
@@ -92,7 +101,8 @@ def register_model_version(db, training_result: dict, model_path: str) -> object
         improvement_pct      = improvement_pct,
         better_than_baseline = verdict.get("better_than_baseline", False),
         is_active            = False,
-        notes                = verdict.get("recommendation", ""),
+        notes                = training_result.get("notes") or verdict.get("recommendation", ""),
+        drift_severity       = drift_severity,
     )
     db.add(row)
     db.commit()
@@ -193,6 +203,17 @@ def promote_model(db, candidate_version: str, *, force: bool = False) -> dict:
     )
     db.commit()
 
+    # Safe-overwrite guarantee: copy versioned model to active champion path
+    if candidate.model_path and os.path.exists(candidate.model_path):
+        try:
+            shutil.copy2(candidate.model_path, str(MODEL_PATH))
+            logger.info(f"[MLOps] Copied promoted model {candidate_version} to champion path {MODEL_PATH}")
+        except Exception as e:
+            logger.error(f"[MLOps] Failed to copy promoted model file: {e}")
+            raise
+    else:
+        logger.warning(f"[MLOps] Candidate model file not found at {candidate.model_path}")
+
     logger.info(f"[MLOps] Promoted: {candidate_version} — {candidate.promotion_reason}")
     return {
         "promoted":           True,
@@ -214,16 +235,8 @@ def _check_leakage_from_report() -> bool:
 
 
 def _archive_candidate(version: str) -> None:
-    """Move the current .pkl to archive/ with version stamp (non-destructive)."""
-    if not MODEL_PATH.exists():
-        return
-    ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
-    dest = ARCHIVE_DIR / f"delay_prediction_model_{version}.pkl"
-    try:
-        shutil.copy2(str(MODEL_PATH), str(dest))
-        logger.info(f"[MLOps] Archived candidate model → {dest}")
-    except Exception as e:
-        logger.warning(f"[MLOps] Archive failed: {e}")
+    """Non-destructive archive logging (candidate was already saved versioned during training)."""
+    logger.info(f"[MLOps] Rejected candidate model '{version}' remains archived in its versioned path")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -248,6 +261,7 @@ def log_prediction(
     airline_enc: Optional[int] = None,
     dep_airport_enc: Optional[int] = None,
     arr_airport_enc: Optional[int] = None,
+    commit: bool = True,
 ) -> None:
     """Write one prediction to ae_prediction_logs (fire-and-forget)."""
     from app.models.ae_models import AEPredictionLog
@@ -273,10 +287,14 @@ def log_prediction(
             arr_airport_enc      = arr_airport_enc,
         )
         db.add(log)
-        db.commit()
+        if commit:
+            db.commit()
     except Exception as e:
-        db.rollback()
+        if commit:
+            db.rollback()
         logger.debug(f"[MLOps] log_prediction failed (non-fatal): {e}")
+        if not commit:
+            raise
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -352,66 +370,158 @@ def reconcile_predictions(db, *, batch_size: int = 500) -> dict:
 # 5. Retraining policy check
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _get_last_training_dataset_size(active) -> int:
+    """Helper to get dataset size from active model, fallback to evaluation report if None/0."""
+    if active and active.dataset_size is not None and active.dataset_size > 0:
+        return active.dataset_size
+    try:
+        if REPORT_PATH.exists():
+            rep = json.loads(REPORT_PATH.read_text(encoding="utf-8"))
+            return int(rep.get("dataset", {}).get("total_rows", 0))
+    except Exception:
+        pass
+    return 0
+
+
 def check_retraining_policy(db) -> dict:
     """
-    Evaluate whether a new training run should be triggered.
+    Evaluate whether a new training run should be triggered using a controlled
+    evidence-driven MLOps retraining policy with safety cooldown and data quality gates.
 
-    Policy triggers (any one is sufficient):
-      A. Drift severity >= medium
-      B. Active model age > _POLICY_MAX_AGE_DAYS
-      C. ae_flight_dataset grew by _POLICY_MIN_NEW_ROWS since last training
-
-    Returns
-    -------
-    dict: {should_retrain, triggers, active_model, dataset_size, model_age_days}
+    Conditions Checked:
+      1. Cooldown safety gate: At least 24 hours passed since last training (blocks loops)
+      2. Data quality checks: Usable real-world flights >= 100, non-zero delay variance
+      3. Continuous data growth: Real dataset grown by >= 15% since last training
+      4. Performance degradation: Live MAE worse than training MAE by > 20%
+      5. Sustained drift: Consolidated drift severity is medium, high, or critical
+      6. Reconciled volume: >= 100 new reconciled predictions exist since last training
     """
-    from app.models.ae_models import AEModelVersion, AEFlightDataset
+    from app.models.ae_models import AEModelVersion, AEFlightDataset, AEPredictionLog
     from sqlalchemy import func
     from app.ai.drift_detection import compute_drift_report
 
     active = db.query(AEModelVersion).filter(AEModelVersion.is_active == True).first()
+    last_size = _get_last_training_dataset_size(active)
+    last_training_date = active.trained_at if active else None
 
-    triggers = []
-    model_age_days = None
-
-    # Trigger A: drift
-    drift = compute_drift_report(db, window_days=7)
-    if drift["overall_severity"] in _POLICY_DRIFT_RETRAIN:
-        triggers.append(f"drift:{drift['overall_severity']}")
-
-    # Trigger B: model age
-    if active and active.trained_at:
-        age = (datetime.now(timezone.utc).replace(tzinfo=None) - active.trained_at)
-        model_age_days = age.days
-        if model_age_days > _POLICY_MAX_AGE_DAYS:
-            triggers.append(f"age:{model_age_days}d > {_POLICY_MAX_AGE_DAYS}d")
-    elif not active:
-        triggers.append("no_active_model")
-
-    # Trigger C: dataset growth
+    # Compute current dataset size (real-only)
     current_size = db.query(func.count(AEFlightDataset.id)).filter(
-        AEFlightDataset.usable_for_ml == True
+        AEFlightDataset.usable_for_ml == True,
+        AEFlightDataset.data_source == "aviation_edge"
     ).scalar() or 0
 
-    last_size = active.dataset_size if active else 0
-    growth    = current_size - (last_size or 0)
-    if growth >= _POLICY_MIN_NEW_ROWS:
-        triggers.append(f"growth:{growth} new rows")
+    triggers = []
+    blocks = []
+
+    # 1. Cooldown safety gate (blocks loops)
+    cooldown_passed = True
+    time_since_last_retrain_hours = None
+    if last_training_date:
+        delta = datetime.now(timezone.utc).replace(tzinfo=None) - last_training_date
+        time_since_last_retrain_hours = delta.total_seconds() / 3600.0
+        if time_since_last_retrain_hours < 24.0:
+            cooldown_passed = False
+            blocks.append(f"cooldown: only {time_since_last_retrain_hours:.1f}h passed since last training (min 24h cooldown)")
+
+    # 2. Data quality checks
+    data_quality_ok = True
+    dq_reasons = []
+    if current_size < 100:
+        data_quality_ok = False
+        dq_reasons.append(f"insufficient real rows: {current_size} < 100")
+    
+    delayed_count = db.query(func.count(AEFlightDataset.id)).filter(
+        AEFlightDataset.usable_for_ml == True,
+        AEFlightDataset.data_source == "aviation_edge",
+        AEFlightDataset.delay_minutes > 0
+    ).scalar() or 0
+    if delayed_count == 0:
+        data_quality_ok = False
+        dq_reasons.append("zero delayed flights in training set")
+    
+    if not data_quality_ok:
+        blocks.append(f"data_quality: {', '.join(dq_reasons)}")
+
+    # 3. Continuous data growth check
+    growth_pct = 0.0
+    growth_triggered = False
+    if last_size > 0:
+        growth_pct = ((current_size - last_size) / last_size) * 100
+        if growth_pct >= 15.0:
+            growth_triggered = True
+            triggers.append(f"growth: dataset grown by {growth_pct:.1f}% >= 15% (+{current_size - last_size} rows)")
+
+    # 4. Performance degradation check
+    live_mae = None
+    degradation_triggered = False
+    training_mae = active.mae if active else None
+    
+    # Calculate live MAE from past 7 days of reconciled logs (or fallback to last 100)
+    cutoff_7d = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)
+    recent_logs = db.query(AEPredictionLog).filter(
+        AEPredictionLog.reconciled_at >= cutoff_7d,
+        AEPredictionLog.prediction_error.isnot(None),
+    ).all()
+    
+    if len(recent_logs) < 10:
+        recent_logs = db.query(AEPredictionLog).filter(
+            AEPredictionLog.prediction_error.isnot(None)
+        ).order_by(AEPredictionLog.reconciled_at.desc()).limit(100).all()
+
+    if recent_logs:
+        errors = [abs(log.prediction_error) for log in recent_logs]
+        live_mae = sum(errors) / len(errors)
+        if training_mae and training_mae > 0:
+            mae_ratio = (live_mae - training_mae) / training_mae
+            if mae_ratio > 0.20:
+                degradation_triggered = True
+                triggers.append(f"performance_degradation: live MAE {live_mae:.2f} vs train MAE {training_mae:.2f} ({mae_ratio*100:+.1f}% worse)")
+
+    # 5. Sustained drift check
+    drift = compute_drift_report(db, window_days=7)
+    drift_triggered = False
+    if drift["overall_severity"] in {"medium", "high", "critical"}:
+        drift_triggered = True
+        triggers.append(f"drift: sustained {drift['overall_severity']} drift")
+
+    # 6. Reconciled prediction volume check since last training
+    new_reconciled_count = 0
+    reconciled_count_triggered = False
+    if last_training_date:
+        new_reconciled_count = db.query(func.count(AEPredictionLog.id)).filter(
+            AEPredictionLog.reconciled_at.isnot(None),
+            AEPredictionLog.prediction_timestamp >= last_training_date
+        ).scalar() or 0
+        if new_reconciled_count >= 100:
+            reconciled_count_triggered = True
+            triggers.append(f"reconciled_volume: {new_reconciled_count} new reconciled predictions >= 100")
+
+    # Retraining logic: triggers must fire, and NO blocks exist
+    should_retrain = len(triggers) > 0 and len(blocks) == 0
+
+    if not active:
+        # Bootstrap scenario
+        should_retrain = current_size >= 100
+        triggers = ["bootstrap: no active champion model"]
+        blocks = [] if current_size >= 100 else ["data_quality: Insufficient data rows to bootstrap model"]
+        should_retrain = len(blocks) == 0
 
     return {
-        "should_retrain":     len(triggers) > 0,
-        "triggers":           triggers,
-        "active_model":       active.model_version if active else None,
-        "active_model_mae":   active.mae if active else None,
-        "model_age_days":     model_age_days,
-        "dataset_size":       current_size,
-        "last_train_size":    last_size,
-        "drift_severity":     drift["overall_severity"],
-        "policy": {
-            "max_age_days":     _POLICY_MAX_AGE_DAYS,
-            "min_new_rows":     _POLICY_MIN_NEW_ROWS,
-            "drift_threshold":  list(_POLICY_DRIFT_RETRAIN),
-        },
+        "should_retrain":                 should_retrain,
+        "triggers":                       triggers,
+        "blocks":                         blocks,
+        "active_model":                   active.model_version if active else None,
+        "last_training_date":             last_training_date.isoformat() if last_training_date else None,
+        "time_since_last_retrain_hours":  round(time_since_last_retrain_hours, 1) if time_since_last_retrain_hours is not None else None,
+        "dataset_size_at_last_training":  last_size,
+        "current_dataset_size":           current_size,
+        "growth_pct":                     round(growth_pct, 1),
+        "live_mae":                       round(live_mae, 2) if live_mae is not None else None,
+        "training_mae":                   round(training_mae, 2) if training_mae is not None else None,
+        "drift_status":                   drift["overall_severity"],
+        "new_reconciled_predictions":     new_reconciled_count,
+        "cooldown_passed":                cooldown_passed,
+        "data_quality_ok":                data_quality_ok,
     }
 
 
@@ -457,7 +567,7 @@ def run_auto_retrain(db) -> dict:
         }
 
     # Register candidate
-    candidate_row = register_model_version(db, training_result, str(MODEL_PATH))
+    candidate_row = register_model_version(db, training_result, training_result.get("model_path", str(MODEL_PATH)))
 
     # Attempt promotion (safe — will archive if it loses)
     promo = promote_model(db, candidate_row.model_version)
@@ -475,8 +585,8 @@ def run_auto_retrain(db) -> dict:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def get_dashboard_metrics(db) -> dict:
-    """Return a concise metrics dict for the admin dashboard."""
-    from app.models.ae_models import AEModelVersion, AEPredictionLog
+    """Return a comprehensive metrics dict for the MLOps admin dashboard."""
+    from app.models.ae_models import AEModelVersion, AEPredictionLog, AEFlightDataset
     from sqlalchemy import func
 
     active = db.query(AEModelVersion).filter(AEModelVersion.is_active == True).first()
@@ -486,13 +596,25 @@ def get_dashboard_metrics(db) -> dict:
         AEPredictionLog.reconciled_at.isnot(None)
     ).scalar() or 0
 
-    # Live MAE from last 24h reconciled logs
-    cutoff_24h = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=24)
+    # Calculate current dataset size (real-only)
+    current_size = db.query(func.count(AEFlightDataset.id)).filter(
+        AEFlightDataset.usable_for_ml == True,
+        AEFlightDataset.data_source == "aviation_edge"
+    ).scalar() or 0
+
+    # Live MAE from past 7 days of reconciled logs
+    cutoff_7d = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=7)
     recent_logs = db.query(AEPredictionLog).filter(
-        AEPredictionLog.reconciled_at >= cutoff_24h,
+        AEPredictionLog.reconciled_at >= cutoff_7d,
         AEPredictionLog.prediction_error.isnot(None),
     ).all()
-    live_mae_24h = (
+    
+    if len(recent_logs) < 10:
+        recent_logs = db.query(AEPredictionLog).filter(
+            AEPredictionLog.prediction_error.isnot(None)
+        ).order_by(AEPredictionLog.reconciled_at.desc()).limit(100).all()
+
+    live_mae = (
         round(sum(abs(r.prediction_error) for r in recent_logs) / len(recent_logs), 2)
         if recent_logs else None
     )
@@ -501,20 +623,41 @@ def get_dashboard_metrics(db) -> dict:
     if active and active.trained_at:
         model_age_days = (datetime.now(timezone.utc).replace(tzinfo=None) - active.trained_at).days
 
+    # Fetch next scheduled retraining check from APScheduler
+    next_check = None
+    try:
+        from app.scheduler import _scheduler
+        if _scheduler and _scheduler.running:
+            job = _scheduler.get_job("auto_retrain")
+            if job and job.next_run_time:
+                next_check = job.next_run_time.isoformat()
+    except Exception:
+        pass
+
     # Drift
     from app.ai.drift_detection import compute_drift_report
     drift = compute_drift_report(db, window_days=7)
 
+    # Policy recommendation
+    policy = check_retraining_policy(db)
+
     return {
-        "current_model_version":   active.model_version if active else None,
-        "current_mae_training":    round(active.mae, 2) if active and active.mae else None,
-        "current_mae_live_24h":    live_mae_24h,
-        "model_age_days":          model_age_days,
-        "total_model_versions":    total_versions,
-        "total_predictions_logged":total_preds,
-        "reconciled_predictions":  reconciled,
-        "drift_severity":          drift["overall_severity"],
-        "retrain_recommended":     drift["retrain_recommended"],
-        "r2_score":                round(active.r2_score, 4) if active and active.r2_score else None,
-        "improvement_vs_baseline": f"{active.improvement_pct:.1f}%" if active and active.improvement_pct else None,
+        "current_model_version":         active.model_version if active else None,
+        "last_training_date":            active.trained_at.isoformat() if active and active.trained_at else None,
+        "next_retraining_check":         next_check,
+        "dataset_size_at_last_training": _get_last_training_dataset_size(active),
+        "current_dataset_size":          current_size,
+        "live_mae":                      live_mae,
+        "training_mae":                  round(active.mae, 2) if active and active.mae else None,
+        "current_mae_training":          round(active.mae, 2) if active and active.mae else None,
+        "drift_status":                  drift["overall_severity"],
+        "drift_severity":                drift["overall_severity"],
+        "retraining_recommended":        policy["should_retrain"],
+        "last_retraining_reason":        active.notes if active else None,
+        "model_age_days":                model_age_days,
+        "total_model_versions":          total_versions,
+        "total_predictions_logged":      total_preds,
+        "reconciled_predictions":        reconciled,
+        "r2_score":                      round(active.r2_score, 4) if active and active.r2_score else None,
+        "improvement_vs_baseline":       f"{active.improvement_pct:.1f}%" if active and active.improvement_pct else None,
     }

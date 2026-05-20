@@ -84,7 +84,7 @@ export default function AdminDashboard({ selectedDate }) {
             setLoading(true);
             setError(null);
             const baseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
-            const res = await fetch(`${baseUrl}/api/aviationstack/flights/${selectedAirport.iata}`);
+            const res = await fetch(`${baseUrl}/api/aviation-edge/flights/${selectedAirport.iata}`);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const json = await res.json();
             const rawList = json.flights || [];
@@ -92,7 +92,7 @@ export default function AdminDashboard({ selectedDate }) {
             setFlights(fetched);
             setLastUpdated(new Date());
         } catch (err) {
-            console.warn('AdminDashboard: AviationStack API unavailable:', err.message);
+            console.warn('AdminDashboard: Aviation Edge API unavailable:', err.message);
             setError(`Live feed unavailable: ${err.message}`);
             setFlights([]);
             setLastUpdated(new Date());

@@ -427,6 +427,11 @@ class PassengerAlertSubscription(Base):
     airline             = Column(String(120), nullable=True)
     scheduled_departure = Column(DateTime,    nullable=True)
     is_active           = Column(Boolean,     nullable=False, default=True)
+    status              = Column(String(20),  nullable=False, default="ACTIVE")
+    completed_at        = Column(TIMESTAMP,   nullable=True)
+    completion_reason   = Column(String(50),  nullable=True)
+    last_checked_at     = Column(TIMESTAMP,   nullable=True)
+    last_notified_status= Column(String(50),  nullable=True)
     created_at          = Column(TIMESTAMP,   default=_now)
 
     logs = relationship("PassengerAlertLog", back_populates="subscription")

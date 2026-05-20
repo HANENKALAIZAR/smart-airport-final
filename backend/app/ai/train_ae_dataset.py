@@ -96,6 +96,7 @@ def _load_ae_dataset(db) -> pd.DataFrame:
         db.query(AEFlightDataset)
         .filter(
             AEFlightDataset.usable_for_ml == True,
+            AEFlightDataset.data_source == "aviation_edge",  # STRICTLY 100% REAL AE DATA
             AEFlightDataset.dep_hour.isnot(None),
             AEFlightDataset.distance_km.isnot(None),
             AEFlightDataset.airline_enc.isnot(None),
@@ -442,15 +443,21 @@ def train_ae_model(db, notes: str = "") -> dict:
             "recommendation":        recommendation,
         }
 
-        # ── Step 11: Save model ───────────────────────────────────────────────
-        MODEL_DIR.mkdir(parents=True, exist_ok=True)
-        tmp_model = MODEL_PATH.with_suffix(".tmp")
-        joblib.dump(model, str(tmp_model))
-        os.replace(str(tmp_model), str(MODEL_PATH))
-        logger.info(f"Model saved → {MODEL_PATH}")
-
-        # ── Step 12: Save evaluation report ──────────────────────────────────
+        # ── Step 11: Generate version ─────────────────────────────────────────
         version = datetime.now(timezone.utc).strftime("ae-v%Y%m%d-%H%M")
+
+        # ── Step 12: Save model to archive (safe-overwrite guarantee) ─────────
+        MODEL_DIR.mkdir(parents=True, exist_ok=True)
+        ARCHIVE_DIR = MODEL_DIR / "archive"
+        ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+        versioned_model_path = ARCHIVE_DIR / f"delay_prediction_model_{version}.pkl"
+
+        tmp_model = versioned_model_path.with_suffix(".tmp")
+        joblib.dump(model, str(tmp_model))
+        os.replace(str(tmp_model), str(versioned_model_path))
+        logger.info(f"Model saved to archive → {versioned_model_path}")
+
+        # ── Step 12.1: Save evaluation report ─────────────────────────────────
         report = {
             "version":         version,
             "trained_at":      datetime.now(timezone.utc).isoformat(),
@@ -506,6 +513,8 @@ def train_ae_model(db, notes: str = "") -> dict:
             "baseline":        report["baseline"],
             "verdict":         verdict,
             "evaluation_path": str(REPORT_PATH),
+            "model_path":      str(versioned_model_path),
+            "dataset":         report["dataset"],
         }
 
     except ValueError as e:

@@ -1,6 +1,18 @@
 """
-Smart Airport Operations — Train from PostgreSQL (v10)
-=======================================================
+[DEPRECATED — kept for reference only]
+===========================================================
+This file trained on the legacy flight_features table (FlightFeature ORM model)
+using a classification+regression pipeline. It wrote metrics to model_metrics.
+
+It has been SUPERSEDED by:
+  → app/ai/train_ae_dataset.py  (production AE pipeline, 100% real Aviation Edge data)
+  → app/models/ae_models.py     (AEFlightDataset, AEModelVersion — active registry)
+
+DO NOT invoke this file in production. The active APScheduler auto-retrain
+job calls train_ae_model() from train_ae_dataset.py exclusively.
+===========================================================
+
+Smart Airport Operations — Train from PostgreSQL (Legacy FlightFeature pipeline)
 Replaces the CSV-based train_model.py.
 
 Loads features from the flight_features table, performs a time-based

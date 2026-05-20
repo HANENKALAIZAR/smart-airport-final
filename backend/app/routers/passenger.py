@@ -462,6 +462,7 @@ async def subscribe_passenger_alert(
 
     if existing:
         existing.is_active = True
+        existing.status    = "ACTIVE"
         existing.dep_iata  = req.dep_iata or existing.dep_iata
         existing.arr_iata  = req.arr_iata or existing.arr_iata
         existing.airline   = req.airline  or existing.airline
@@ -477,6 +478,7 @@ async def subscribe_passenger_alert(
             airline             = req.airline or None,
             scheduled_departure = dep_ts,
             is_active           = True,
+            status              = "ACTIVE",
         )
         db.add(sub)
 
@@ -512,3 +514,89 @@ async def subscribe_passenger_alert(
         "message": f"Alert activated. Confirmation email sent to {email}.",
         "flight": fn,
     }
+
+
+class AlertUnsubscribeRequest(BaseModel):
+    email: str
+    flight_number: str
+
+
+@router.get("/alerts/status")
+async def get_alert_status(
+    email: str = Query(...),
+    flight_number: str = Query(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Get the status of a passenger alert subscription.
+    """
+    email_clean = email.strip().lower()
+    fn_clean = flight_number.strip().upper()
+
+    sub = (
+        db.query(PassengerAlertSubscription)
+        .filter(
+            PassengerAlertSubscription.email == email_clean,
+            PassengerAlertSubscription.flight_number == fn_clean,
+        )
+        .first()
+    )
+
+    if not sub:
+        return {"subscribed": False}
+
+    return {
+        "subscribed": True,
+        "is_active": sub.is_active,
+        "status": sub.status,
+        "completed_at": sub.completed_at.isoformat() if sub.completed_at else None,
+        "completion_reason": sub.completion_reason,
+        "last_checked_at": sub.last_checked_at.isoformat() if sub.last_checked_at else None,
+        "last_notified_status": sub.last_notified_status,
+    }
+
+
+@router.post("/alerts/unsubscribe")
+async def unsubscribe_passenger_alert_api(
+    req: AlertUnsubscribeRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Manually unsubscribe/cancel a flight alert.
+    """
+    email_clean = req.email.strip().lower()
+    fn_clean = req.flight_number.strip().upper()
+
+    sub = (
+        db.query(PassengerAlertSubscription)
+        .filter(
+            PassengerAlertSubscription.email == email_clean,
+            PassengerAlertSubscription.flight_number == fn_clean,
+        )
+        .first()
+    )
+
+    if not sub:
+        raise HTTPException(404, "Alert subscription not found.")
+
+    sub.is_active = False
+    sub.status = "CANCELLED"
+    sub.completed_at = datetime.now(timezone.utc)
+    sub.completion_reason = "cancelled_by_user"
+
+    log_entry = PassengerAlertLog(
+        subscription_id = sub.id,
+        flight_number   = fn_clean,
+        email           = email_clean,
+        event_type      = "unsubscribed",
+        new_value       = "cancelled_by_user",
+        email_sent      = False,
+    )
+    db.add(log_entry)
+    db.commit()
+
+    return {
+        "ok": True,
+        "message": "Successfully unsubscribed from flight alerts."
+    }
+

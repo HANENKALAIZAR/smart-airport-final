@@ -6,7 +6,7 @@
  * Data sources — all REAL, no mocks:
  *   • GET /api/intelligence/stats/flight   → route/airline/hour delay intelligence
  *   • GET /api/intelligence/future-schedules → matching future schedule + prediction
- *   • GET /api/aviationstack/predict/{fn}  → live inference for the clicked flight
+ *   • GET /api/intelligence/flight-predict/{id} → live inference for the clicked flight
  *
  * Shows: flight info, real predicted delay, confidence, risk, route/airline stats,
  *        operational recommendations, and feature breakdown.

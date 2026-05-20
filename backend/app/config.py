@@ -37,8 +37,6 @@ class Settings(BaseSettings):
 
     MODEL_DIR: str = str(Path(__file__).resolve().parent / "ai" / "model")
 
-    AVIATIONSTACK_KEY: str = ""
-    AVIATIONSTACK_MAX_REQUESTS: int = 80
     AVIATION_EDGE_KEY: str = ""
     HISTORICAL_DAYS: int = 2
     OPENWEATHER_KEY: str = ""

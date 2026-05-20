@@ -22,7 +22,7 @@ class TestMessages:
             json={
                 "category": "technical",
                 "subject": "API issue at TUN",
-                "body": "The AviationStack API is returning empty responses.",
+                "body": "The Aviation Edge API is returning empty responses.",
             },
             headers={"Authorization": f"Bearer {admin_token}"},
         )
@@ -94,7 +94,8 @@ class TestMessages:
 
         # Super admin resolves
         resolve_resp = client.patch(
-            f"/api/messages/{msg_id}/resolve",
+            f"/api/messages/{msg_id}/status",
+            json={"status": "resolved"},
             headers={"Authorization": f"Bearer {super_admin_token}"},
         )
         assert resolve_resp.status_code == 200
@@ -109,7 +110,8 @@ class TestMessages:
         msg_id = msg_resp.json()["id"]
 
         client.patch(
-            f"/api/messages/{msg_id}/resolve",
+            f"/api/messages/{msg_id}/status",
+            json={"status": "resolved"},
             headers={"Authorization": f"Bearer {super_admin_token}"},
         )
 

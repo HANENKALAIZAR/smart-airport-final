@@ -6,10 +6,9 @@ prediction jobs, and automatic ML retraining.
 
 Jobs:
   collect_weather     — Every 30 min : OpenWeatherMap for all airports
-  collect_flights     — Every N hours : AviationStack flight sync
+  ae_ingest           — Every 8 min  : Aviation Edge stale-only ingestion
   run_features        — After each flight collection run
   batch_predictions   — Every 30 min : predict upcoming flights with features
-  ae_ingest           — Every 8 min  : Aviation Edge stale-only ingestion
   auto_retrain        — Every 7 days : policy-gated automatic model retraining
                          (also triggered if drift/growth thresholds are met)
 
@@ -51,55 +50,12 @@ async def _job_collect_weather():
         db.close()
 
 
-async def _job_collect_flights():
-    """
-    Fetch and store flights from AviationStack for all airports.
-    Triggers feature pipeline afterwards.
-    """
-    from app.api_clients.aviationstack_client import fetch_and_store_flights
-    from app.api_clients import aviationstack_client
-    from app.database import SessionLocal
-
-    db = SessionLocal()
-    total = {"fetched": 0, "upserted": 0, "skipped": 0, "errors": 0}
-    try:
-        for iata in AIRPORTS:
-            for direction in ("departure", "arrival"):
-                try:
-                    stats = await fetch_and_store_flights(iata, direction, db=db)
-                    for k in total:
-                        total[k] += stats.get(k, 0)
-                except Exception as e:
-                    logger.error(f"Flight job failed for {iata}/{direction}: {e}")
-    finally:
-        db.close()
-
-    # Immediately run data cleaning and feature engineering after flights are updated
-    db2 = SessionLocal()
-    clean_metrics = {}
-    try:
-        from app.services.data_cleaner import run_data_cleaner
-        clean_metrics = run_data_cleaner(db2)
-    except Exception as e:
-        logger.error(f"Data cleaner job failed: {e}")
-    finally:
-        db2.close()
-
-    logger.info(f"=== PIPELINE CYCLE COMPLETE ===")
-    logger.info(f"API requests made: {getattr(aviationstack_client, 'API_REQUESTS_MADE', 'N/A')}")
-    logger.info(f"Total fetched flights: {total['fetched']}")
-    logger.info(f"Total stored flights: {total['upserted']}")
-    logger.info(f"Total valid flights after cleaning: {clean_metrics.get('total_valid_flights_after', 0)}")
-    logger.info(f"===============================")
-
-    await _job_run_features()
-
-
 async def _job_ae_ingest():
     """
     Smart Aviation Edge ingestion — runs every 8 minutes.
     Only calls the AE API for airports whose cache is actually stale (> 10 min old).
     Airports with fresh data are skipped entirely — no wasted API calls.
+    Triggers data cleaner and feature engineering on updates.
     """
     from app.services.flight_cache_service import (
         is_cache_fresh, MONITORED_AIRPORTS, CACHE_TTL_MINUTES,
@@ -135,6 +91,20 @@ async def _job_ae_ingest():
         f"(TTL={CACHE_TTL_MINUTES}min)"
     )
 
+    if refreshed > 0:
+        logger.info("[AE Ingest Job] New flights ingested. Triggering data cleaning and feature pipeline...")
+        db2 = SessionLocal()
+        try:
+            from app.services.data_cleaner import run_data_cleaner
+            clean_metrics = run_data_cleaner(db2)
+            logger.info(f"[AE Ingest Job] Data quality cleaner complete. Valid flights: {clean_metrics.get('total_valid_flights_after', 0)}")
+        except Exception as e:
+            logger.error(f"[AE Ingest Job] Data cleaner failed: {e}")
+        finally:
+            db2.close()
+
+        await _job_run_features()
+
 
 async def _job_run_features():
     """Run the DB-backed feature engineering pipeline."""
@@ -152,17 +122,49 @@ async def _job_run_features():
 
 
 async def _job_batch_predictions():
-    """Generate predictions for upcoming flights with features but no recent prediction."""
-    from app.services.prediction_service import run_batch_predictions
+    """
+    Generate predictions for upcoming flights (Aviation Edge future schedules).
+    Uses the official delay_prediction_model.pkl (Aviation Edge model).
+    """
+    from app.ai.future_predictions import predict_future_flights
     from app.database import SessionLocal
 
     db = SessionLocal()
     try:
-        count = run_batch_predictions(db)
-        if count > 0:
-            logger.info(f"Batch prediction job: {count} predictions generated")
+        res = predict_future_flights(db, horizon_hours=72)
+        status = res.get("status", "error")
+        pred_count = res.get("predicted", 0)
+        if pred_count > 0 or status == "ok":
+            logger.info(
+                f"[AE Prediction Job] Batch complete: predicted={pred_count} "
+                f"skipped={res.get('skipped', 0)} errors={res.get('errors', 0)}"
+            )
     except Exception as e:
-        logger.error(f"Batch prediction job failed: {e}")
+        logger.error(f"[AE Prediction Job] Failed: {e}")
+    finally:
+        db.close()
+
+
+async def _job_reconcile_predictions():
+    """
+    Reconcile completed predictions with real actual flight delays.
+    Matches prediction logs with actual outcome data (Aviation Edge flight dataset)
+    and computes error metrics (MAE/drift).
+    """
+    from app.ai.mlops_controller import reconcile_predictions
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        res = reconcile_predictions(db, batch_size=500)
+        reconciled = res.get("reconciled", 0)
+        if reconciled > 0:
+            logger.info(
+                f"[MLOps Reconcile Job] Complete: reconciled={reconciled} "
+                f"skipped={res.get('skipped', 0)} errors={res.get('errors', 0)}"
+            )
+    except Exception as e:
+        logger.error(f"[MLOps Reconcile Job] Failed: {e}")
     finally:
         db.close()
 
@@ -232,11 +234,33 @@ async def _job_passenger_alerts():
         today = date.today()
         subscriptions = (
             db.query(PassengerAlertSubscription)
-            .filter(PassengerAlertSubscription.is_active == True)
+            .filter(
+                PassengerAlertSubscription.is_active == True,
+                PassengerAlertSubscription.status.in_(["ACTIVE", "pending"])
+            )
             .all()
         )
 
         for sub in subscriptions:
+            now_ts = _now_utc() if hasattr(__builtins__, '_now_utc') else __import__('datetime').datetime.now(__import__('datetime').timezone.utc)
+            sub.last_checked_at = now_ts
+            db.commit()
+
+            # Auto-expire subscriptions for flights scheduled more than 36 hours ago
+            if sub.scheduled_departure:
+                from datetime import timezone
+                dep_time = sub.scheduled_departure
+                if dep_time.tzinfo is None:
+                    dep_time = dep_time.replace(tzinfo=timezone.utc)
+                if (now_ts - dep_time).total_seconds() > 36 * 3600:
+                    sub.status = "EXPIRED"
+                    sub.is_active = False
+                    sub.completed_at = now_ts
+                    sub.completion_reason = "expired"
+                    logger.info(f"[PassengerAlerts] Subscription auto-expired (scheduled departure was >36h ago) → {sub.email} / {sub.flight_number}")
+                    db.commit()
+                    continue
+
             fn = sub.flight_number
             snap = (
                 db.query(AEFlightSnapshot)
@@ -269,9 +293,10 @@ async def _job_passenger_alerts():
             current_terminal = snap.dep_terminal or snap.arr_terminal or "—"
             current_delay  = str(snap.delay_minutes or 0)
 
+            last_state = {}
             if last_log is None:
-                # Never sent any update — send initial status if flight is delayed/boarding
-                if current_status in ("delayed", "boarding", "cancelled"):
+                # Never sent any update — send initial status if flight is delayed/boarding/cancelled/landed
+                if current_status in ("delayed", "boarding", "cancelled", "landed"):
                     events.append((current_status, "", current_status))
             else:
                 # Parse last known values from most recent log
@@ -290,10 +315,16 @@ async def _job_passenger_alerts():
                 if last_state.get("delay") != current_delay and int(current_delay) > 0:
                     events.append(("delay", last_state.get("delay", "0"), current_delay))
 
-            if not events:
+            is_final = current_status.lower() in ("landed", "cancelled", "arrived", "completed", "departed")
+
+            if is_final:
+                last_st = last_state.get("status") if last_log else "unknown"
+                if last_st != current_status and not any(e[0] == "status_change" for e in events) and not any(e[0] == current_status for e in events):
+                    events.append(("status_change", last_st, current_status))
+
+            if not events and not is_final:
                 continue
 
-            # Build and send update email
             import json
             new_state = json.dumps({
                 "status":   current_status,
@@ -302,19 +333,24 @@ async def _job_passenger_alerts():
                 "delay":    current_delay,
             })
 
-            event_labels = {
-                "status_change": f"Status changed to {current_status.upper()}",
-                "gate_change":   f"Gate updated to {current_gate}",
-                "delay":         f"Delay: {current_delay} minutes",
-                "boarding":      "Boarding has started",
-                "delayed":       f"Flight delayed by {current_delay} minutes",
-                "cancelled":     "Flight has been cancelled",
-            }
-            lines = [event_labels.get(e[0], e[0]) for e in events]
-            body_text = "\n".join(f"• {l}" for l in lines)
+            if events:
+                # Build and send update email
+                event_labels = {
+                    "status_change": f"Status changed to {current_status.upper()}",
+                    "gate_change":   f"Gate updated to {current_gate}",
+                    "delay":         f"Delay: {current_delay} minutes",
+                    "boarding":      "Boarding has started",
+                    "delayed":       f"Flight delayed by {current_delay} minutes",
+                    "cancelled":     "Flight has been cancelled",
+                    "landed":        "Flight has landed",
+                }
+                lines = [event_labels.get(e[0], e[0]) for e in events]
+                if is_final:
+                    lines.append("Alert subscription automatically closed because flight reached a final status.")
+                body_text = "\n".join(f"• {l}" for l in lines)
 
-            year = __import__('datetime').datetime.utcnow().year
-            html = f"""<!DOCTYPE html>
+                year = __import__('datetime').datetime.utcnow().year
+                html = f"""<!DOCTYPE html>
 <html><head><meta charset="UTF-8"/></head>
 <body style="background:#0F172A;font-family:'Segoe UI',Arial,sans-serif;margin:0;padding:40px 16px;">
   <table width="600" style="background:#1E293B;border-radius:16px;margin:0 auto;overflow:hidden;
@@ -339,37 +375,47 @@ async def _job_passenger_alerts():
   </table>
 </body></html>"""
 
-            try:
-                msg = MIMEMultipart("alternative")
-                msg["Subject"] = f"✈ Update: Flight {fn} — {lines[0]}"
-                msg["From"]    = f"Smart Airport Alerts <{settings.SMTP_USER}>"
-                msg["To"]      = sub.email
-                msg.attach(MIMEText(body_text, "plain"))
-                msg.attach(MIMEText(html, "html"))
+            now_ts = _now_utc() if hasattr(__builtins__, '_now_utc') else __import__('datetime').datetime.now(__import__('datetime').timezone.utc)
+            if events:
+                try:
+                    msg = MIMEMultipart("alternative")
+                    msg["Subject"] = f"✈ Update: Flight {fn} — {lines[0]}"
+                    msg["From"]    = f"Smart Airport Alerts <{settings.SMTP_USER}>"
+                    msg["To"]      = sub.email
+                    msg.attach(MIMEText(body_text, "plain"))
+                    msg.attach(MIMEText(html, "html"))
 
-                with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as srv:
-                    srv.ehlo(); srv.starttls()
-                    srv.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                    srv.sendmail(settings.SMTP_USER, [sub.email], msg.as_string())
+                    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as srv:
+                        srv.ehlo(); srv.starttls()
+                        srv.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                        srv.sendmail(settings.SMTP_USER, [sub.email], msg.as_string())
 
-                now_ts = _now_utc() if hasattr(__builtins__, '_now_utc') else __import__('datetime').datetime.now(__import__('datetime').timezone.utc)
-                for ev in events:
-                    log = PassengerAlertLog(
-                        subscription_id = sub.id,
-                        flight_number   = fn,
-                        email           = sub.email,
-                        event_type      = ev[0],
-                        old_value       = ev[1],
-                        new_value       = new_state,
-                        email_sent      = True,
-                        sent_at         = now_ts,
-                    )
-                    db.add(log)
-                db.commit()
-                logger.info(f"[PassengerAlerts] Update sent → {sub.email} / {fn}: {[e[0] for e in events]}")
+                    for ev in events:
+                        log = PassengerAlertLog(
+                            subscription_id = sub.id,
+                            flight_number   = fn,
+                            email           = sub.email,
+                            event_type      = ev[0],
+                            old_value       = ev[1],
+                            new_value       = new_state,
+                            email_sent      = True,
+                            sent_at         = now_ts,
+                        )
+                        db.add(log)
+                    logger.info(f"[PassengerAlerts] Update sent → {sub.email} / {fn}: {[e[0] for e in events]}")
 
-            except Exception as exc:
-                logger.error(f"[PassengerAlerts] Notification dispatch failed for {sub.email}/{fn}: {exc}")
+                except Exception as exc:
+                    logger.error(f"[PassengerAlerts] Notification dispatch failed for {sub.email}/{fn}: {exc}")
+
+            sub.last_notified_status = current_status
+            if is_final:
+                sub.status = "COMPLETED"
+                sub.is_active = False
+                sub.completed_at = now_ts
+                sub.completion_reason = f"flight_{current_status.lower()}"
+                logger.info(f"[PassengerAlerts] Subscription closed → {sub.email} / {fn}: Final status {current_status}")
+
+            db.commit()
 
     except Exception as exc:
         logger.error(f"[PassengerAlerts] Job error: {exc}")
@@ -397,20 +443,20 @@ def start_scheduler():
     )
 
     _scheduler.add_job(
-        _job_collect_flights,
-        trigger=IntervalTrigger(hours=interval_hours),
-        id="collect_flights",
-        name=f"Collect AviationStack flights (every {interval_hours}h)",
-        replace_existing=True,
-        max_instances=1,
-        misfire_grace_time=300,
-    )
-
-    _scheduler.add_job(
         _job_batch_predictions,
         trigger=IntervalTrigger(minutes=30),
         id="batch_predictions",
         name="Batch predict upcoming flights",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=120,
+    )
+
+    _scheduler.add_job(
+        _job_reconcile_predictions,
+        trigger=IntervalTrigger(minutes=30),
+        id="reconcile_predictions",
+        name="Reconcile predictions with actual outcomes (every 30 min)",
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=120,
@@ -428,9 +474,9 @@ def start_scheduler():
 
     _scheduler.add_job(
         _job_auto_retrain,
-        trigger=IntervalTrigger(weeks=1),
+        trigger=IntervalTrigger(hours=6),
         id="auto_retrain",
-        name="Automatic ML retraining — policy-gated (weekly + drift/growth triggers)",
+        name="Automatic ML retraining — policy-gated (every 6 hours)",
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=3600,  # 1 hour grace — retraining is heavy
@@ -449,8 +495,7 @@ def start_scheduler():
     _scheduler.start()
     logger.info(
         f"APScheduler started — "
-        f"weather=30min | flights={interval_hours}h | "
-        f"predictions=30min | ae_ingest=8min | passenger_alerts=5min | auto_retrain=weekly"
+        f"weather=30min | predictions=30min | reconciliation=30min | ae_ingest=8min | passenger_alerts=5min | auto_retrain=6hours"
     )
 
 

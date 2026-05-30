@@ -101,6 +101,8 @@ from app.routers import alerts
 from app.routers import ae_dataset
 from app.routers import intelligence
 from app.routers import passenger as passenger_router
+from app.routers import ai_suggestions
+from app.routers import passenger_desk
 
 # Ensure AE pipeline tables (including new intelligence tables) are registered
 import app.models.ae_models  # noqa: F401  (AEFlightSnapshot, AEFlightDataset, AEFutureSchedule, AEAviationStats)
@@ -117,6 +119,7 @@ try:
         notifications,
         predictions,
         users,
+        admin_analytics,
     )
 
     _optional_routers = [
@@ -124,6 +127,7 @@ try:
         predictions,
         auth,
         dashboard,
+        admin_analytics,
         airports,
         users,
         messages,
@@ -235,6 +239,8 @@ app.include_router(alerts.router)
 app.include_router(ae_dataset.router)
 app.include_router(intelligence.router)
 app.include_router(passenger_router.router)
+app.include_router(ai_suggestions.router)
+app.include_router(passenger_desk.router)
 
 
 @app.get("/")

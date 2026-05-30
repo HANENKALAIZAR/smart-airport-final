@@ -32,7 +32,7 @@ class TestLogin:
             "password": "WrongPassword",
         })
         assert resp.status_code == 401
-        assert "Invalid" in resp.json()["error"]
+        assert "incorrect" in resp.json()["error"]
 
     def test_login_unknown_email(self, client):
         resp = client.post("/api/auth/login", json={

@@ -32,29 +32,17 @@ def validate_tunisian_phone_digits(phone: str) -> bool:
 
 
 def normalize_emergency_contact_phone(raw: Optional[str]) -> str:
-    """Keep only + and digits (no spaces, letters, or other symbols)."""
-    if raw is None:
+    """Normalize using the same Tunisian phone logic as primary phone."""
+    if not raw:
         return ""
-    return re.sub(r"[^+\d]", "", str(raw).strip())
+    return normalize_tunisian_phone(str(raw))
 
 
 def validate_emergency_contact_phone(raw: Optional[str]) -> bool:
-    """
-    Tunisian: +216[2459] + 7 digits (exactly 8 digits after +216).
-    International (non-216): + then 7–15 digits total after +.
-    Only + and digits allowed before normalization.
-    """
-    s = normalize_emergency_contact_phone(raw)
-    if not s or s[0] != "+":
+    """Validate using the same Tunisian phone logic as primary phone."""
+    if not raw:
         return False
-    if not re.match(r"^\+\d+$", s):
-        return False
-    rest = s[1:]
-    if s.startswith("+216"):
-        return bool(TUNISIAN_PHONE_RE.match(normalize_tunisian_phone(s)))
-    if 7 <= len(rest) <= 15:
-        return True
-    return False
+    return validate_tunisian_phone_digits(str(raw))
 
 
 def validate_passport_number(raw: str) -> bool:

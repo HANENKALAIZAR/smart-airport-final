@@ -84,13 +84,15 @@ export interface Airport {
   y: number;
 }
 
-export type FlightStatus = 'scheduled' | 'boarding' | 'in_air' | 'landed' | 'delayed' | 'cancelled' | 'on_time';
+export type FlightStatus = 'scheduled' | 'boarding' | 'in_air' | 'landed' | 'delayed' | 'cancelled' | 'on_time' | 'taxiing';
 
 export interface Flight {
   id: string;
   flightNumber: string;
+  canonicalFlightNumber: string;
   airline: string;
   airlineCode: string;
+  airlineIcao: string;
   airlineReliability: number;
   from: Airport;
   to: Airport;
@@ -158,8 +160,9 @@ function adaptStatus(apiStatus: string, delayMin: number | null): FlightStatus {
   if (apiStatus === 'delayed') return 'delayed';
   if (apiStatus === 'cancelled') return 'cancelled';
   if (apiStatus === 'boarding') return 'boarding';
+  if (apiStatus === 'taxiing') return 'taxiing';
   if (apiStatus === 'landed') return 'landed';
-  if (apiStatus === 'departed') return 'in_air';
+  if (apiStatus === 'in_air' || apiStatus === 'departed') return 'in_air';
   return 'scheduled';
 }
 
@@ -400,6 +403,7 @@ interface AEFlight {
   direction: 'departure' | 'arrival';
   airline_name: string;
   airline_iata: string;
+  airline_icao: string;
   dep_iata: string;
   dep_airport: string;
   dep_terminal: string | null;
@@ -442,6 +446,20 @@ function haversineKm(iata1: string, iata2: string): number {
   return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
+function buildCanonicalFlightNumber(flightNumber: string, airlineIata: string, airlineIcao: string): string {
+  if (!flightNumber) return "";
+  const numPart = flightNumber.replace(/^[A-Za-z]+/, "");
+  if (!numPart) return flightNumber;
+  
+  const iata = airlineIata ? `${airlineIata.toUpperCase()}${numPart}` : "";
+  const icao = airlineIcao ? `${airlineIcao.toUpperCase()}${numPart}` : "";
+  
+  if (iata && icao && iata !== icao) {
+    return `${iata} / ${icao}`;
+  }
+  return flightNumber;
+}
+
 // ── Aviation Edge → Flight adapter ───────────────────────────────────────────
 
 function adaptAEFlight(f: AEFlight): Flight {
@@ -468,19 +486,24 @@ function adaptAEFlight(f: AEFlight): Flight {
     f.status === 'landed'    ? 'landed'    :
     f.status === 'cancelled' ? 'cancelled' :
     f.status === 'boarding'  ? 'boarding'  :
+    f.status === 'taxiing'   ? 'taxiing'   :
     f.status === 'delayed'   ? 'delayed'   :
     f.status === 'on_time'   ? 'on_time'   : 'scheduled';
 
   // Auto-resolve landed if AE is lagging
-  if (['scheduled', 'on_time', 'in_air'].includes(status) && arrTs < now - 10 * 60_000) {
+  if (['scheduled', 'on_time', 'in_air', 'taxiing'].includes(status) && arrTs < now - 10 * 60_000) {
     status = 'landed';
   }
+
+  const canonicalFlightNumber = buildCanonicalFlightNumber(f.flight_number, f.airline_iata, f.airline_icao);
 
   return {
     id: f.id || f.flight_number,
     flightNumber: f.flight_number,
+    canonicalFlightNumber,
     airline: f.airline_name,
     airlineCode: f.airline_iata ?? '??',
+    airlineIcao: f.airline_icao ?? '',
     airlineReliability: 0, // Not available from Aviation Edge — not displayed
     from: { code: f.dep_iata, city: depCity, name: depCity, country: '', x: depCoords.x, y: depCoords.y },
     to:   { code: f.arr_iata, city: arrCity, name: arrCity, country: '', x: arrCoords.x, y: arrCoords.y },

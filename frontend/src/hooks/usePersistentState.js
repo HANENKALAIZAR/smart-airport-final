@@ -1,21 +1,3 @@
-/**
- * usePersistentState — localStorage-backed state hook
- * =====================================================
- * Replaces all manual localStorage.getItem/setItem patterns
- * in AdminApp.jsx and elsewhere.
- *
- * Guarantees:
- * - State is initialized from storage on mount
- * - Every setState call syncs to storage atomically
- * - No state mismatch between reloads
- *
- * Usage:
- *   const [token, setToken] = usePersistentState('admin_token', '');
- *
- * @param {string} key       - localStorage key
- * @param {*} initialValue   - fallback when key is absent
- * @returns {[*, function]}  - [value, setter]
- */
 import { useState, useCallback } from 'react';
 
 export default function usePersistentState(key, initialValue) {
@@ -23,7 +5,11 @@ export default function usePersistentState(key, initialValue) {
         try {
             const stored = localStorage.getItem(key);
             if (stored === null) return initialValue;
-            return JSON.parse(stored);
+            try {
+                return JSON.parse(stored);
+            } catch {
+                return stored;
+            }
         } catch {
             return initialValue;
         }

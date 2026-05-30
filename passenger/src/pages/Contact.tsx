@@ -134,9 +134,11 @@ export default function Contact() {
     [activeCode]
   );
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name || !form.email || !form.message) {
+
+    // 1. Basic validation
+    if (!form.name.trim() || !form.email.trim() || !form.message.trim()) {
       toast({
         title: "Missing information",
         description: "Please fill in your name, email and message.",
@@ -144,15 +146,93 @@ export default function Contact() {
       });
       return;
     }
-    setSubmitting(true);
-    setTimeout(() => {
-      setSubmitting(false);
+
+    // 2. Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(form.email.trim())) {
       toast({
-        title: "Message sent",
-        description: `Your message has been forwarded to ${airportsInfo.find((a) => a.code === form.airport)?.shortName}. We'll reply within 48 hours.`,
+        title: "Invalid Email Address",
+        description: "Please enter a valid email format.",
+        variant: "destructive",
       });
-      setForm({ name: "", email: "", subject: "general", airport: form.airport, message: "" });
-    }, 900);
+      return;
+    }
+
+    // 3. Minimum length validation
+    if (form.message.trim().length < 10) {
+      toast({
+        title: "Message Too Short",
+        description: "Please enter a message containing at least 10 characters.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api');
+      const response = await fetch(`${apiBase}/public/contact-message`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          fullName: form.name.trim(),
+          email: form.email.trim(),
+          airportIata: form.airport,
+          subject: form.subject,
+          message: form.message.trim(),
+        }),
+      });
+
+      const resText = await response.text();
+      let resData;
+      try {
+        resData = JSON.parse(resText);
+      } catch {
+        resData = { error: resText || "Internal server error" };
+      }
+
+      if (!response.ok) {
+        toast({
+          title: "Submission Failed",
+          description: resData?.error || resData?.detail || "Could not send message. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (resData.appended) {
+        // Spam/duplicate merged warning
+        toast({
+          title: "Duplicate Request Detected",
+          description: `Your previous request is already being processed. Reference ID: ${resData.reference_id}`,
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Message Sent Successfully",
+          description: `Your message has been sent to the selected airport operations team. Ticket ID: ${resData.reference_id}`,
+        });
+      }
+
+      // Reset message and subject, preserve name/email/airport for convenience
+      setForm({
+        name: form.name,
+        email: form.email,
+        subject: "general",
+        airport: form.airport,
+        message: "",
+      });
+    } catch (err: any) {
+      toast({
+        title: "Network Error",
+        description: "Cannot connect to the helpdesk server. Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -404,15 +484,21 @@ export default function Contact() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="message">Message</Label>
+                <div className="flex justify-between items-baseline">
+                  <Label htmlFor="message">Message</Label>
+                  <span className="text-[10px] text-muted-foreground font-mono">
+                    {form.message.length} chars {form.message.length < 10 && "(min 10)"}
+                  </span>
+                </div>
                 <Textarea
                   id="message"
                   name="message"
                   rows={6}
-                  placeholder="How can we help?"
+                  placeholder="How can we help? (Please write at least 10 characters)"
                   value={form.message}
                   onChange={(e) => setForm({ ...form, message: e.target.value })}
                   className="resize-none"
+                  maxLength={4000}
                 />
               </div>
 

@@ -1,6 +1,6 @@
 import { TUNISIAN_AIRPORTS, TUNISIAN_AIRPORT_CODES } from '@smart-airport/shared-core/constants/airports.js';
 
-export type FlightStatus = "scheduled" | "boarding" | "in_air" | "landed" | "delayed" | "cancelled";
+export type FlightStatus = "scheduled" | "boarding" | "in_air" | "landed" | "delayed" | "cancelled" | "taxiing";
 
 export interface Airport {
   code: string;

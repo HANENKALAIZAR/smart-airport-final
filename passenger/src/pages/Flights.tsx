@@ -36,6 +36,7 @@ const STATUS_OPTIONS: { value: FlightStatus | "all"; label: string }[] = [
   { value: "all", label: "All statuses" },
   { value: "scheduled", label: "On time" },
   { value: "boarding", label: "Boarding" },
+  { value: "taxiing", label: "Taxiing" },
   { value: "in_air", label: "Departed" },
   { value: "landed", label: "Landed" },
   { value: "delayed", label: "Delayed" },
@@ -44,6 +45,13 @@ const STATUS_OPTIONS: { value: FlightStatus | "all"; label: string }[] = [
 
 
 type TnCode = "TUN" | "MIR" | "NBE" | "DJE";
+
+const IATA_TO_ICAO: Record<string, string> = {
+  TUN: "DTTA",
+  MIR: "DTMB",
+  DJE: "DTTJ",
+  NBE: "DTNH",
+};
 
 import { useTranslation } from "react-i18next";
 
@@ -94,18 +102,36 @@ const Flights = () => {
     const q = query.trim().toLowerCase();
     const now = Date.now();
 
+    const icao = IATA_TO_ICAO[airportCode];
     let rows = allFlights.filter(f => {
-      if (direction === "departures" && f.from.code !== airportCode) return false;
-      if (direction === "arrivals" && f.to.code !== airportCode) return false;
+      if (direction === "departures" && f.from.code !== airportCode && f.from.code !== icao) return false;
+      if (direction === "arrivals" && f.to.code !== airportCode && f.to.code !== icao) return false;
       if (status !== "all" && f.status !== status) return false;
       if (date) {
         const ref = direction === "arrivals" ? f.scheduledArrival : f.scheduledDeparture;
         if (!isSameDay(new Date(ref), date)) return false;
       }
       if (q) {
-        const hay = [f.flightNumber, f.airline, f.from.code, f.from.city, f.to.code, f.to.city]
-          .join(" ").toLowerCase();
-        if (!hay.includes(q)) return false;
+        const cleanQuery = q.replace(/\s+/g, "").toLowerCase();
+        const numericPart = f.flightNumber.replace(/^[A-Za-z]+/, "").toLowerCase();
+        const iataVariant = f.airlineCode ? `${f.airlineCode}${numericPart}`.toLowerCase() : "";
+        const icaoVariant = f.airlineIcao ? `${f.airlineIcao}${numericPart}`.toLowerCase() : "";
+        
+        const hay = [
+          f.flightNumber.toLowerCase(),
+          f.canonicalFlightNumber.toLowerCase(),
+          cleanQuery.includes(numericPart) ? cleanQuery : "",
+          iataVariant,
+          icaoVariant,
+          numericPart,
+          f.airline.toLowerCase(),
+          f.from.code.toLowerCase(),
+          f.from.city.toLowerCase(),
+          f.to.code.toLowerCase(),
+          f.to.city.toLowerCase()
+        ].join(" ");
+        
+        if (!hay.includes(cleanQuery) && !hay.includes(q)) return false;
       }
       return true;
     });
@@ -209,9 +235,10 @@ const Flights = () => {
   const resetFilters = () => {
     setQuery(""); setStatus("all"); setDate(new Date()); setPage(1);
   };
+  const icao = IATA_TO_ICAO[airportCode];
   const liveCount = filtered.filter(f => f.status === "in_air" || f.status === "boarding").length;
-  const departuresCount = allFlights.filter(f => f.from.code === airportCode).length;
-  const arrivalsCount = allFlights.filter(f => f.to.code === airportCode).length;
+  const departuresCount = allFlights.filter(f => f.from.code === airportCode || f.from.code === icao).length;
+  const arrivalsCount = allFlights.filter(f => f.to.code === airportCode || f.to.code === icao).length;
 
 
   const SortIcon = ({ col }: { col: SortKey }) =>
@@ -446,7 +473,7 @@ const Flights = () => {
                     <TableRow>
                       <TableCell colSpan={10} className="py-16 text-center text-muted-foreground">
                         <Plane className="h-8 w-8 mx-auto mb-3 opacity-40" />
-                        {t("flights_no_results", "No flights match these filters.")}
+                        {t("flights_no_results", "No tracked flight found for this search. Some external flights may not yet be synchronized from the realtime provider.")}
                       </TableCell>
                     </TableRow>
                   ) : pageRows.map(f => <FlightRow key={f.id} flight={f} />)}
@@ -503,7 +530,7 @@ function FlightRow({ flight: f }: { flight: Flight }) {
 
   return (
     <TableRow className={cn("group transition-colors", isHighlight && "bg-primary/[0.04] hover:bg-primary/[0.08]")}>
-      <TableCell className="font-mono font-semibold tracking-tight">{f.flightNumber}</TableCell>
+      <TableCell className="font-mono font-semibold tracking-tight">{f.canonicalFlightNumber || f.flightNumber}</TableCell>
       <TableCell>
         <div className="flex items-center gap-2">
           <span className="inline-flex h-7 w-7 items-center justify-center rounded-md bg-secondary text-[10px] font-bold tracking-wider">{f.airlineCode}</span>

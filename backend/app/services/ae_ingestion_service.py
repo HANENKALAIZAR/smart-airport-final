@@ -106,9 +106,67 @@ _STATUS_ENC = {
     "in_air":    4,
     "landed":    5,
     "cancelled": 6,
+    "stale_unresolved": 7,
 }
 
 _PEAK_HOURS = {7, 8, 9, 17, 18, 19, 20}
+
+_STATUS_PROGRESS = {
+    "scheduled": 0,
+    "boarding": 1,
+    "taxiing": 2,
+    "in_air": 3,
+    "landed": 4,
+}
+
+def resolve_next_status(existing_status: Optional[str], incoming_status: str, is_telemetry_stale: bool = False) -> str:
+    """
+    Resolve next status using transition rules:
+    - Normal progress flow: scheduled (0) -> boarding (1) -> taxiing (2) -> in_air (3) -> landed (4)
+    - Reversions to earlier progress states are blocked (e.g. in_air cannot go back to taxiing or scheduled).
+    - Landed and cancelled are terminal: once landed or cancelled, they can never revert or change.
+    - Delayed can be entered from any non-terminal state, and transitioned out of to progress states.
+    - If telemetry is stale, we do not force in_air (if the incoming is in_air), and preserve the last valid status instead.
+    """
+    if not existing_status:
+        return incoming_status if incoming_status else "scheduled"
+
+    existing_status = existing_status.lower()
+    incoming_status = incoming_status.lower() if incoming_status else "scheduled"
+
+    # Terminal state guards
+    if existing_status == "landed":
+        return "landed"
+    if existing_status == "cancelled":
+        return "cancelled"
+
+    # Stale telemetry handling: if incoming is in_air but we determined telemetry is stale,
+    # we don't force 'in_air'. We preserve the existing state or fall back.
+    if incoming_status == "in_air" and is_telemetry_stale:
+        logger.warning(f"[AE Status Guard] Telemetry stale: blocking transition to in_air. Keeping existing status: '{existing_status}'")
+        return existing_status
+
+    # Progress rankings
+    prog_existing = _STATUS_PROGRESS.get(existing_status)
+    prog_incoming = _STATUS_PROGRESS.get(incoming_status)
+
+    if incoming_status == "cancelled":
+        return "cancelled"
+
+    if incoming_status == "delayed":
+        return "delayed"
+    
+    if existing_status == "delayed":
+        return incoming_status
+
+    # Check progress regression
+    if prog_existing is not None and prog_incoming is not None:
+        if prog_incoming < prog_existing:
+            logger.warning(f"[AE Status Guard] Blocked status regression: '{existing_status}' -> '{incoming_status}'")
+            return existing_status
+
+    return incoming_status
+
 
 
 def _encode_categorical(encoder_name: str, value: Optional[str]) -> int:
@@ -141,7 +199,17 @@ def _encode_categorical(encoder_name: str, value: Optional[str]) -> int:
 
 # ── Snapshot building ─────────────────────────────────────────────────────────
 
-def _build_snapshot(flight: dict, airport_iata: str, today: date) -> dict:
+def _build_snapshot(
+    flight: dict,
+    airport_iata: str,
+    today: date,
+    status: str,
+    departed_at: Optional[datetime],
+    airborne_at: Optional[datetime],
+    landed_at: Optional[datetime],
+    last_status_change: Optional[datetime],
+    last_position_update: Optional[datetime]
+) -> dict:
     live = flight.get("live") or {}
     return {
         "flight_number":  flight.get("flight_number", ""),
@@ -174,8 +242,15 @@ def _build_snapshot(flight: dict, airport_iata: str, today: date) -> dict:
         "arr_actual":     _parse_dt(flight.get("arr_actual")),
         "arr_delay_min":  _safe_int(flight.get("arr_delay")),
 
-        "status":         flight.get("status", "scheduled"),
+        "status":         status,
+        "raw_status":     flight.get("status"),
         "delay_minutes":  _safe_int(flight.get("delay_minutes")),
+
+        "departed_at":    departed_at,
+        "airborne_at":    airborne_at,
+        "landed_at":      landed_at,
+        "last_status_change": last_status_change,
+        "last_position_update": last_position_update,
 
         "aircraft_type":  flight.get("aircraft_type") or None,
         "aircraft_reg":   flight.get("aircraft_reg") or None,
@@ -187,6 +262,7 @@ def _build_snapshot(flight: dict, airport_iata: str, today: date) -> dict:
         "heading_deg":    _safe_float(live.get("direction")),
         "is_ground":      bool(live.get("is_ground")) if live.get("is_ground") is not None else None,
     }
+
 
 
 # ── Dataset row building ──────────────────────────────────────────────────────
@@ -236,6 +312,12 @@ def _build_dataset_row(snap: dict) -> dict:
         "is_delayed":      is_delayed,
         "delay_minutes":   delay,
         "final_status":    snap.get("status"),
+
+        "departed_at":     snap.get("departed_at"),
+        "airborne_at":     snap.get("airborne_at"),
+        "landed_at":       snap.get("landed_at"),
+        "last_status_change": snap.get("last_status_change"),
+        "last_position_update": snap.get("last_position_update"),
 
         "dep_hour":        dep_hour,
         "dep_day_of_week": dep_dow,
@@ -310,7 +392,91 @@ async def ingest_airport(airport_iata: str, direction: str, db: Session) -> Sync
                 continue
 
             try:
-                snap = _build_snapshot(flight, airport_iata, today)
+                # 1. Query existing snapshot to feed the state machine
+                existing_snap = (
+                    db.query(AEFlightSnapshot)
+                    .filter(
+                        AEFlightSnapshot.flight_number == fnum,
+                        AEFlightSnapshot.snapshot_date == today,
+                        AEFlightSnapshot.airport_iata == airport_iata,
+                        AEFlightSnapshot.direction == direction
+                    )
+                    .first()
+                )
+
+                existing_status = existing_snap.status if existing_snap else None
+                existing_departed_at = existing_snap.departed_at if existing_snap else None
+                existing_airborne_at = existing_snap.airborne_at if existing_snap else None
+                existing_landed_at = existing_snap.landed_at if existing_snap else None
+                existing_last_status_change = existing_snap.last_status_change if existing_snap else None
+                existing_last_position_update = existing_snap.last_position_update if existing_snap else None
+
+                # Determine if incoming flight has live telemetry update
+                incoming_has_gps = False
+                live_gps = flight.get("live") or {}
+                if live_gps.get("latitude") is not None and live_gps.get("longitude") is not None:
+                    incoming_has_gps = True
+
+                now_dt = datetime.now(timezone.utc)
+
+                # Resolve telemetry staleness (15 minute threshold)
+                is_telemetry_stale = False
+                if existing_last_position_update:
+                    elpu = existing_last_position_update
+                    if elpu.tzinfo is None:
+                        elpu = elpu.replace(tzinfo=timezone.utc)
+                    if (now_dt - elpu).total_seconds() > 900:  # 15 minutes
+                        is_telemetry_stale = True
+
+                # Secondary stale check if stuck in 'in_air' status without any GPS update
+                if existing_status == "in_air" and existing_last_status_change and not incoming_has_gps:
+                    elsc = existing_last_status_change
+                    if elsc.tzinfo is None:
+                        elsc = elsc.replace(tzinfo=timezone.utc)
+                    if (now_dt - elsc).total_seconds() > 900:
+                        is_telemetry_stale = True
+
+                # Resolve next status via state machine
+                raw_incoming_status = flight.get("status", "scheduled")
+                resolved_status = resolve_next_status(existing_status, raw_incoming_status, is_telemetry_stale)
+
+                # Maintain lifecycle timestamps
+                last_position_update = now_dt if incoming_has_gps else existing_last_position_update
+
+                if existing_status != resolved_status:
+                    last_status_change = now_dt
+                    logger.info(f"[AE Ingestion Status Change] Flight {fnum}: {existing_status} -> {resolved_status}")
+                else:
+                    last_status_change = existing_last_status_change or now_dt
+
+                # departed_at
+                departed_at = existing_departed_at
+                if resolved_status in ("taxiing", "in_air") and not departed_at:
+                    dep_actual_parsed = _parse_dt(flight.get("dep_actual"))
+                    departed_at = dep_actual_parsed or now_dt
+
+                # airborne_at
+                airborne_at = existing_airborne_at
+                if resolved_status == "in_air" and not airborne_at:
+                    airborne_at = now_dt
+
+                # landed_at
+                landed_at = existing_landed_at
+                if resolved_status == "landed" and not landed_at:
+                    arr_actual_parsed = _parse_dt(flight.get("arr_actual"))
+                    landed_at = arr_actual_parsed or now_dt
+
+                snap = _build_snapshot(
+                    flight=flight,
+                    airport_iata=airport_iata,
+                    today=today,
+                    status=resolved_status,
+                    departed_at=departed_at,
+                    airborne_at=airborne_at,
+                    landed_at=landed_at,
+                    last_status_change=last_status_change,
+                    last_position_update=last_position_update
+                )
 
                 # UPSERT snapshot (PostgreSQL ON CONFLICT DO UPDATE)
                 stmt = (
@@ -321,6 +487,7 @@ async def ingest_airport(airport_iata: str, direction: str, db: Session) -> Sync
                         set_={
                             "collected_at":     snap["collected_at"],
                             "status":           snap["status"],
+                            "raw_status":       snap["raw_status"],
                             "delay_minutes":    snap["delay_minutes"],
                             "dep_actual":       snap["dep_actual"],
                             "arr_actual":       snap["arr_actual"],
@@ -340,6 +507,12 @@ async def ingest_airport(airport_iata: str, direction: str, db: Session) -> Sync
                             "is_ground":        snap["is_ground"],
                             "aircraft_type":    snap["aircraft_type"],
                             "aircraft_reg":     snap["aircraft_reg"],
+                            # Lifecycle columns
+                            "departed_at":      snap["departed_at"],
+                            "airborne_at":      snap["airborne_at"],
+                            "landed_at":        snap["landed_at"],
+                            "last_status_change": snap["last_status_change"],
+                            "last_position_update": snap["last_position_update"],
                         },
                     )
                 )

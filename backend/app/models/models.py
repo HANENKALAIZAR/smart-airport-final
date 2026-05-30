@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     Column, Integer, String, DateTime, Enum, ForeignKey,
     DECIMAL, Text, JSON, TIMESTAMP, SmallInteger, Date, Boolean,
-    Index, Float
+    Index, Float, UniqueConstraint
 )
 from sqlalchemy.orm import relationship
 from app.database import Base
@@ -185,7 +185,7 @@ class Prediction(Base):
 class User(Base):
     __tablename__ = "users"
     __table_args__ = (
-        Index('ix_unique_super_admin', 'role', unique=True, postgresql_where=(Column('role') == 'super_admin')),
+        Index('ix_unique_super_admin', 'role', unique=True, postgresql_where=(Column('role') == 'super_admin'), sqlite_where=(Column('role') == 'super_admin')),
     )
 
     id                   = Column(Integer, primary_key=True, autoincrement=True)
@@ -217,6 +217,7 @@ class User(Base):
     emergency_contact_relationship = Column(String(30), nullable=True)  # Parent, Spouse, ...
     cin_number           = Column(String(50), nullable=True)
     cin_document_url     = Column(Text, nullable=True)
+    cin_document_back_url = Column(Text, nullable=True)
     passport_number      = Column(String(50), nullable=True)
     passport_document_url = Column(Text, nullable=True)
     passport_expiry_date = Column(Date, nullable=True)
@@ -328,7 +329,7 @@ class Message(Base):
     id           = Column(Integer, primary_key=True, autoincrement=True)
     # 'to_super' = admin → super admin | 'to_admin' = super admin → admin
     direction    = Column(Enum("to_super", "to_admin", name="msg_direction"), nullable=False)
-    from_user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    from_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     to_user_id   = Column(Integer, ForeignKey("users.id"), nullable=True)  # None = broadcast to super
     category     = Column(
         Enum("technical", "operational", "request", "general", name="msg_category"),
@@ -344,8 +345,24 @@ class Message(Base):
     created_at   = Column(TIMESTAMP, default=_now)
     updated_at   = Column(TIMESTAMP, default=_now, onupdate=_now)
 
+    # Soft deletion
+    deleted_by_sender = Column(Boolean, nullable=False, default=False)
+    deleted_by_recipient = Column(Boolean, nullable=False, default=False)
+
+    # Passenger feedback fields
+    passenger_name = Column(String(200), nullable=True)
+    passenger_email = Column(String(200), nullable=True)
+    airport_code = Column(String(10), nullable=True)
+    sender_type = Column(String(50), nullable=False, default="internal")
+
+    # Assignment fields
+    assigned_admin_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    assigned_admin_name = Column(String(200), nullable=True)
+    assigned_at = Column(TIMESTAMP, nullable=True)
+
     from_user  = relationship("User", foreign_keys=[from_user_id])
     to_user    = relationship("User", foreign_keys=[to_user_id])
+    assigned_admin = relationship("User", foreign_keys=[assigned_admin_id])
     replies    = relationship("MessageReply", back_populates="message", order_by="MessageReply.created_at")
 
     __table_args__ = (
@@ -467,4 +484,89 @@ class PassengerAlertLog(Base):
         Index("idx_pal_sub", "subscription_id"),
         Index("idx_pal_sent", "sent_at"),
     )
+
+
+# ── Passenger Helpdesk Ticket System ─────────────────────────
+
+class PassengerMessage(Base):
+    """Passenger helpdesk tickets submitted from the public contact portal."""
+    __tablename__ = "passenger_messages"
+
+    id                   = Column(Integer, primary_key=True, autoincrement=True)
+    reference_id         = Column(String(50), unique=True, nullable=False, index=True)
+    airport_iata         = Column(String(3), nullable=False, index=True)
+    sender_name          = Column(String(120), nullable=False)
+    sender_email         = Column(String(255), nullable=False)
+    subject              = Column(String(255), nullable=False)
+    message_body         = Column(Text, nullable=False)
+    source               = Column(String(50), nullable=False, default="passenger_portal")
+    priority             = Column(String(10), nullable=False, default="LOW")
+    category             = Column(String(30), nullable=False, default="general")
+    status               = Column(String(20), nullable=False, default="NEW")
+    is_read              = Column(Boolean, nullable=False, default=False)
+    
+    assigned_admin_id    = Column(Integer, ForeignKey("users.id"), nullable=True)
+    claimed_at           = Column(TIMESTAMP, nullable=True)
+    claim_expires_at     = Column(TIMESTAMP, nullable=True)
+    
+    draft_body           = Column(Text, nullable=True)
+    draft_last_saved_at  = Column(TIMESTAMP, nullable=True)
+    
+    first_response_at    = Column(TIMESTAMP, nullable=True)
+    response_time_minutes = Column(Integer, nullable=True)
+    
+    created_at           = Column(TIMESTAMP, default=_now)
+    updated_at           = Column(TIMESTAMP, default=_now, onupdate=_now)
+    replied_at           = Column(TIMESTAMP, nullable=True)
+    replied_by_admin_id  = Column(Integer, ForeignKey("users.id"), nullable=True)
+    resolved_at          = Column(TIMESTAMP, nullable=True)
+    resolved_by_admin_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    assigned_admin = relationship("User", foreign_keys=[assigned_admin_id])
+    replied_by_admin = relationship("User", foreign_keys=[replied_by_admin_id])
+    resolved_by_admin = relationship("User", foreign_keys=[resolved_by_admin_id])
+    replies = relationship("PassengerMessageThread", back_populates="message", order_by="PassengerMessageThread.created_at", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("idx_pm_airport_status_created", "airport_iata", "status", "created_at"),
+    )
+
+
+class PassengerMessageThread(Base):
+    """Chronological thread of message replies and internal coordination notes."""
+    __tablename__ = "passenger_message_threads"
+
+    id                = Column(Integer, primary_key=True, autoincrement=True)
+    message_id        = Column(Integer, ForeignKey("passenger_messages.id"), nullable=False, index=True)
+    sender_type       = Column(String(20), nullable=False) # passenger | admin | system | internal_note
+    sender_name       = Column(String(120), nullable=False)
+    sender_email      = Column(String(255), nullable=True)
+    admin_id          = Column(Integer, ForeignKey("users.id"), nullable=True)
+    body              = Column(Text, nullable=False)
+    email_status      = Column(String(50), nullable=True) # sent | failed | None
+    message_id_header = Column(String(255), nullable=True)
+    retry_count       = Column(Integer, default=0, nullable=False)
+    created_at        = Column(TIMESTAMP, default=_now)
+
+    message = relationship("PassengerMessage", back_populates="replies")
+    admin = relationship("User", foreign_keys=[admin_id])
+
+
+class PassengerMessageReadState(Base):
+    """Tracks which admins have read which passenger messages to support per-user read/unread indicators."""
+    __tablename__ = "passenger_message_read_states"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    message_id = Column(Integer, ForeignKey("passenger_messages.id", ondelete="CASCADE"), nullable=False, index=True)
+    admin_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    read_at = Column(TIMESTAMP, default=_now)
+
+    message = relationship("PassengerMessage")
+    admin = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("message_id", "admin_id", name="uq_msg_admin_read"),
+    )
+
+
 

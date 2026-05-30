@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, case
+from sqlalchemy import func, case, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
@@ -22,31 +22,41 @@ router = APIRouter(prefix="/api/dashboard", tags=["Dashboard"])
 @router.get("/overview", response_model=DashboardOverview)
 def get_overview(
     days: int = Query(30, description="Number of past days to include"),
+    airport_id: Optional[int] = Query(None, description="Filter by airport ID"),
     db: Session = Depends(get_db),
     _user: User = Depends(require_approved_admin),
 ):
     """Staff dashboard: overall flight statistics."""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    latest_flight = db.query(func.max(Flight.scheduled_departure)).scalar()
+    if latest_flight:
+        cutoff = latest_flight - timedelta(days=days)
+    else:
+        cutoff = datetime.utcnow() - timedelta(days=days)
 
-    total = db.query(func.count(Flight.id)).filter(Flight.scheduled_departure >= cutoff).scalar() or 0
+    query_filter = [Flight.scheduled_departure >= cutoff]
+    if airport_id:
+        query_filter.append(or_(Flight.origin_airport_id == airport_id, Flight.dest_airport_id == airport_id))
+
+    total = db.query(func.count(Flight.id)).filter(*query_filter).scalar() or 0
     on_time = db.query(func.count(Flight.id)).filter(
-        Flight.scheduled_departure >= cutoff, Flight.status == "on_time"
+        *query_filter, Flight.status == "on_time"
     ).scalar() or 0
     delayed = db.query(func.count(Flight.id)).filter(
-        Flight.scheduled_departure >= cutoff, Flight.status == "delayed"
+        *query_filter, Flight.status == "delayed"
     ).scalar() or 0
     cancelled = db.query(func.count(Flight.id)).filter(
-        Flight.scheduled_departure >= cutoff, Flight.status == "cancelled"
+        *query_filter, Flight.status == "cancelled"
     ).scalar() or 0
 
     avg_delay = db.query(func.avg(Flight.delay_minutes)).filter(
-        Flight.scheduled_departure >= cutoff, Flight.status == "delayed"
+        *query_filter, Flight.status == "delayed"
     ).scalar() or 0
 
     # Flights with high risk predictions
-    at_risk = db.query(func.count(Prediction.id)).filter(
-        Prediction.risk_score >= 60
-    ).scalar() or 0
+    at_risk_q = db.query(func.count(Prediction.id)).join(Flight).filter(Prediction.risk_score >= 60)
+    if airport_id:
+        at_risk_q = at_risk_q.filter(or_(Flight.origin_airport_id == airport_id, Flight.dest_airport_id == airport_id))
+    at_risk = at_risk_q.scalar() or 0
 
     delay_rate = (delayed / total * 100) if total > 0 else 0
 
@@ -84,15 +94,16 @@ def get_at_risk_flights(
 
 @router.get("/delay-causes", response_model=list[DelayCause])
 def get_delay_causes(
+    airport_id: Optional[int] = Query(None, description="Filter by airport ID"),
     db: Session = Depends(get_db),
     _user: User = Depends(require_approved_admin),
 ):
     """Analyze main causes of delays from flight features."""
-    delayed_features = (
-        db.query(FlightFeature)
-        .filter(FlightFeature.is_delayed == 1)
-        .all()
-    )
+    q = db.query(FlightFeature).join(Flight).filter(FlightFeature.is_delayed == 1)
+    if airport_id:
+        q = q.filter(or_(Flight.origin_airport_id == airport_id, Flight.dest_airport_id == airport_id))
+    
+    delayed_features = q.all()
 
     if not delayed_features:
         return []
@@ -137,18 +148,22 @@ def get_delay_causes(
 def get_delay_history(
     days: int = Query(90, description="Number of past days"),
     group_by: str = Query("week", description="Group by: day, week, month"),
+    airport_id: Optional[int] = Query(None, description="Filter by airport ID"),
     db: Session = Depends(get_db),
     _user: User = Depends(require_approved_admin),
 ):
     """Historical delay statistics grouped by time period."""
-    cutoff = datetime.utcnow() - timedelta(days=days)
+    latest_flight = db.query(func.max(Flight.scheduled_departure)).scalar()
+    if latest_flight:
+        cutoff = latest_flight - timedelta(days=days)
+    else:
+        cutoff = datetime.utcnow() - timedelta(days=days)
 
-    flights = (
-        db.query(Flight)
-        .filter(Flight.scheduled_departure >= cutoff)
-        .order_by(Flight.scheduled_departure)
-        .all()
-    )
+    q = db.query(Flight).filter(Flight.scheduled_departure >= cutoff)
+    if airport_id:
+        q = q.filter(or_(Flight.origin_airport_id == airport_id, Flight.dest_airport_id == airport_id))
+        
+    flights = q.order_by(Flight.scheduled_departure).all()
 
     # Group flights
     from collections import defaultdict
@@ -184,19 +199,25 @@ def get_delay_history(
 
 
 @router.get("/airlines-performance")
-def get_airlines_performance(db: Session = Depends(get_db)):
+def get_airlines_performance(
+    airport_id: Optional[int] = Query(None, description="Filter by airport ID"),
+    db: Session = Depends(get_db)
+):
     """Delay rate per airline."""
     airlines = db.query(Airline).all()
     results = []
 
     for al in airlines:
-        total = db.query(func.count(Flight.id)).filter(Flight.airline_id == al.id).scalar() or 0
-        delayed = db.query(func.count(Flight.id)).filter(
-            Flight.airline_id == al.id, Flight.status == "delayed"
-        ).scalar() or 0
-        avg_delay = db.query(func.avg(Flight.delay_minutes)).filter(
-            Flight.airline_id == al.id, Flight.status == "delayed"
-        ).scalar() or 0
+        q_filter = [Flight.airline_id == al.id]
+        if airport_id:
+            q_filter.append(or_(Flight.origin_airport_id == airport_id, Flight.dest_airport_id == airport_id))
+
+        total = db.query(func.count(Flight.id)).filter(*q_filter).scalar() or 0
+        if total == 0:
+            continue
+
+        delayed = db.query(func.count(Flight.id)).filter(*q_filter, Flight.status == "delayed").scalar() or 0
+        avg_delay = db.query(func.avg(Flight.delay_minutes)).filter(*q_filter, Flight.status == "delayed").scalar() or 0
 
         results.append({
             "airline_iata": al.iata_code,

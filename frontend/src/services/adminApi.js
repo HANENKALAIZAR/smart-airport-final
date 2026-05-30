@@ -251,9 +251,10 @@ export async function apiPatchSettings(payload) {
 }
 
 
-export async function apiReuploadIdDocument(cinDocumentUrl, passportDocumentUrl) {
+export async function apiReuploadIdDocument(cinDocumentUrl, cinDocumentBackUrl, passportDocumentUrl) {
   const body = {};
   if (cinDocumentUrl) body.cin_document_url = cinDocumentUrl;
+  if (cinDocumentBackUrl) body.cin_document_back_url = cinDocumentBackUrl;
   if (passportDocumentUrl) body.passport_document_url = passportDocumentUrl;
   return request('POST', '/users/me/id-document', body);
 }
@@ -288,6 +289,20 @@ export async function apiGetAiAlerts(airportIata, decision = 'all') {
   if (decision && decision !== 'all') params.set('decision', decision);
   const qs = params.toString();
   return request('GET', `/notifications/ai-alerts${qs ? `?${qs}` : ''}`);
+}
+
+/** AI Operational Suggestions — airport admin (their airport only) */
+export async function apiGetAiSuggestions() {
+  return request('GET', '/admin/ai-suggestions');
+}
+
+/** AI Operational Suggestions — super admin, optionally filtered by airport or priority */
+export async function apiGetAllAiSuggestions(airportIata = null, priority = null) {
+  const params = new URLSearchParams();
+  if (airportIata) params.set('airport_iata', airportIata);
+  if (priority) params.set('priority', priority);
+  const qs = params.toString();
+  return request('GET', `/admin/ai-suggestions/all${qs ? `?${qs}` : ''}`);
 }
 
 export async function apiResubmitIdProfile(payload) {
@@ -331,7 +346,11 @@ export async function apiUpdateMessageStatus(messageId, status) {
 }
 
 export async function apiGetMessageUnreadCount() {
-  return request('GET', '/messages/unread-count');
+  return request('GET', '/admin/messages/unread-count');
+}
+
+export async function apiMarkPassengerRead(messageId) {
+  return request('POST', `/admin/messages/${messageId}/read`, {});
 }
 
 export async function apiMarkMessagesInboxRead() {
@@ -342,27 +361,88 @@ export async function apiDeleteMessage(messageId) {
   return request('DELETE', `/messages/${messageId}`);
 }
 
+// ── Passenger Helpdesk Ticket Center ──────────────────────────────────────
+
+export async function apiListPassengerMessages(status = null) {
+  const params = new URLSearchParams();
+  if (status && status !== 'all') params.set('status_filter', status);
+  const qs = params.toString();
+  return request('GET', `/admin/messages${qs ? '?' + qs : ''}`);
+}
+
+export async function apiClaimPassengerMessage(messageId) {
+  return request('POST', `/admin/messages/${messageId}/claim`, {});
+}
+
+export async function apiHeartbeatPassengerMessage(messageId) {
+  return request('POST', `/admin/messages/${messageId}/heartbeat`, {});
+}
+
+export async function apiSavePassengerDraft(messageId, draft_body) {
+  return request('PATCH', `/admin/messages/${messageId}/draft`, { draft_body });
+}
+
+export async function apiReplyToPassengerMessage(messageId, body) {
+  return request('POST', `/admin/messages/${messageId}/reply`, { body });
+}
+
+export async function apiAddPassengerInternalNote(messageId, body) {
+  return request('POST', `/admin/messages/${messageId}/internal-note`, { body });
+}
+
+export async function apiRetryPassengerEmail(replyId) {
+  return request('POST', `/admin/messages/replies/${replyId}/retry-email`, {});
+}
+
+export async function apiResolvePassengerMessage(messageId) {
+  return request('POST', `/admin/messages/${messageId}/resolve`, {});
+}
+
+export async function apiSuperReleasePassengerClaim(messageId) {
+  return request('POST', `/admin/messages/${messageId}/release-claim`, {});
+}
+
+export async function apiSuperReassignPassengerMessage(messageId, newAdminId) {
+  return request('POST', `/admin/messages/${messageId}/reassign`, { new_admin_id: newAdminId });
+}
+
+export async function apiSuperReopenPassengerMessage(messageId) {
+  return request('POST', `/admin/messages/${messageId}/reopen`, {});
+}
+
+
 // ── Dashboard ─────────────────────────────────────────────────────────────
 
-export async function apiGetDashboardOverview() {
-  return request('GET', '/dashboard/overview');
+export async function apiGetDashboardOverview(params = {}) {
+  const q = new URLSearchParams(params).toString();
+  return request('GET', `/dashboard/overview${q ? '?' + q : ''}`);
 }
 
-export async function apiGetDelayCauses() {
-  return request('GET', '/dashboard/delay-causes');
+export async function apiGetDelayCauses(params = {}) {
+  const q = new URLSearchParams(params).toString();
+  return request('GET', `/dashboard/delay-causes${q ? '?' + q : ''}`);
 }
 
-export async function apiGetDelayHistory() {
-  return request('GET', '/dashboard/history');
+export async function apiGetAtRiskFlights(params = {}) {
+  const q = new URLSearchParams(params).toString();
+  return request('GET', `/dashboard/at-risk${q ? '?' + q : ''}`);
 }
 
-export async function apiGetAirlinesPerformance() {
-  return request('GET', '/dashboard/airlines-performance');
+export async function apiGetAdminAnalytics(params = {}) {
+  const q = new URLSearchParams(params).toString();
+  return request('GET', `/admin/analytics${q ? '?' + q : ''}`);
 }
 
-export async function apiGetAtRiskFlights() {
-  return request('GET', '/dashboard/at-risk');
+export async function apiGetDelayHistory(params = {}) {
+  const q = new URLSearchParams(params).toString();
+  return request('GET', `/dashboard/history${q ? '?' + q : ''}`);
 }
+
+export async function apiGetAirlinesPerformance(params = {}) {
+  const q = new URLSearchParams(params).toString();
+  return request('GET', `/dashboard/airlines-performance${q ? '?' + q : ''}`);
+}
+
 
 // ── Flights ───────────────────────────────────────────────────────────────
 

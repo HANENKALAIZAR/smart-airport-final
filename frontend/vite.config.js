@@ -13,6 +13,8 @@ export default defineConfig(({ mode }) => {
         // Resolve the shared-core package locally without npm symlink dependency
         '@smart-airport/shared-core': path.resolve(__dirname, '../shared-core'),
         '@': path.resolve(__dirname, './src'),
+        'react': path.resolve(__dirname, 'node_modules/react'),
+        'react-dom': path.resolve(__dirname, 'node_modules/react-dom'),
       },
     },
     server: {

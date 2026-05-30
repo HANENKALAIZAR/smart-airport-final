@@ -30,9 +30,7 @@ export default function Assistant() {
   const tSugg = i18n.getFixedT(suggLang);
 
   const SUGGESTIONS = [
-    { icon: Plane, label: tSugg("assistant.sugg_track") },
     { icon: Clock, label: tSugg("assistant.sugg_delay") },
-    { icon: Luggage, label: tSugg("assistant.sugg_baggage") },
     { icon: Scale, label: tSugg("assistant.sugg_rights") },
     { icon: Hotel, label: tSugg("assistant.sugg_hotels") },
     { icon: PlaneTakeoff, label: tSugg("assistant.sugg_alt") },
@@ -83,10 +81,19 @@ export default function Assistant() {
 
       if (parsed.flight) {
         const f = parsed.flight;
-        const statusStr = f.status ? ` — **${f.status.toUpperCase()}**` : "";
+        const flightNum = f.flightNumber || f.number || '';
+        const rawStatus = f.status || '';
+        const translatedStatus = rawStatus ? (t(`status_${rawStatus.toLowerCase()}`) || rawStatus.toUpperCase()) : "";
+        const statusStr = translatedStatus ? ` — **${translatedStatus.toUpperCase()}**` : "";
         const delayStr = f.delay && f.delay !== "0min" ? ` (${f.delay} ${t("common.delayed") || "delay"})` : "";
-        reply += `${t("common.flightNumber") || 'Flight'} **${f.number}** (${f.airline})${statusStr}${delayStr}\n`;
-        if (f.route) reply += `Route: ${f.route.from || f.route} → ${f.route.to || ''}\n`;
+        reply += `${t("common.flightNumber") || 'Flight'} **${flightNum}** (${f.airline})${statusStr}${delayStr}\n`;
+        if (f.route) {
+          if (typeof f.route === 'object' && f.route.from) {
+            reply += `Route: ${f.route.from} → ${f.route.to || ''}\n`;
+          } else {
+            reply += `Route: ${f.route}\n`;
+          }
+        }
         if (f.scheduledDeparture) reply += `${t("common.departure")}: ${f.scheduledDeparture}\n`;
         if (f.scheduledArrival) reply += `${t("common.arrival")}: ${f.scheduledArrival}\n`;
         if (f.gate) reply += `${t("common.gate")}: ${f.gate}\n`;
@@ -169,7 +176,7 @@ export default function Assistant() {
           {/* Header */}
           <div className="flex items-center gap-3 py-4 border-b border-border">
             <div className="relative h-10 w-10 rounded-xl bg-gradient-amber grid place-items-center shadow-amber shrink-0">
-              <Sparkles className="h-5 w-5 text-primary-foreground" />
+              <Bot className="h-5 w-5 text-primary-foreground" />
             </div>
             <div className="min-w-0 flex-1">
               <h1 className="font-display text-xl text-foreground leading-tight truncate">
@@ -204,7 +211,7 @@ export default function Assistant() {
             {messages.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center text-center gap-6">
                 <div className="h-16 w-16 rounded-2xl bg-gradient-amber grid place-items-center shadow-amber">
-                  <Sparkles className="h-7 w-7 text-primary-foreground" />
+                  <Bot className="h-7 w-7 text-primary-foreground" />
                 </div>
                 <div className="max-w-md">
                   <div className="text-xs uppercase tracking-[0.18em] text-primary mb-2">

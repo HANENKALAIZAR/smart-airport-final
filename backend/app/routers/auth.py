@@ -59,27 +59,27 @@ def assert_new_password_policy(password: str, *, must_differ_from: str | None = 
     if len(password) < 8:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="New password must be at least 8 characters",
+            detail="Your new password must be at least 8 characters long.",
         )
     if not re.search(r"[A-Z]", password):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="New password must contain at least one uppercase letter",
+            detail="Your new password must contain at least one uppercase letter (A-Z).",
         )
     if not re.search(r"\d", password):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="New password must contain at least one number",
+            detail="Your new password must contain at least one number (0-9).",
         )
     if not re.search(r"[!@#$%^&*]", password):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="New password must contain at least one special character (!@#$%^&*)",
+            detail="Your new password must contain at least one special character (e.g. !, @, #, $, %, ^, &, *).",
         )
     if must_differ_from is not None and password == must_differ_from:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="New password must be different from the current password",
+            detail="Your new password must be different from your current password.",
         )
 
 
@@ -102,13 +102,13 @@ def login(request: Request, credentials: LoginRequest, db: Session = Depends(get
         logger.warning(f"Failed login attempt for email: {credentials.email}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+            detail="The email address or password you entered is incorrect. Please verify your credentials and try again.",
         )
 
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is deactivated",
+            detail="Your administrator account has been deactivated. Please contact the system operations team for assistance.",
         )
 
     user.last_login = datetime.now(timezone.utc)
@@ -128,7 +128,11 @@ def login(request: Request, credentials: LoginRequest, db: Session = Depends(get
     profile_complete = bool(getattr(user, "profile_complete", 0))
 
     user_out = UserOut.model_validate(user)
-    user_out = user_out.model_copy(update={"is_approved": is_approved})
+    user_out = user_out.model_copy(update={
+        "is_approved": is_approved,
+        "onboarding_status": user.id_document_status,
+        "rejection_reasons": user.id_document_rejection_reason
+    })
 
     logger.info(f"Successful login: {user.email} (role={user.role})")
     return TokenOut(
@@ -147,7 +151,10 @@ def change_password(
     current_user: User = Depends(get_current_user),
 ):
     if current_user.role == "super_admin":
-        raise HTTPException(status_code=403, detail="Super admin profile cannot be modified")
+        raise HTTPException(
+            status_code=403,
+            detail="Super Administrator profile settings are protected and cannot be modified."
+        )
     """
     Change password for the currently authenticated user.
     Required on first login when must_change_password = 1.
@@ -158,7 +165,7 @@ def change_password(
     if not new_password:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="new_password is required",
+            detail="A new password is required. Please enter a strong password.",
         )
 
     must_set_initial = bool(current_user.must_change_password)
@@ -168,19 +175,19 @@ def change_password(
         if verify_password(new_password, current_user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="New password must be different from your current password",
+                detail="Your new password must be different from your current temporary password. Please choose a different strong password.",
             )
         assert_new_password_policy(new_password)
     else:
         if not current_password:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="current_password is required",
+                detail="Your account password has already been successfully secured. Please refresh the page or log in again to proceed to the next onboarding step.",
             )
         if not verify_password(current_password, current_user.password_hash):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Current password is incorrect",
+                detail="The current password you entered is incorrect. Please verify and try again.",
             )
         assert_new_password_policy(new_password, must_differ_from=current_password)
 
@@ -203,7 +210,11 @@ def get_me(
         or str(getattr(current_user, "id_document_status", None) or "") == "approved"
     )
     base = UserOut.model_validate(current_user)
-    return base.model_copy(update={"is_approved": is_approved})
+    return base.model_copy(update={
+        "is_approved": is_approved,
+        "onboarding_status": current_user.id_document_status,
+        "rejection_reasons": current_user.id_document_rejection_reason
+    })
 
 
 def _token_expiry_naive_utc(expires_at: datetime) -> datetime:
@@ -237,7 +248,7 @@ def forgot_password(
     if not personal_email:
         raise HTTPException(
             status_code=400,
-            detail="Your profile does not have a personal recovery email configured. Please contact your administrator.",
+            detail="This administrator profile does not have a personal recovery email configured. Please contact the system administrator to reset your password.",
         )
 
     db.query(PasswordResetToken).filter(
@@ -255,7 +266,7 @@ def forgot_password(
     db.add(rec)
     db.commit()
     base = (settings.FRONTEND_URL or "").rstrip("/")
-    reset_url = f"{base}/reset-password?token={raw_token}"
+    reset_url = f"{base}/admin/reset-password?token={raw_token}"
     first = user.full_name.split()[0] if user.full_name.strip() else "there"
     try:
         send_password_reset_email(personal_email, reset_url, first)
@@ -290,7 +301,7 @@ def reset_password(
     if body.new_password != body.confirm_password:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="New password and confirmation do not match.",
+            detail="The new password and confirmation password do not match. Please verify that both fields are identical.",
         )
 
     assert_new_password_policy(body.new_password)
@@ -309,12 +320,12 @@ def reset_password(
     if exp < datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="This link has expired or has already been used.",
+            detail="This password reset link has expired or has already been used. Please request a new password reset link.",
         )
 
     user = db.query(User).filter(User.id == rec.admin_id).first()
     if not user:
-        raise HTTPException(status_code=400, detail="Invalid reset token.")
+        raise HTTPException(status_code=400, detail="The password reset security token is invalid. Please request a new link.")
 
     user.password_hash = hash_password(body.new_password)
     user.must_change_password = 0

@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     BigInteger, Boolean, Column, Date, DateTime,
-    Float, Index, Integer, SmallInteger, String, Text, TIMESTAMP,
+    Float, Index, Integer, JSON, SmallInteger, String, Text, TIMESTAMP,
 )
 
 from app.database import Base
@@ -73,7 +73,15 @@ class AEFlightSnapshot(Base):
 
     # ── Status / Delay ────────────────────────────────────────────────────────
     status          = Column(String(20), nullable=False, default="scheduled", index=True)
+    raw_status      = Column(String(20), nullable=True)
     delay_minutes   = Column(Integer,    nullable=True)
+
+    # ── Lifecycle Timestamps ──────────────────────────────────────────────────
+    departed_at      = Column(TIMESTAMP(timezone=True), nullable=True)
+    airborne_at      = Column(TIMESTAMP(timezone=True), nullable=True)
+    landed_at        = Column(TIMESTAMP(timezone=True), nullable=True)
+    last_status_change = Column(TIMESTAMP(timezone=True), nullable=True)
+    last_position_update = Column(TIMESTAMP(timezone=True), nullable=True)
 
     # ── Aircraft ──────────────────────────────────────────────────────────────
     aircraft_type   = Column(String(30), nullable=True)
@@ -86,6 +94,16 @@ class AEFlightSnapshot(Base):
     speed_kmh       = Column(Float, nullable=True)
     heading_deg     = Column(Float, nullable=True)
     is_ground       = Column(Boolean, nullable=True)
+
+    # ── Provider Enrichment Metadata (added by FlightAware enrichment job) ────
+    # raw_flightaware_payload: full FA API response for debugging / audit
+    # last_verified_by: which provider last enriched this row ('flightaware')
+    # last_verified_at: timestamp of last enrichment
+    # provider_sources: structured dict recording each provider's contribution
+    raw_flightaware_payload = Column(JSON, nullable=True)                  # JSONB on PG
+    last_verified_by        = Column(String(30), nullable=True)            # 'flightaware'
+    last_verified_at        = Column(TIMESTAMP(timezone=True), nullable=True)
+    provider_sources        = Column(JSON, nullable=True)                  # JSONB on PG
 
     __table_args__ = (
         # Primary dedup key – one row per flight per day per Tunisian airport per direction
@@ -162,9 +180,17 @@ class AEFlightDataset(Base):
     # 'augmented_training'   — statistically generated training row (clearly NOT production data)
     data_source     = Column(String(30), nullable=False, default="aviation_edge", index=True)
 
+    # ── Lifecycle Timestamps ──────────────────────────────────────────────────
+    departed_at      = Column(TIMESTAMP(timezone=True), nullable=True)
+    airborne_at      = Column(TIMESTAMP(timezone=True), nullable=True)
+    landed_at        = Column(TIMESTAMP(timezone=True), nullable=True)
+    last_status_change = Column(TIMESTAMP(timezone=True), nullable=True)
+    last_position_update = Column(TIMESTAMP(timezone=True), nullable=True)
+
     # ── Metadata ─────────────────────────────────────────────────────────────
     created_at      = Column(TIMESTAMP, nullable=False, default=_now)
     updated_at      = Column(TIMESTAMP, nullable=False, default=_now, onupdate=_now)
+
 
     __table_args__ = (
         Index(

@@ -202,23 +202,6 @@ export default function CalendarPopup({ isOpen, onClose, selectedDate, onDateSel
                     </div>
                 )}
 
-                {/* Footer */}
-                <div className="admin-calendar__footer">
-                    <button
-                        className={`admin-btn ${view === 'monthly' ? 'admin-btn--primary' : 'admin-btn--outline'}`}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', border: view !== 'monthly' ? '1px solid #0A1F44' : undefined, color: view !== 'monthly' ? '#0A1F44' : undefined }}
-                        onClick={() => setView(view === 'monthly' ? 'calendar' : 'monthly')}
-                    >
-                        <BarChart3 size={16} /> {view === 'monthly' ? 'Back to Calendar' : 'Monthly Summary'}
-                    </button>
-                    <button
-                        className={`admin-btn ${view === 'yearly' ? 'admin-btn--primary' : 'admin-btn--outline'}`}
-                        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%', border: view !== 'yearly' ? '1px solid #0A1F44' : undefined, color: view !== 'yearly' ? '#0A1F44' : undefined }}
-                        onClick={() => setView(view === 'yearly' ? 'calendar' : 'yearly')}
-                    >
-                        <TrendingUp size={16} /> {view === 'yearly' ? 'Back to Calendar' : 'Yearly Summary'}
-                    </button>
-                </div>
             </div>
         </div>
     );

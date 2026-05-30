@@ -48,6 +48,7 @@ const en = {
     admin_nav_weather: 'Weather',
     admin_nav_map: 'Airport Map',
     admin_nav_settings: 'Settings',
+    profile: 'Profile',
     admin_logout: 'Logout',
 
     /* ── Explore (Passenger Home) ────────────────────────────── */
@@ -665,8 +666,8 @@ const en = {
     modal_explanation_text_3: 'Historical data for this route shows similar delay patterns under these conditions.',
 
     /* ── User Management (Super Admin) ──────────────────────── */
-    admin_users_nav: 'User Management',
-    admin_users_title: '👥 User Management',
+    admin_users_nav: 'Admin Users',
+    admin_users_title: '👥 Admin Users',
     admin_users_subtitle: 'Manage admin accounts and access permissions across all airports',
     admin_users_add: 'Add User',
     admin_users_total: 'Total Users',

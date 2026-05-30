@@ -205,6 +205,7 @@ class UserOut(BaseModel):
     emergency_contact_relationship: Optional[str] = None
     cin_number: Optional[str] = None
     cin_document_url: Optional[str] = None
+    cin_document_back_url: Optional[str] = None
     passport_number: Optional[str] = None
     passport_document_url: Optional[str] = None
     passport_expiry_date: Optional[date] = None
@@ -213,6 +214,8 @@ class UserOut(BaseModel):
     id_document_rejection_reason: Optional[str] = None
     rejected_fields: Optional[list[str]] = None
     correction_attempts: int = 0
+    onboarding_status: Optional[str] = None
+    rejection_reasons: Optional[str] = None
 
     @field_validator("id_document_status", "gender", "emergency_contact_relationship", mode="before")
     @classmethod
@@ -250,6 +253,7 @@ class ProfileCompleteRequest(BaseModel):
     emergency_contact_relationship: Literal["Parent", "Spouse", "Sibling", "Friend", "Other"]
     cin_number: str
     cin_document_url: str
+    cin_document_back_url: str
     passport_number: str
     passport_document_url: str
     passport_expiry_date: str  # YYYY-MM-DD
@@ -271,6 +275,7 @@ class PatchMySettingsRequest(BaseModel):
     ] = None
     cin_number: Optional[str] = None
     cin_document_url: Optional[str] = None
+    cin_document_back_url: Optional[str] = None
     passport_number: Optional[str] = None
     passport_document_url: Optional[str] = None
     passport_expiry_date: Optional[str] = None
@@ -285,6 +290,7 @@ class SuperAdminSelfProfilePatch(BaseModel):
     date_of_birth: Optional[str] = None  # YYYY-MM-DD
     cin_number: Optional[str] = None
     cin_document_url: Optional[str] = None
+    cin_document_back_url: Optional[str] = None
     passport_number: Optional[str] = None
     passport_document_url: Optional[str] = None
     passport_expiry_date: Optional[str] = None
@@ -308,6 +314,7 @@ class SuperAdminAdminProfilePatch(BaseModel):
     ] = None
     cin_number: Optional[str] = None
     cin_document_url: Optional[str] = None
+    cin_document_back_url: Optional[str] = None
     passport_number: Optional[str] = None
     passport_document_url: Optional[str] = None
     passport_expiry_date: Optional[str] = None
@@ -315,6 +322,7 @@ class SuperAdminAdminProfilePatch(BaseModel):
 
 class IdDocumentReuploadRequest(BaseModel):
     cin_document_url: Optional[str] = None
+    cin_document_back_url: Optional[str] = None
     passport_document_url: Optional[str] = None
 
 
@@ -335,6 +343,7 @@ class AdminReviewDetail(BaseModel):
     emergency_contact_relationship: Optional[str] = None
     cin_number: Optional[str] = None
     cin_document_url: Optional[str] = None
+    cin_document_back_url: Optional[str] = None
     passport_number: Optional[str] = None
     passport_document_url: Optional[str] = None
     passport_expiry_date: Optional[date] = None
@@ -426,11 +435,11 @@ class MessageReplyOut(BaseModel):
 class MessageOut(BaseModel):
     id: int
     direction: str
-    from_user_id: int
+    from_user_id: Optional[int] = None
     from_user_name: str
-    from_user_airport: Optional[str]
-    to_user_id: Optional[int]
-    to_user_name: Optional[str]
+    from_user_airport: Optional[str] = None
+    to_user_id: Optional[int] = None
+    to_user_name: Optional[str] = None
     category: str
     subject: str
     body: str
@@ -438,6 +447,15 @@ class MessageOut(BaseModel):
     is_read: bool
     created_at: datetime
     updated_at: datetime
+    passenger_name: Optional[str] = None
+    passenger_email: Optional[str] = None
+    airport_code: Optional[str] = None
+    sender_type: str = "internal"
+    assigned_admin_id: Optional[int] = None
+    assigned_admin_name: Optional[str] = None
+    assigned_at: Optional[datetime] = None
+    deleted_by_sender: bool = False
+    deleted_by_recipient: bool = False
     replies: list[MessageReplyOut] = []
 
     class Config:
@@ -449,6 +467,14 @@ class MessageCreate(BaseModel):
     category: str = "general"
     subject: str
     body: str
+
+
+class PublicFeedbackCreate(BaseModel):
+    name: str
+    email: str
+    airport: str
+    subject: str
+    message: str
 
 
 class MessageReplyCreate(BaseModel):

@@ -24,7 +24,7 @@ from app.models.ae_models import AEFlightSnapshot, AESyncLog
 logger = logging.getLogger(__name__)
 
 # ── Cache TTL: min minutes between AE API calls per airport/direction ─────────
-CACHE_TTL_MINUTES: int = 10
+CACHE_TTL_MINUTES: int = 2
 MONITORED_AIRPORTS = ["TUN", "MIR", "NBE", "DJE"]  # Supported Tunisian airports
 
 
@@ -71,7 +71,7 @@ def is_cache_fresh(airport_iata: str, direction: str, db: Session) -> bool:
         return False  # UTC date changed, cache is stale
     
     age = (now - last_sync).total_seconds() / 60
-    return age < CACHE_TTL_MINUTES
+    return 0 <= age < CACHE_TTL_MINUTES
 
 
 def _snapshot_to_api_dict(r: AEFlightSnapshot) -> dict:
@@ -87,16 +87,76 @@ def _snapshot_to_api_dict(r: AEFlightSnapshot) -> dict:
             "is_ground": r.is_ground,
         }
 
-    def _fmt(dt) -> Optional[str]:
+    from zoneinfo import ZoneInfo
+    
+    AIRPORT_TIMEZONES = {
+        "TUN": "Africa/Tunis",
+        "MIR": "Africa/Tunis",
+        "NBE": "Africa/Tunis",
+        "DJE": "Africa/Tunis",
+        "TOE": "Africa/Tunis",
+        "CDG": "Europe/Paris",
+        "ORY": "Europe/Paris",
+        "LHR": "Europe/London",
+        "FRA": "Europe/Berlin",
+        "FCO": "Europe/Rome",
+        "MXP": "Europe/Rome",
+        "MAD": "Europe/Madrid",
+        "BCN": "Europe/Madrid",
+        "IST": "Europe/Istanbul",
+        "SAW": "Europe/Istanbul",
+        "DOH": "Asia/Qatar",
+        "DXB": "Asia/Dubai",
+        "AMM": "Asia/Amman",
+        "CAI": "Africa/Cairo",
+        "JED": "Asia/Riyadh",
+        "CMN": "Africa/Casablanca",
+        "ALG": "Africa/Algiers",
+        "GVA": "Europe/Zurich",
+        "BRU": "Europe/Brussels",
+        "VIE": "Europe/Vienna",
+        "MUC": "Europe/Berlin",
+        "DUS": "Europe/Berlin",
+        "LYS": "Europe/Paris",
+        "NCE": "Europe/Paris",
+        "MRS": "Europe/Paris",
+        "MLA": "Europe/Malta",
+        "DSS": "Africa/Dakar",
+        "YUL": "America/Montreal",
+    }
+
+    def _fmt_tz(dt, iata: Optional[str]) -> Optional[str]:
         if dt is None:
             return None
-        return dt.strftime("%Y-%m-%dT%H:%M:%S.000")
+        tz_name = AIRPORT_TIMEZONES.get((iata or "").upper(), "UTC")
+        try:
+            if dt.tzinfo is not None:
+                localized = dt.astimezone(ZoneInfo(tz_name))
+            else:
+                localized = dt.replace(tzinfo=ZoneInfo(tz_name))
+            return localized.isoformat()
+        except Exception as e:
+            logger.error(f"Error localizing datetime {dt} for airport {iata}: {e}")
+            return dt.strftime("%Y-%m-%dT%H:%M:%S.000")
+
+    def _fmt_utc(dt) -> Optional[str]:
+        if dt is None:
+            return None
+        try:
+            if dt.tzinfo is not None:
+                localized = dt.astimezone(timezone.utc)
+            else:
+                localized = dt.replace(tzinfo=timezone.utc)
+            return localized.isoformat()
+        except Exception:
+            return dt.strftime("%Y-%m-%dT%H:%M:%S.000")
 
     return {
         "id":            r.flight_number,
         "flight_number": r.flight_number,
         "flight_date":   r.flight_date.isoformat() if r.flight_date else None,
         "status":        r.status,
+        "raw_status":    r.raw_status,
         "direction":     r.direction,
         "source":        "aviation_edge_db",
 
@@ -108,39 +168,74 @@ def _snapshot_to_api_dict(r: AEFlightSnapshot) -> dict:
         "dep_iata":      r.dep_iata or "",
         "dep_terminal":  r.dep_terminal,
         "dep_gate":      r.dep_gate,
-        "dep_scheduled": _fmt(r.dep_scheduled),
-        "dep_estimated": _fmt(r.dep_estimated),
-        "dep_actual":    _fmt(r.dep_actual),
+        "dep_scheduled": _fmt_tz(r.dep_scheduled, r.dep_iata),
+        "dep_estimated": _fmt_tz(r.dep_estimated, r.dep_iata),
+        "dep_actual":    _fmt_tz(r.dep_actual, r.dep_iata),
         "dep_delay":     str(r.dep_delay_min) if r.dep_delay_min is not None else None,
 
         "arr_airport":   r.arr_airport or "—",
         "arr_iata":      r.arr_iata or "",
         "arr_terminal":  r.arr_terminal,
         "arr_gate":      r.arr_gate,
-        "arr_scheduled": _fmt(r.arr_scheduled),
-        "arr_estimated": _fmt(r.arr_estimated),
-        "arr_actual":    _fmt(r.arr_actual),
+        "arr_scheduled": _fmt_tz(r.arr_scheduled, r.arr_iata),
+        "arr_estimated": _fmt_tz(r.arr_estimated, r.arr_iata),
+        "arr_actual":    _fmt_tz(r.arr_actual, r.arr_iata),
         "arr_delay":     str(r.arr_delay_min) if r.arr_delay_min is not None else None,
 
         "aircraft_type": r.aircraft_type or "",
         "aircraft_reg":  r.aircraft_reg or "",
         "delay_minutes": r.delay_minutes,
+        "departed_at":   _fmt_utc(r.departed_at),
+        "airborne_at":   _fmt_utc(r.airborne_at),
+        "landed_at":     _fmt_utc(r.landed_at),
+        "last_status_change": _fmt_utc(r.last_status_change),
+        "last_position_update": _fmt_utc(r.last_position_update),
         "live":          live,
+        # FlightAware enrichment metadata (null if not yet enriched)
+        "last_verified_by":  r.last_verified_by,
+        "last_verified_at":  _fmt_utc(r.last_verified_at),
+        "provider_sources":  r.provider_sources or {},
     }
 
 
-def get_cached_flights(airport_iata: str, db: Session) -> list[dict]:
-    """Return today's flight snapshots from DB as normalised dicts."""
-    today = datetime.now(timezone.utc).date()
+def get_cached_flights(airport_iata: str, db: Session, target_date: Optional[str] = None) -> list[dict]:
+    """Return flight snapshots from DB as normalised dicts for a specific date."""
+    if target_date:
+        try:
+            query_date = datetime.strptime(target_date, "%Y-%m-%d").date()
+        except ValueError:
+            query_date = datetime.now(timezone.utc).date()
+    else:
+        query_date = datetime.now(timezone.utc).date()
+        
     rows = (
         db.query(AEFlightSnapshot)
         .filter(
             AEFlightSnapshot.airport_iata == airport_iata,
-            AEFlightSnapshot.snapshot_date == today,
+            AEFlightSnapshot.snapshot_date == query_date,
         )
         .order_by(AEFlightSnapshot.dep_scheduled, AEFlightSnapshot.arr_scheduled)
         .all()
     )
+
+    # Intercept and auto-reconcile stale active flights on the fly
+    modified = False
+    from app.services.flight_reconciliation_service import reconcile_stale_flight_status
+    for r in rows:
+        try:
+            if reconcile_stale_flight_status(r, db):
+                modified = True
+        except Exception as e:
+            logger.error(f"[FlightCache] Error during on-the-fly reconciliation for {r.flight_number}: {e}")
+
+    if modified:
+        try:
+            db.commit()
+            logger.info(f"[FlightCache] Successfully committed on-the-fly reconciled stale flights for {query_date}")
+        except Exception as e:
+            logger.error(f"[FlightCache] Failed to commit reconciled flights: {e}")
+            db.rollback()
+
     return [_snapshot_to_api_dict(r) for r in rows]
 
 
@@ -149,15 +244,22 @@ async def get_flights_smart(
     direction: str,
     db: Session,
     force_refresh: bool = False,
+    target_date: Optional[str] = None,
 ) -> tuple[list[dict], bool, Optional[float]]:
     """
     Cache-aware flight fetcher. Returns (flights, was_api_called, cache_age_minutes).
 
     Logic:
+      0. target_date provided -> just query DB for that date (no API call)
       1. force_refresh=True  → skip cache, call API, store, return
       2. cache is fresh       → return DB data immediately (NO API call)
       3. cache is stale       → call API, store, return fresh
     """
+    if target_date:
+        # Cannot fetch historical/future flights from live AE API, rely purely on DB cache
+        flights = get_cached_flights(airport_iata, db, target_date)
+        return flights, False, None
+
     cache_age = get_cache_age_minutes(airport_iata, direction, db)
     fetched_from_api = False
     needs_refresh = force_refresh or not is_cache_fresh(airport_iata, direction, db)

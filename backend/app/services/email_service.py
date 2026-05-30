@@ -155,7 +155,7 @@ def send_welcome_email(
         return False
 
     base = (settings.FRONTEND_URL or "").rstrip("/")
-    login_url = f"{base}/login"
+    login_url = f"{base}/admin/login"
     personal_email = personal_email.strip()
     work_email = work_email.lower().strip()
 
@@ -329,5 +329,251 @@ def send_password_reset_email(
     except Exception as exc:
         logger.error(f"Password reset email failed: {exc}")
         return False
+
+
+def send_passenger_reply_email(
+    passenger_name: str,
+    passenger_email: str,
+    original_subject: str,
+    original_body: str,
+    reply_body: str,
+    admin_name: str,
+    airport_iata: str,
+    reference_id: str,
+    message_id_header: str = None,
+    in_reply_to_header: str = None,
+    references_header: str = None,
+) -> bool:
+    """
+    Sends a premium-styled HTML email reply to a passenger's feedback/inquiry.
+    Includes headers for email threading and disclaimers.
+    """
+    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        logger.warning(f"SMTP not configured — skipping passenger reply email to {passenger_email}.")
+        return False
+    
+    to_addr = (passenger_email or "").strip()
+    if not to_addr:
+        return False
+
+    airport_display = AIRPORT_DISPLAY.get(airport_iata, airport_iata)
+    subject = f"Re: {original_subject}"
+    
+    text = (
+        f"Hello {passenger_name},\n\n"
+        f"Thank you for contacting {airport_display} Airport. Our team has reviewed your inquiry:\n\n"
+        f"\" {original_body} \"\n\n"
+        f"--- Reply from {admin_name} ({airport_display}): ---\n"
+        f"{reply_body}\n\n"
+        f"Best regards,\n"
+        f"Smart Airport Operations Network\n\n"
+        f"--------------------------------------------------\n"
+        f"This message was sent from the Smart Airport Operations Support Desk.\n"
+        f"Please do not reply directly to this email.\n"
+        f"Email replies are currently not monitored by the airport operations team.\n\n"
+        f"Please do not share sensitive payment or identity information by email.\n\n"
+        f"For additional assistance or follow-up requests, please submit a new message\n"
+        f"through the official contact portal and include your reference ID.\n\n"
+        f"Reference ID: {reference_id}\n"
+        f"--------------------------------------------------"
+    )
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8" />
+      <style>
+        body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #F8FAFC; margin: 0; padding: 20px; color: #1E293B; }}
+        .card {{ background: #ffffff; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); max-width: 600px; margin: 0 auto; overflow: hidden; border: 1px solid #E2E8F0; }}
+        .header {{ background: linear-gradient(135deg, #1e3a5f, #1E90FF); color: #ffffff; padding: 24px 32px; text-align: center; }}
+        .header h1 {{ margin: 0; font-size: 20px; font-weight: 700; }}
+        .header p {{ margin: 4px 0 0; font-size: 13px; color: rgba(255,255,255,0.85); }}
+        .content {{ padding: 32px; }}
+        .greeting {{ font-size: 16px; font-weight: 600; margin-bottom: 16px; }}
+        .reply-box {{ background: #F1F5F9; border-left: 4px solid #1E90FF; border-radius: 8px; padding: 18px; margin: 24px 0; font-size: 15px; line-height: 1.6; color: #0F172A; white-space: pre-line; }}
+        .original-quote {{ font-style: italic; color: #64748B; padding-left: 12px; border-left: 2px solid #CBD5E1; margin: 16px 0; font-size: 13px; }}
+        .disclaimer-box {{ background: #FFFBEB; border: 1px solid #FCD34D; border-radius: 8px; padding: 12px 16px; margin: 24px 0; font-size: 12px; color: #B45309; line-height: 1.5; }}
+        .footer {{ background: #F8FAFC; border-top: 1px solid #E2E8F0; padding: 20px 32px; text-align: center; font-size: 11px; color: #94A3B8; line-height: 1.6; }}
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <div class="header">
+          <h1>Smart Airport Operations</h1>
+          <p>{airport_display} Airport Office</p>
+        </div>
+        <div class="content">
+          <div class="greeting">Hello {passenger_name},</div>
+          <p>Thank you for contacting our customer assistance desk. A representative from our operations team has responded to your feedback:</p>
+          
+          <div class="reply-box">
+            <strong>Response from {admin_name}:</strong><br/>
+            {reply_body}
+          </div>
+
+          <div class="disclaimer-box">
+            <strong>⚠️ Security & Response Warning:</strong><br/>
+            This message was sent from the airport operations support desk. Please do not share sensitive payment or identity information by email.
+          </div>
+
+          <p style="font-size: 13px; color: #64748B; font-weight: 600; margin-top: 32px; margin-bottom: 4px;">Original Inquiry Details:</p>
+          <div class="original-quote">
+            <strong>Subject:</strong> {original_subject}<br/>
+            "{original_body}"
+          </div>
+
+          <p style="margin-top: 24px; font-size: 14px;">If you have any further questions, please submit a new request through the contact portal.</p>
+        </div>
+        <div class="footer">
+          <strong>Smart Airport Operations Support Desk</strong><br/>
+          ⚠️ Please do not reply directly to this email. Email replies are currently not monitored.<br/>
+          For additional assistance, please submit a new ticket quoting <strong>Reference ID: {reference_id}</strong>.<br/>
+          Sent automatically by Smart Airport Operations Network &middot; {airport_display}<br/>
+          &copy; {datetime.utcnow().year} Smart Airport. All rights reserved.
+        </div>
+      </div>
+    </body>
+    </html>
+    """
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"Smart Airport Ops <{settings.SMTP_USER}>"
+    msg["To"] = to_addr
+    
+    if message_id_header:
+        msg["Message-ID"] = message_id_header
+    if in_reply_to_header:
+        msg["In-Reply-To"] = in_reply_to_header
+    if references_header:
+        msg["References"] = references_header
+
+    msg.attach(MIMEText(text, "plain"))
+    msg.attach(MIMEText(html, "html"))
+    
+    try:
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.sendmail(settings.SMTP_USER, [to_addr], msg.as_string())
+        logger.info(f"Passenger reply email sent successfully to {to_addr}")
+        return True
+    except Exception as exc:
+        logger.error(f"Failed to send passenger reply email to {to_addr}: {exc}")
+        return False
+
+
+def send_passenger_confirmation_email(
+    passenger_name: str,
+    passenger_email: str,
+    airport_iata: str,
+    subject: str,
+    message_body: str,
+    reference_id: str,
+    message_id_header: str = None,
+) -> bool:
+    """
+    Sends an automated HTML acknowledgment email confirming a new contact ticket request was received.
+    """
+    if not settings.SMTP_USER or not settings.SMTP_PASSWORD:
+        logger.warning(f"SMTP not configured — skipping passenger confirmation email.")
+        return False
+    
+    to_addr = (passenger_email or "").strip()
+    if not to_addr:
+        return False
+
+    airport_display = AIRPORT_DISPLAY.get(airport_iata, airport_iata)
+    email_subject = f"Received: Contact Inquiry [{reference_id}]"
+    
+    text = (
+        f"Hello {passenger_name},\n\n"
+        f"We have received your message and forwarded it to the {airport_display} Airport operations team.\n\n"
+        f"Our support desk representatives will review your request shortly.\n\n"
+        f"--- Ticket Details ---\n"
+        f"Reference ID: {reference_id}\n"
+        f"Airport: {airport_display} ({airport_iata})\n"
+        f"Subject: {subject}\n\n"
+        f"--------------------------------------------------\n"
+        f"⚠️ Please do not reply directly to this email.\n"
+        f"Replies are not monitored. To submit additional comments, open a new ticket.\n"
+        f"--------------------------------------------------"
+    )
+    
+    html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="UTF-8" />
+      <style>
+        body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #F8FAFC; margin: 0; padding: 20px; color: #1E293B; }}
+        .card {{ background: #ffffff; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); max-width: 600px; margin: 0 auto; overflow: hidden; border: 1px solid #E2E8F0; }}
+        .header {{ background: linear-gradient(135deg, #1e3a5f, #1E90FF); color: #ffffff; padding: 24px 32px; text-align: center; }}
+        .header h1 {{ margin: 0; font-size: 20px; font-weight: 700; }}
+        .header p {{ margin: 4px 0 0; font-size: 13px; color: rgba(255,255,255,0.85); }}
+        .content {{ padding: 32px; }}
+        .greeting {{ font-size: 16px; font-weight: 600; margin-bottom: 16px; }}
+        .ticket-details {{ background: #F1F5F9; border-radius: 8px; padding: 18px; margin: 24px 0; font-size: 14px; line-height: 1.6; color: #0F172A; }}
+        .footer {{ background: #F8FAFC; border-top: 1px solid #E2E8F0; padding: 20px 32px; text-align: center; font-size: 11px; color: #94A3B8; line-height: 1.6; }}
+      </style>
+    </head>
+    <body>
+      <div class="card">
+        <div class="header">
+          <h1>Smart Airport Support</h1>
+          <p>Ticket Received &middot; {airport_display}</p>
+        </div>
+        <div class="content">
+          <div class="greeting">Hello {passenger_name},</div>
+          <p>We have successfully received your inquiry and routed it to the {airport_display} operations helpdesk.</p>
+          <p>Our team reviews and processes requests in order of priority. No further action is required from you at this time.</p>
+          
+          <div class="ticket-details">
+            <strong>🎫 Ticket Information:</strong><br/>
+            Reference ID: <strong>{reference_id}</strong><br/>
+            Airport: {airport_display} ({airport_iata})<br/>
+            Subject: {subject}<br/>
+            Message Preview: <em>{message_body[:100] + ("..." if len(message_body) > 100 else "")}</em>
+          </div>
+
+          <p style="font-size: 13px; color: #64748B;">For safety reasons, please do not reply directly to this message. We look forward to assisting you.</p>
+        </div>
+        <div class="footer">
+          <strong>Smart Airport Operations Support Desk</strong><br/>
+          ⚠️ Please do not reply directly to this email. Email replies are currently not monitored.<br/>
+          To provide additional information, please submit a new inquiry quoting Reference ID.<br/>
+          Sent automatically by Smart Airport Operations Network &middot; {airport_display}<br/>
+          &copy; {datetime.utcnow().year} Smart Airport. All rights reserved.
+        </div>
+      </div>
+    </body>
+    </html>
+    """
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = email_subject
+    msg["From"] = f"Smart Airport Support <{settings.SMTP_USER}>"
+    msg["To"] = to_addr
+    
+    if message_id_header:
+        msg["Message-ID"] = message_id_header
+
+    msg.attach(MIMEText(text, "plain"))
+    msg.attach(MIMEText(html, "html"))
+    
+    try:
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.sendmail(settings.SMTP_USER, [to_addr], msg.as_string())
+        logger.info(f"Passenger confirmation email sent successfully to {to_addr}")
+        return True
+    except Exception as exc:
+        logger.error(f"Failed to send passenger confirmation email: {exc}")
+        return False
+
 
 

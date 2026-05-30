@@ -51,24 +51,164 @@ function extractAirportFromMessage(message) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// LOCALIZATION, AIRLINES, AND ELIGIBILITY HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+const AIRLINE_MAP = {
+  'TU': 'Tunisair',
+  'BJ': 'Nouvelair',
+  'RJ': 'Royal Jordanian',
+  'AF': 'Air France',
+  'MS': 'EgyptAir',
+  'AZ': 'ITA Airways',
+  'LH': 'Lufthansa',
+  'EK': 'Emirates',
+  'QR': 'Qatar Airways',
+  'TK': 'Turkish Airlines'
+};
+
+function getAirlineName(flightNumber, existingName) {
+  if (existingName && existingName !== 'Unknown Airline') return existingName;
+  if (!flightNumber) return 'the airline';
+  const prefix = flightNumber.substring(0, 2).toUpperCase();
+  return AIRLINE_MAP[prefix] || 'the airline';
+}
+
+function detectLanguage(message, fallbackLang = 'fr') {
+  const msg = (message || '').trim().toLowerCase();
+  
+  if (/[\u0600-\u06FF]/.test(msg)) {
+    return 'ar';
+  }
+  
+  const frMarkers = /\b(bonjour|salut|vol|vols|retard|retards|retardé|retardée|annulé|annulée|annulés|remboursement|rembourser|droits|droit|passager|passagers|compagnie|compagnies|agent|alternative|alternatifs|alternatives|gratuit|gratuits|gratuité|option|options|voir|contacter|demander|est|sont|avec|pour|votre|vos|notre|nos|mon|mes|je|tu|il|elle|nous|vous|ils|elles|mon_vol|retard_de|retardé_de|hôtel|hôtels|aéroport|aéroports|près|proche|proximité|donner|moi|parle|parler|français|anglais|pas|non|quel|quelle|où|montrer|liste)\b/i;
+  const enMarkers = /\b(hello|hi|flight|flights|delay|delays|delayed|cancel|canceled|cancelled|refund|rights|right|passenger|passengers|airline|airlines|agent|alternative|alternatives|free|option|options|view|contact|ask|is|are|with|for|your|our|my|i|you|he|she|we|they|my_flight|delay_of|delayed_by|hotel|hotels|airport|airports|near|nearby|give|me|speak|english|french|dont|don't|not|no|which|where|what|how|show|list)\b/i;
+
+  if (frMarkers.test(msg) && !enMarkers.test(msg)) {
+    return 'fr';
+  }
+  if (enMarkers.test(msg) && !frMarkers.test(msg)) {
+    return 'en';
+  }
+
+  const frCount = (msg.match(new RegExp(frMarkers, 'gi')) || []).length;
+  const enCount = (msg.match(new RegExp(enMarkers, 'gi')) || []).length;
+
+  if (frCount > enCount) return 'fr';
+  if (enCount > frCount) return 'en';
+
+  return fallbackLang;
+}
+
+function getAlternativeFlightsEligibility(status, delayMinutes, delayMinutesKnown) {
+  if (status === 'cancelled') {
+    return 'eligible';
+  }
+  if (delayMinutesKnown) {
+    if (delayMinutes >= 180) {
+      return 'eligible';
+    } else {
+      return 'not_eligible';
+    }
+  }
+  return 'unknown';
+}
+
+function generateAlternativeFlightsResponse(flightNumber, airlineName, delayMinutes, delayMinutesKnown, status, lang) {
+  const eligibility = getAlternativeFlightsEligibility(status, delayMinutes, delayMinutesKnown);
+  let message = '';
+  let actions = [];
+  
+  if (lang === 'fr') {
+    actions = ["Voir les vols alternatifs", "Demander à un agent"];
+    if (eligibility === 'not_eligible') {
+      message = `Votre vol ${flightNumber} affiche actuellement un retard de ${delayMinutes} minutes. Avec ce retard, vous n’êtes pas éligible à un vol alternatif gratuit. Vous pouvez toutefois contacter ${airlineName} pour connaître les options disponibles.`;
+    } else if (eligibility === 'unknown') {
+      message = `Nous ne pouvons pas encore confirmer votre éligibilité à un vol alternatif gratuit car le retard ou le statut de votre vol n'est pas encore confirmé. Veuillez vérifier plus tard ou contacter votre compagnie aérienne.`;
+    } else {
+      message = `Votre vol ${flightNumber} est éligible pour un vol alternatif gratuit en raison de son statut (retard important ou annulation). Voici les options de vols alternatifs disponibles pour vous.`;
+    }
+  } else if (lang === 'ar') {
+    actions = ["عرض الرحلات البديلة", "الاستفسار من وكيل"];
+    if (eligibility === 'not_eligible') {
+      message = `رحلتك ${flightNumber} متأخرة حالياً لمدة ${delayMinutes} دقيقة. مع هذا التأخير، أنت غير مؤهل للحصول على رحلة بديلة مجانية. ومع ذلك، يمكنك الاتصال بـ ${airlineName} لمعرفة الخيارات المتاحة.`;
+    } else if (eligibility === 'unknown') {
+      message = `لا يمكننا تأكيد أهليتك للحصول على رحلة بديلة مجانية بعد لأن تأخير رحلتك أو حالتها غير مؤكدة بعد. يرجى التحقق لاحقًا أو الاتصال بشركة الطيران الخاصة بك.`;
+    } else {
+      message = `رحلتك ${flightNumber} مؤهلة للحصول على رحلة بديلة مجانية بسبب حالتها (تأخير كبير أو إلغاء). إليك الرحلات البديلة المتاحة لك.`;
+    }
+  } else {
+    actions = ["View alternative flights", "Ask an agent"];
+    if (eligibility === 'not_eligible') {
+      message = `Your flight ${flightNumber} currently shows a ${delayMinutes}-minute delay. With this delay, you are not eligible for a free alternative flight. You can still contact ${airlineName} to check the available options.`;
+    } else if (eligibility === 'unknown') {
+      message = `We cannot confirm your eligibility for a free alternative flight yet because your flight's delay or status is not confirmed. Please check again later or contact your airline.`;
+    } else {
+      message = `Your flight ${flightNumber} is eligible for a free alternative flight due to its status (significant delay or cancellation). Here are the available alternative flights for you.`;
+    }
+  }
+  
+  return { message, actions };
+}
+
+function localizeActions(actions, lang) {
+  if (!actions || !Array.isArray(actions)) return [];
+  
+  const map = {
+    fr: {
+      'Airport Services': 'Services aéroportuaires',
+      'Passenger Rights': 'Droits des passagers',
+      'Alternative Flights': 'Vols alternatifs',
+      'Vérifier les écrans d\'affichage': null,
+      'Check display screens': null,
+    },
+    en: {
+      'Airport Services': 'Airport Services',
+      'Passenger Rights': 'Passenger Rights',
+      'Alternative Flights': 'Alternative Flights',
+      'Vérifier les écrans d\'affichage': null,
+      'Check display screens': null,
+    },
+    ar: {
+      'Airport Services': 'خدمات المطار',
+      'Passenger Rights': 'حقوق المسافرين',
+      'Alternative Flights': 'رحلات بديلة',
+      'Vérifier les écrans d\'affichage': null,
+      'Check display screens': null,
+    }
+  };
+  
+  const langMap = map[lang] || map['en'];
+  
+  return actions
+    .map(act => {
+      if (langMap[act] !== undefined) return langMap[act];
+      if (/écran/i.test(act) || /affichage/i.test(act) || /screen/i.test(act) || /rebook/i.test(act)) return null;
+      return act;
+    })
+    .filter(Boolean);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SYSTEM PROMPT
 // ─────────────────────────────────────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are a professional airport assistant AI deployed at Tunisian airports (TUN, DJE, MIR, NBE). Help passengers with flight disruptions, rights, and airport services. Be brief, empathetic, and direct.
+const SYSTEM_PROMPT = `You are a professional airport assistant AI deployed at Tunisian airports (TUN, DJE, MIR, NBE). Help passengers with flight status, rights checking, airport services, alternative flights searching, and nearby hotels. Be extremely brief, concise, and direct.
 
 ═══════════════════════════════════════
 CORE RULES
 ═══════════════════════════════════════
 - NEVER introduce yourself or say your name
 - NEVER say "I'm here to help", "I'm happy to help", or any filler phrase
-- Keep replies SHORT — max 2 sentences for general replies
+- Keep all replies EXTREMELY SHORT — maximum 1 concise and direct sentence.
 - NEVER invent flights, times, prices, or compensation amounts
-- If 'Rebooking' is listed in the rights data, explicitly mention: "Based on this delay/cancellation, you may be eligible for rerouting or an alternative flight at no extra cost."
-- NEVER claim they have free rerouting or compensation unless the rights data explicitly includes it.
+- If 'Alternative flights' or 'Vols alternatifs' is listed in the rights data, explicitly mention: "Based on this delay/cancellation, you may be eligible for an alternative flight at no extra cost."
+- NEVER claim they have free alternative flights or compensation unless the rights data explicitly includes it.
+- NEVER suggest, mention, or link to actions like "Booking", "Requesting Meal Voucher", "Submitting Compensation Request", "Visit Airport Information Desk", or "Contact Airline". The assistant does not support booking, requests, desk visits, or contacting.
+- For off-topic or unsupported topics (like bookings, requests, or visits), reply with exactly one short sentence redirecting to the whitelisted topics or human agents, and NEVER generate actions/buttons for them.
 - If data is unavailable, say so honestly and tell the passenger where to verify
 - If hotel data_source is 'static_offline_fallback', explicitly state that live data is unavailable and you are showing saved/offline recommendations.
 - ALWAYS reply in the EXACT language the passenger used
 - For Arabic: mirror the passenger's style (Darija or MSA) exactly
-- Off-topic questions: one sentence redirect only
 - ALWAYS return valid JSON only — no markdown, no plain text, no code fences
 
 ═══════════════════════════════════════
@@ -85,6 +225,7 @@ LANGUAGE
 - Reply in the same language and register as the passenger
 - Mixed-language message: use the dominant language
 - Never switch Arabic script/dialect from what the passenger used
+- For French: Use natural and elegant phrasing. Avoid literal repetitions or direct translation cliches like "prévu comme prévu" (use "est actuellement à l'heure", "est programmé comme prévu", or "est à l'heure" instead).
 
 ═══════════════════════════════════════
 STRICT JSON RULES
@@ -108,7 +249,7 @@ function detectIntents(message) {
   const padMsg = ` ${message.toLowerCase().replace(/[.,!?:'"()\[\]{}]/g, ' ')} `;
   const intents = new Set();
 
-  if (padMsg.match(/ (alternative|other flight|another flight|rebook|autre vol|vol alternatif|rebooker|طيران بديل|رحلة أخرى|vol de remplacement) /))
+  if (padMsg.match(/ (alternative[s]?|other flight[s]?|another flight|rebook|autre[s]? vol[s]?|vol[s]? alternatif[s]?|rebooker|طيران بديل|رحلة أخرى|vol de remplacement) /))
     intents.add('alternative_flights');
 
   if (padMsg.match(/ (right|rights|compensation|refund|indemnisation|remboursement|droit|droits|حق|حقوق|تعويض|استرداد) /))
@@ -119,6 +260,9 @@ function detectIntents(message) {
 
   if (padMsg.match(/ (service|services|lounge|food|restaurant|wifi|shop|boutique|nourriture|salon|مطعم|خدمة|صالة|eat|manger) /))
     intents.add('airport_services');
+
+  if (padMsg.match(/ (subscribe|subscription|abonner|abonnement|alerte|alertes|alert|alerts|اشترك|تنبيهات|تنبيه) /))
+    intents.add('flight_alerts_subscribe');
 
   if (padMsg.match(/[a-z]{2,3}\s?\d{1,4}/i) ||
     padMsg.match(/ (flight|flights|vol|vols|delay|retard|status|statut|track|تأخير|وضع|delayed|cancelled|annulé|رحلة|رحلات) /))
@@ -133,6 +277,11 @@ function extractFlightNumber(message) {
   const match = message.match(/\b([A-Z]{2,3})\s?(\d{1,4})\b/i);
   if (!match) return null;
   return (match[1] + match[2]).toUpperCase();
+}
+
+function extractEmailFromMessage(message) {
+  const match = message.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
+  return match ? match[0].toLowerCase() : null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -161,7 +310,16 @@ const tools = {
       session.airline = data.airline.name;
       session.origin = data.departure.iata;
       session.destination = data.arrival.iata;
-      session.delayMinutes = data.departure.delay || 0;
+      if (typeof data.departure.delay === 'number') {
+        session.delayMinutes = data.departure.delay;
+        session.delayMinutesKnown = true;
+      } else if (data.status === 'scheduled') {
+        session.delayMinutes = 0;
+        session.delayMinutesKnown = true;
+      } else {
+        session.delayMinutes = null;
+        session.delayMinutesKnown = false;
+      }
       session.status = data.status;
       session.route_type = data.route_type;
       if (!session.selectedAirport) session.selectedAirport = data.departure.iata;
@@ -181,42 +339,125 @@ const tools = {
     };
   },
 
-  async getPassengerRights(delayMinutes, routeType = 'tunisia_to_eu', status = 'delayed') {
-    console.log(`🔧 [TOOL] getPassengerRights: ${delayMinutes}min, ${routeType}, ${status}`);
+  async getPassengerRights(delayMinutes, routeType = 'tunisia_to_eu', status = 'delayed', lang = 'en') {
+    console.log(`🔧 [TOOL] getPassengerRights: ${delayMinutes}min, ${routeType}, ${status}, lang: ${lang}`);
     const { getPassengerRights: getRights } = require('./rights');
     const data = getRights(routeType, delayMinutes, status);
     const rights = [];
 
-    if (data.compensation?.length > 0 && data.compensation[0].amount) {
-      const c = data.compensation[0];
-      rights.push({ title: 'Compensation', detail: `${c.amount} — ${c.example || c.distance}` });
+    if (data.compensation?.length > 0) {
+      data.compensation.forEach(c => {
+        if (c.amount) {
+          let title = lang === 'fr' ? 'Indemnisation' : lang === 'ar' ? 'تعويض' : 'Compensation';
+          let detail = `${c.amount} — ${c.example || c.distance}`;
+          if (lang === 'fr') {
+            detail = `${c.amount} — pour les vols ${c.distance === 'Flights under 1,500 km' ? 'de moins de 1500 km' : c.distance === 'Flights 1,500–3,500 km' ? 'de 1500 à 3500 km' : 'de plus de 3500 km'}`;
+          } else if (lang === 'ar') {
+            detail = `${c.amount} — للرحلات ${c.distance === 'Flights under 1,500 km' ? 'الأقل من 1500 كم' : c.distance === 'Flights 1,500–3,500 km' ? 'بين 1500 و 3500 كم' : 'الأكثر من 3500 كم'}`;
+          }
+          rights.push({ title, detail });
+        }
+      });
+      // Compensation reduction note
+      const reductionNote = data.compensation.find(c => c.note);
+      if (reductionNote) {
+        let title = lang === 'fr' ? 'Note d\'indemnisation' : lang === 'ar' ? 'ملاحظة التعويض' : 'Compensation Note';
+        let detail = reductionNote.note;
+        if (lang === 'fr') {
+          detail = 'L\'indemnisation peut être réduite de 50 % si la compagnie propose un vol alternatif avec une heure d\'arrivée proche de l\'heure initiale';
+        } else if (lang === 'ar') {
+          detail = 'يمكن تخفيض التعويض بنسبة 50٪ إذا عرضت شركة الطيران رحلة بديلة وكان وقت الوصول قريباً من الوقت الأصلي';
+        }
+        rights.push({ title, detail });
+      }
     }
 
     data.care.forEach(item => {
       const l = item.toLowerCase();
-      if (l.includes('meal') || l.includes('voucher') || l.includes('repas'))
-        rights.push({ title: 'Meal voucher', detail: item });
-      else if (l.includes('hotel') || l.includes('accommodation') || l.includes('hébergement'))
-        rights.push({ title: 'Hotel', detail: item });
-      else if (l.includes('phone') || l.includes('call') || l.includes('email'))
-        rights.push({ title: 'Communication', detail: item });
-      else
-        rights.push({ title: 'Care', detail: item });
+      let title = 'Care';
+      let detail = item;
+      
+      if (l.includes('meal') || l.includes('voucher') || l.includes('repas')) {
+        title = lang === 'fr' ? 'Bon de repas' : lang === 'ar' ? 'قسيمة وجبة' : 'Meal voucher';
+        if (lang === 'fr') {
+          detail = 'Demander un bon de repas au comptoir de la compagnie aérienne';
+        } else if (lang === 'ar') {
+          detail = 'طلب قسيمة وجبة من مكتب شركة الطيران';
+        }
+      } else if (l.includes('hotel') || l.includes('accommodation') || l.includes('hébergement')) {
+        title = lang === 'fr' ? 'Hôtel' : lang === 'ar' ? 'فندق' : 'Hotel';
+        if (lang === 'fr') {
+          detail = 'Hébergement à l’hôtel et transfert gratuit si un séjour d’une nuit est nécessaire';
+        } else if (lang === 'ar') {
+          detail = 'إقامة فندقية مجانية مع خدمة النقل إذا كان الانتظار يتطلب المبيت';
+        }
+      } else if (l.includes('phone') || l.includes('call') || l.includes('email')) {
+        title = lang === 'fr' ? 'Communication' : lang === 'ar' ? 'الاتصالات' : 'Communication';
+        if (lang === 'fr') {
+          detail = '2 appels téléphoniques ou e-mails gratuits';
+        } else if (lang === 'ar') {
+          detail = 'اتصاليْن هاتفييْن أو رسالتي بريد إلكتروني مجاناً';
+        }
+      } else {
+        title = lang === 'fr' ? 'Assistance' : lang === 'ar' ? 'رعاية' : 'Care';
+        if (lang === 'fr') {
+          detail = 'Assistance et rafraîchissements proportionnels au temps d’attente';
+        } else if (lang === 'ar') {
+          detail = 'تقديم المساعدة والمرطبات بما يتناسب مع وقت الانتظار';
+        }
+      }
+      rights.push({ title, detail });
     });
 
     data.options.forEach(item => {
       const l = item.toLowerCase();
-      if (l.includes('refund') || l.includes('remboursement'))
-        rights.push({ title: 'Full refund', detail: item });
-      else if (l.includes('rebook'))
-        rights.push({ title: 'Rebooking', detail: item });
+      if (l.includes('refund') || l.includes('remboursement')) {
+        let refundTitle = 'Full refund';
+        let detail = item;
+        if (lang === 'fr') {
+          refundTitle = 'Remboursement complet';
+          detail = 'Remboursement complet du billet si le retard dépasse 5 heures ou si vous choisissez de ne pas voyager';
+        } else if (lang === 'ar') {
+          refundTitle = 'استرداد كامل';
+          detail = 'استرداد كامل لقيمة التذكرة إذا تجاوز التأخير 5 ساعات أو إذا اخترت عدم السفر';
+        }
+        rights.push({ title: refundTitle, detail: detail });
+      } else if (l.includes('rebook')) {
+        let rebookTitle = 'Alternative flights';
+        let detail = item;
+        if (lang === 'fr') {
+          rebookTitle = 'Vols alternatifs';
+          detail = 'Demande de vols alternatifs sur le prochain vol disponible sans frais supplémentaires';
+        } else if (lang === 'ar') {
+          rebookTitle = 'رحلات بديلة';
+          detail = 'طلب رحلات بديلة على أول رحلة متاحة دون أي تكلفة إضافية';
+        } else {
+          detail = 'Request alternative flights on the next available flight at no extra cost';
+        }
+        rights.push({ title: rebookTitle, detail: detail });
+      }
     });
 
-    const lawNote = routeType === 'eu_to_tunisia'
-      ? 'EU Regulation 261/2004 applies — file at ec.europa.eu/transport'
-      : routeType === 'domestic'
-        ? 'OACA rules apply — contact airline desk'
-        : 'Montreal Convention applies — ask airline for voluntary compensation';
+    let lawNote = '';
+    if (lang === 'fr') {
+      lawNote = routeType === 'eu_to_tunisia'
+        ? 'Le règlement européen CE 261/2004 s’applique — réclamation à déposer auprès de la compagnie aérienne.'
+        : routeType === 'domestic'
+          ? 'Les règles de l’OACA s’appliquent — contactez le comptoir de la compagnie.'
+          : 'La Convention de Montréal s’applique — demandez des informations sur l’indemnisation volontaire.';
+    } else if (lang === 'ar') {
+      lawNote = routeType === 'eu_to_tunisia'
+        ? 'تنطبق اللائحة الأوروبية CE 261/2004 — قم بتقديم شكوى لدى شركة الطيران.'
+        : routeType === 'domestic'
+          ? 'تنطبق قواعد ديوان الطيران المدني والمطارات (OACA) — اتصل بمكتب شركة الطيران.'
+          : 'تنطبق اتفاقية مونتريال — اسأل شركة الطيران عن التعويض التطوعي.';
+    } else {
+      lawNote = routeType === 'eu_to_tunisia'
+        ? 'EU Regulation 261/2004 applies — file a claim with the airline.'
+        : routeType === 'domestic'
+          ? 'OACA rules apply — contact airline desk'
+          : 'Montreal Convention applies — ask airline for voluntary compensation';
+    }
 
     return { delayMinutes, rights, lawNote };
   },
@@ -263,6 +504,61 @@ const tools = {
       actions: ['Passenger Rights', 'Airport Services'],
     };
   },
+
+  async subscribeToFlightAlerts(email, flightNumber, session) {
+    console.log(`🔧 [TOOL] subscribeToFlightAlerts: ${email} for ${flightNumber}`);
+    const baseUrl = process.env.SMART_AIRPORT_API || 'http://localhost:8000';
+    try {
+      let dep_iata = session.origin || "TUN";
+      let arr_iata = session.destination || "";
+      let airline = session.airline || "";
+      
+      if (!session.origin) {
+        try {
+          const status = await tools.getFlightStatus(flightNumber, session);
+          if (status && status.type !== 'general') {
+            dep_iata = status.route ? status.route.split(' → ')[0] : (session.origin || "TUN");
+            arr_iata = status.route ? status.route.split(' → ')[1] : (session.destination || "");
+            airline = status.airline || (session.airline || "");
+          }
+        } catch (e) {
+          console.error("Flight details pre-fetch failed:", e);
+        }
+      }
+
+      const url = `${baseUrl}/api/passenger/alerts/subscribe`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: email,
+          flight_number: flightNumber,
+          dep_iata: dep_iata,
+          arr_iata: arr_iata,
+          airline: airline,
+          scheduled_departure: ""
+        })
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error ${res.status}`);
+      }
+
+      const data = await res.json();
+      return {
+        ok: true,
+        message: data.message || `Successfully subscribed ${email} to flight ${flightNumber} updates!`,
+        subscription_id: data.subscription_id
+      };
+    } catch (err) {
+      console.error("subscribeToFlightAlerts tool failed:", err);
+      return {
+        ok: false,
+        message: err.message || "Failed to complete the alert subscription."
+      };
+    }
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -275,11 +571,20 @@ async function runAgent(message, history = [], conversationId = 'default', selec
     // ── Session ──────────────────────────────────────────────────────────────
     let session = sessions.get(conversationId) || {
       flightNumber: null, status: null, origin: null,
-      destination: null, delayMinutes: null, airline: null,
+      destination: null, delayMinutes: null, delayMinutesKnown: false, airline: null,
       selectedAirport: null, route_type: null,
-      pendingIntents: null,
+      pendingIntents: null, language: null,
     };
     let conversationHistory = sessions.get(conversationId + '_history') || [];
+
+    // Detect language from message
+    let detectedLang = detectLanguage(message, session.language);
+    const isShortOrCode = message.trim().length < 8 || /^[A-Z]{2,3}\s?\d{1,4}$/i.test(message.trim());
+    if (isShortOrCode && session.language) {
+      detectedLang = session.language;
+    } else {
+      session.language = detectedLang;
+    }
 
     // Priority 0: frontend-provided airport
     if (selectedAirport) session.selectedAirport = selectedAirport;
@@ -288,9 +593,16 @@ async function runAgent(message, history = [], conversationId = 'default', selec
     const mentionedAirport = extractAirportFromMessage(message);
     if (mentionedAirport) session.selectedAirport = mentionedAirport;
 
-    // Priority 2: delay in hours from message
+    // Priority 2: delay in hours or minutes from message
     const delayMatch = message.match(/(\d+)\s*h(?:eure|ours?)?/i);
-    if (delayMatch) session.delayMinutes = parseInt(delayMatch[1]) * 60;
+    const delayMinMatch = message.match(/(\d+)\s*(?:min|minute|minutes)/i);
+    if (delayMinMatch) {
+      session.delayMinutes = parseInt(delayMinMatch[1]);
+      session.delayMinutesKnown = true;
+    } else if (delayMatch) {
+      session.delayMinutes = parseInt(delayMatch[1]) * 60;
+      session.delayMinutesKnown = true;
+    }
 
     // Priority 3: flight number from message
     const flightMatch = message.match(/([A-Z]{2,3})\s?(\d{1,4})/i);
@@ -301,6 +613,7 @@ async function runAgent(message, history = [], conversationId = 'default', selec
             session.flightNumber = newFn;
             session.status = null;
             session.delayMinutes = 0;
+            session.delayMinutesKnown = false;
             session.airline = null;
             session.origin = null;
             session.destination = null;
@@ -325,29 +638,45 @@ async function runAgent(message, history = [], conversationId = 'default', selec
       intents.push('passenger_rights');
     }
 
-    if (session.pendingIntents && mentionedAirport) {
+    if (session.pendingIntents) {
       intents = [...new Set([...intents, ...session.pendingIntents])];
-      session.pendingIntents = null;
+      if (mentionedAirport || session.selectedAirport) {
+        session.pendingIntents = null;
+      }
       sessions.set(conversationId, session);
     }
 
     console.log(`🎯 [Intents] ${intents.join(', ')}`);
 
-    // ── Missing Context Checks ─────────────────────────────────────────────────
     const needsFlight = intents.includes('alternative_flights') || 
+                        intents.includes('passenger_rights') ||
                         (intents.includes('flight_status') && intents.length === 1);
     const needsAirportOnly = intents.some(i => ['hotels', 'airport_services'].includes(i)) && !needsFlight;
 
     if (needsFlight && !session.flightNumber) {
-      let askMsg = 'Please provide your flight number (e.g. TU741, AF1083) so I can assist you with your flight details.';
-      if (intents.includes('alternative_flights')) {
-        askMsg = 'To find relevant alternative flights and check your rights, please provide your current or original flight number (e.g. TU741, AF1083).';
+      let askMsg = '';
+      let actions = [];
+      if (detectedLang === 'fr') {
+        askMsg = (intents.includes('alternative_flights') || intents.includes('passenger_rights'))
+          ? 'Pour vérifier vos droits et trouver des vols alternatifs, veuillez indiquer votre numéro de vol actuel ou initial (ex. TU741, AF1083).'
+          : 'Veuillez indiquer votre numéro de vol (ex. TU741, AF1083) afin que je puisse vous aider avec les détails de votre vol.';
+        actions = ['Services aéroportuaires', 'Droits des passagers'];
+      } else if (detectedLang === 'ar') {
+        askMsg = (intents.includes('alternative_flights') || intents.includes('passenger_rights'))
+          ? 'للتحقق من حقوقك والعثور على رحلات بديلة، يرجى تقديم رقم رحلتك الحالية أو الأصلية (مثل TU741، AF1083).'
+          : 'يرجى تقديم رقم رحلتك (مثل TU741، AF1083) لمساعدتك في تفاصيل رحلتك.';
+        actions = ['خدمات المطار', 'حقوق المسافرين'];
+      } else {
+        askMsg = (intents.includes('alternative_flights') || intents.includes('passenger_rights'))
+          ? 'To check your rights and find alternative flights, please provide your current or original flight number (e.g. TU741, AF1083).'
+          : 'Please provide your flight number (e.g. TU741, AF1083) so I can assist you with your flight details.';
+        actions = ['Airport Services', 'Passenger Rights'];
       }
       
       const ask = {
         type: 'general',
         message: askMsg,
-        actions: ['Airport Services', 'Passenger Rights'],
+        actions: actions,
       };
       conversationHistory.push({ role: 'user', content: message });
       conversationHistory.push({ role: 'assistant', content: JSON.stringify(ask) });
@@ -359,10 +688,22 @@ async function runAgent(message, history = [], conversationId = 'default', selec
     }
 
     if (needsAirportOnly && !session.selectedAirport && !session.origin) {
+      let askMsg = '';
+      let actions = [];
+      if (detectedLang === 'fr') {
+        askMsg = "De quel aéroport s'agit-il ?";
+        actions = ["Tunis-Carthage", "Djerba", "Monastir", "Enfidha"];
+      } else if (detectedLang === 'ar') {
+        askMsg = "ما هو المطار الذي تستفسر عنه؟";
+        actions = ["تونس قرطاج", "جربة", "المنستير", "النفيضة"];
+      } else {
+        askMsg = "Which airport are you inquiring about?";
+        actions = ["Tunis-Carthage", "Djerba", "Monastir", "Enfidha"];
+      }
       const ask = {
         type: "general",
-        message: "Which airport are you inquiring about?",
-        actions: ["Tunis-Carthage", "Djerba", "Monastir", "Enfidha"],
+        message: askMsg,
+        actions: actions,
       };
       session.pendingIntents = intents;
       sessions.set(conversationId, session);
@@ -446,16 +787,68 @@ async function runAgent(message, history = [], conversationId = 'default', selec
       const routeType = session.route_type || getRouteType(dep, arr, airCode);
       const mins = session.delayMinutes || 180;
       const status = session.status || 'delayed';
-      const rd = await tools.getPassengerRights(mins, routeType, status);
+      const rd = await tools.getPassengerRights(mins, routeType, status, detectedLang);
       if (rd?.rights) toolData.rights = rd.rights;
       hasToolData = true;
     }
 
+    // Programmatic override for alternative flights request when flight number is known
+    if (intents.includes('alternative_flights') && session.flightNumber) {
+      console.log(`✈️ [Programmatic Override] Alternative flights requested for ${session.flightNumber}`);
+      const airlineName = getAirlineName(session.flightNumber, session.airline);
+      const delayVal = session.delayMinutesKnown ? session.delayMinutes : null;
+      const { message: altMessage, actions: altActions } = generateAlternativeFlightsResponse(
+        session.flightNumber,
+        airlineName,
+        delayVal,
+        session.delayMinutesKnown,
+        session.status,
+        detectedLang
+      );
+      
+      const responseObj = {
+        type: 'multi',
+        message: altMessage,
+        flight: toolData.flight,
+        rights: toolData.rights,
+        flights: toolData.flights,
+        hotels: toolData.hotels,
+        services: toolData.services,
+        suggestion: detectedLang === 'fr' 
+          ? 'Vérifiez auprès du comptoir de la compagnie pour plus de détails.' 
+          : detectedLang === 'ar'
+            ? 'يرجى التحقق من مكتب شركة الطيران لمزيد من التفاصيل.'
+            : 'Check with the airline desk for more details.',
+        actions: altActions,
+        isFollowUp: history.length > 2
+      };
+
+      // Clean/sanitize actions of alternative flights to remove screen/display/rebook
+      if (responseObj.actions && Array.isArray(responseObj.actions)) {
+        responseObj.actions = responseObj.actions.filter(act => {
+          const actLower = act.toLowerCase();
+          return !actLower.includes('écran') && !actLower.includes('affichage') && !actLower.includes('display') && !actLower.includes('screen');
+        });
+      }
+
+      conversationHistory.push({ role: 'assistant', content: JSON.stringify(responseObj) });
+      sessions.set(conversationId + '_history', conversationHistory);
+
+      return {
+        reply: JSON.stringify(responseObj),
+        updatedHistory: [...history,
+        { role: 'user', content: message },
+        { role: 'assistant', content: JSON.stringify(responseObj) }],
+      };
+    }
+
     // ── LLM call ─────────────────────────────────────────────────────────────
-    const hasRebooking = toolData.rights && toolData.rights.some(r => r.title === 'Rebooking');
-    const reroutingPrompt = hasRebooking 
-      ? 'CRITICAL INSTRUCTION: You MUST explicitly mention: "Based on this delay/cancellation, you may be eligible for rerouting or an alternative flight at no extra cost."'
-      : 'CRITICAL INSTRUCTION: Do NOT mention free rerouting, free alternative flights, or compensation, as the current flight status does not guarantee it.';
+    const hasAlternative = toolData.rights && toolData.rights.some(r => 
+      r.title === 'Alternative flights' || r.title === 'Vols alternatifs' || r.title === 'رحلات بديلة'
+    );
+    const reroutingPrompt = hasAlternative 
+      ? 'CRITICAL INSTRUCTION: You MUST explicitly mention: "Based on this delay/cancellation, you may be eligible for an alternative flight at no extra cost."'
+      : 'CRITICAL INSTRUCTION: Do NOT mention free alternative flights or compensation, as the current flight status does not guarantee it.';
 
     const systemMessage = hasToolData
       ? `${SYSTEM_PROMPT}\n\n═══════════════════════════════════════\nCURRENT REQUEST CONTEXT\n═══════════════════════════════════════\n${reroutingPrompt}\n\nRespond ONLY with a valid JSON object. Combine the following data into your JSON response using the SAME top-level keys. Write a conversational response addressing all queries in the 'message' field.\nREAL DATA TO USE (Do not invent anything else):\n${JSON.stringify(toolData)}\n\nYour response format must EXACTLY match this shape (exclude blocks if you have no data for them):\n{\n  "type": "multi",\n  "message": "Conversational reply covering all intents",\n  "flight": {...},\n  "rights": [...],\n  "flights": [...],\n  "hotels": [...],\n  "services": [...],\n  "suggestion": "Helpful next step.",\n  "actions": ["Action 1", "Action 2"],\n  "isFollowUp": false\n}`
@@ -490,6 +883,75 @@ async function runAgent(message, history = [], conversationId = 'default', selec
           actions: ['Passenger Rights', 'Alternative Flights', 'Airport Services'],
           isFollowUp: history.length > 2,
       };
+    }
+
+    // Post-process the parsed JSON object to translate actions and sanitize message/actions
+    if (parsed) {
+      // Sanitize flight object: completely remove it if the flight was not found or has undefined details
+      if (parsed.flight) {
+        const num = parsed.flight.flightNumber || parsed.flight.number || '';
+        const air = parsed.flight.airline || '';
+        const numStr = num.toString().toLowerCase();
+        const airStr = air.toString().toLowerCase();
+        
+        if (toolData.flight_error || 
+            !num || 
+            numStr.includes('undef') || numStr.includes('null') || numStr.includes('none') ||
+            airStr.includes('undef') || airStr.includes('null') || airStr.includes('none')) {
+          delete parsed.flight;
+        }
+      }
+
+      // Sanitize message: replace "rebooking" or "Rebooking"
+      if (parsed.message) {
+        if (detectedLang === 'fr') {
+          parsed.message = parsed.message
+            .replace(/rebooking/gi, 'vols alternatifs')
+            .replace(/rebook/gi, 'vols alternatifs')
+            .replace(/réenregistrement/gi, 'vols alternatifs')
+            .replace(/re-booking/gi, 'vols alternatifs');
+        } else if (detectedLang === 'ar') {
+          parsed.message = parsed.message
+            .replace(/rebooking/gi, 'رحلات بديلة')
+            .replace(/rebook/gi, 'رحلات بديلة')
+            .replace(/re-booking/gi, 'رحلات بديلة');
+        } else {
+          parsed.message = parsed.message
+            .replace(/rebooking/gi, 'alternative flights')
+            .replace(/rebook/gi, 'alternative flights')
+            .replace(/re-booking/gi, 'alternative flights');
+        }
+      }
+
+      // Clean and translate actions to whitelisted ones only
+      if (parsed.actions && Array.isArray(parsed.actions)) {
+        const cleanedActions = [];
+        parsed.actions.forEach(act => {
+          const actLower = act.toLowerCase();
+          if (actLower.includes('alternative') || actLower.includes('rebook') || actLower.includes('autre vol') || actLower.includes('vol alternatif')) {
+            cleanedActions.push(detectedLang === 'fr' ? 'Voir les vols alternatifs' : detectedLang === 'ar' ? 'عرض الرحلات البديلة' : 'View alternative flights');
+          } else if (actLower.includes('rights') || actLower.includes('droit')) {
+            cleanedActions.push(detectedLang === 'fr' ? 'Droits des passagers' : detectedLang === 'ar' ? 'حقوق المسافرين' : 'Passenger Rights');
+          } else if (actLower.includes('services') || actLower.includes('aéroport') || actLower.includes('restaurant') || actLower.includes('lounge') || actLower.includes('wifi')) {
+            cleanedActions.push(detectedLang === 'fr' ? 'Services aéroportuaires' : detectedLang === 'ar' ? 'خدمات المطار' : 'Airport Services');
+          } else if (actLower.includes('hotel') || actLower.includes('hébergement')) {
+            cleanedActions.push(detectedLang === 'fr' ? 'Hôtels à proximité' : detectedLang === 'ar' ? 'فنادق قريبة' : 'Nearby Hotels');
+          } else if (actLower.includes('status') || actLower.includes('statut') || actLower.includes('track') || actLower.includes('suivre')) {
+            cleanedActions.push(detectedLang === 'fr' ? 'Statut du vol' : detectedLang === 'ar' ? 'حالة الرحلة' : 'Flight Status');
+          } else if (actLower.includes('agent')) {
+            cleanedActions.push(detectedLang === 'fr' ? 'Demander à un agent' : detectedLang === 'ar' ? 'الاستفسار من وكيل' : 'Ask an agent');
+          }
+        });
+        parsed.actions = [...new Set(cleanedActions)];
+      }
+
+      if (!parsed.actions || parsed.actions.length === 0) {
+        parsed.actions = detectedLang === 'fr'
+          ? ['Voir les vols alternatifs', 'Services aéroportuaires', 'Droits des passagers']
+          : detectedLang === 'ar'
+            ? ['عرض الرحلات البديلة', 'خدمات المطار', 'حقوق المسافرين']
+            : ['View alternative flights', 'Airport Services', 'Passenger Rights'];
+      }
     }
 
     conversationHistory.push({ role: 'assistant', content: JSON.stringify(parsed) });

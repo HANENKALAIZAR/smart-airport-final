@@ -397,7 +397,7 @@ const FlightDetail = () => {
                 ) : (
                   <span className="h-2 w-2 rounded-full bg-muted-foreground/60" />
                 )}
-                {t("flightDetail.track")} · <span className="font-mono font-bold">{flight.flightNumber}</span>
+                {t("flightDetail.track")} · <span className="font-mono font-bold">{flight.canonicalFlightNumber || flight.flightNumber}</span>
               </div>
               <div className="text-sm text-muted-foreground mt-0.5 font-medium">{flight.airline} · {flight.aircraft !== "—" ? flight.aircraft : "Commercial Jet"}</div>
             </div>

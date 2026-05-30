@@ -122,3 +122,10 @@ Thumbs.db
 # Source is committed; exclude any local build artifacts only
 shared-core/node_modules/
 shared-core/dist/
+
+# ── CatBoost training artifacts (generated during model training) ──
+backend/catboost_info/
+
+# ── Dated log rotation files ──────────────────────────────────
+backend/app.log.*
+backend/*.log.*

@@ -6,6 +6,7 @@ const map: Record<FlightStatus, { label: string; cls: string; dot?: boolean }> =
   scheduled: { label: "scheduled", cls: "bg-secondary text-secondary-foreground border-border" },
   on_time:   { label: "on_time",   cls: "bg-success/15 text-success border-success/30" },
   boarding:  { label: "boarding",  cls: "bg-primary/15 text-primary border-primary/30", dot: true },
+  taxiing:   { label: "taxiing",   cls: "bg-warning/15 text-warning border-warning/30", dot: true },
   in_air:    { label: "in_air",    cls: "bg-info/15 text-info border-info/30", dot: true },
   landed:    { label: "landed",    cls: "bg-success/15 text-success border-success/30" },
   delayed:   { label: "delayed",   cls: "bg-destructive/15 text-destructive border-destructive/30", dot: true },

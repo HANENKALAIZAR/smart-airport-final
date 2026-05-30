@@ -19,7 +19,8 @@ from app.database import get_db
 from app.dependencies import require_admin, get_current_user
 from app.models.models import Message, MessageReply, User
 from app.schemas.schemas import (
-    MessageOut, MessageCreate, MessageReplyCreate, MessageReplyOut
+    MessageOut, MessageCreate, MessageReplyCreate, MessageReplyOut,
+    PublicFeedbackCreate
 )
 
 logger = logging.getLogger(__name__)
@@ -35,8 +36,8 @@ def _serialize_message(msg: Message) -> dict:
         "id": msg.id,
         "direction": msg.direction,
         "from_user_id": msg.from_user_id,
-        "from_user_name": msg.from_user.full_name if msg.from_user else "Unknown",
-        "from_user_airport": msg.from_user.airport_iata if msg.from_user else None,
+        "from_user_name": msg.from_user.full_name if msg.from_user else (msg.passenger_name or "Passenger"),
+        "from_user_airport": msg.from_user.airport_iata if msg.from_user else (msg.airport_code or None),
         "to_user_id": msg.to_user_id,
         "to_user_name": msg.to_user.full_name if msg.to_user else "Super Admin",
         "category": msg.category,
@@ -46,6 +47,15 @@ def _serialize_message(msg: Message) -> dict:
         "is_read": getattr(msg, "is_read", False),
         "created_at": msg.created_at,
         "updated_at": msg.updated_at,
+        "passenger_name": getattr(msg, "passenger_name", None),
+        "passenger_email": getattr(msg, "passenger_email", None),
+        "airport_code": getattr(msg, "airport_code", None),
+        "sender_type": getattr(msg, "sender_type", "internal"),
+        "assigned_admin_id": getattr(msg, "assigned_admin_id", None),
+        "assigned_admin_name": getattr(msg, "assigned_admin_name", None),
+        "assigned_at": getattr(msg, "assigned_at", None),
+        "deleted_by_sender": getattr(msg, "deleted_by_sender", False),
+        "deleted_by_recipient": getattr(msg, "deleted_by_recipient", False),
         "replies": [
             {
                 "id": r.id,
@@ -132,16 +142,34 @@ def delete_message(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Permanently delete a message (sender or recipient only)."""
+    """Delete a message for the current user."""
     msg = db.query(Message).filter(Message.id == message_id).first()
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
-    if msg.from_user_id != current_user.id and msg.to_user_id != current_user.id:
+        
+    is_sender = (msg.from_user_id == current_user.id)
+    is_recipient = (msg.to_user_id == current_user.id)
+    
+    if msg.sender_type == "passenger":
+        # Passenger messages shared in inbox
+        if current_user.role == "super_admin":
+            is_recipient = True
+        elif current_user.role == "airport_admin" and msg.airport_code == current_user.airport_iata:
+            is_recipient = True
+            
+    if not is_sender and not is_recipient:
         raise HTTPException(status_code=403, detail="You cannot delete this message")
-    db.query(MessageReply).filter(MessageReply.message_id == message_id).delete(
-        synchronize_session=False
-    )
-    db.delete(msg)
+
+    if is_sender:
+        msg.deleted_by_sender = True
+    if is_recipient:
+        msg.deleted_by_recipient = True
+
+    # If both sides deleted (or for passenger messages if recipient deletes), we could permanently delete,
+    # but for simplicity, we just softly delete from both views.
+    if msg.deleted_by_sender and msg.deleted_by_recipient:
+        pass # Let it stay softly deleted for data integrity
+        
     db.commit()
     return None
 
@@ -155,28 +183,35 @@ def list_messages(
 ):
     """
     List messages visible to the current user.
-    - Super admin inbox = messages sent to super admin (direction=to_super)
-    - Super admin sent  = messages sent by super admin (direction=to_admin)
-    - Airport admin inbox = messages from super admin to this admin
-    - Airport admin sent  = messages from this admin to super admin
     """
     query = db.query(Message)
 
     if current_user.role == "super_admin":
         if tab == "inbox":
-            query = query.filter(Message.direction == "to_super")
+            query = query.filter(
+                Message.direction == "to_super",
+                Message.deleted_by_recipient == False
+            )
         else:
-            query = query.filter(Message.direction == "to_admin")
+            query = query.filter(
+                Message.direction == "to_admin",
+                Message.deleted_by_sender == False
+            )
     else:
         if tab == "inbox":
             query = query.filter(
-                Message.direction == "to_admin",
-                Message.to_user_id == current_user.id,
+                (
+                    (Message.direction == "to_admin") & (Message.to_user_id == current_user.id)
+                ) | (
+                    (Message.sender_type == "passenger") & (Message.airport_code == current_user.airport_iata)
+                ),
+                Message.deleted_by_recipient == False
             )
         else:
             query = query.filter(
                 Message.direction == "to_super",
                 Message.from_user_id == current_user.id,
+                Message.deleted_by_sender == False
             )
 
     if status_filter and status_filter != "all":
@@ -267,6 +302,13 @@ def reply_to_message(
     is_super = current_user.role == "super_admin"
     is_sender = msg.from_user_id == current_user.id
     is_recipient = msg.to_user_id == current_user.id
+    
+    if msg.sender_type == "passenger":
+        if current_user.role == "super_admin":
+            raise HTTPException(status_code=403, detail="Passenger support tickets are managed by airport admins only.")
+        elif current_user.role == "airport_admin" and msg.airport_code == current_user.airport_iata:
+            is_recipient = True
+
     if not (is_super or is_sender or is_recipient):
         raise HTTPException(status_code=403, detail="You cannot reply to this message")
 
@@ -283,9 +325,31 @@ def reply_to_message(
     )
     db.add(reply)
 
-    # Auto-advance status back to "in_progress" if the other participant replies
-    if msg.status == "open" and current_user.id != msg.from_user_id:
-        msg.status = "in_progress"
+    if msg.sender_type == "passenger":
+        if not msg.passenger_email:
+            raise HTTPException(status_code=400, detail="No passenger email available")
+            
+        from app.services.email_service import send_passenger_reply_email
+        send_passenger_reply_email(
+            passenger_email=msg.passenger_email,
+            passenger_name=msg.passenger_name or "Passenger",
+            subject=msg.subject,
+            original_message=msg.body,
+            reply_body=payload.body.strip(),
+            admin_name=current_user.full_name
+        )
+        
+        # Auto-assignment on first reply
+        if not msg.assigned_admin_id:
+            msg.assigned_admin_id = current_user.id
+            msg.assigned_admin_name = current_user.full_name
+            msg.assigned_at = datetime.now(timezone.utc)
+            
+        msg.status = "resolved"  # User rule: mark as replied/resolved
+    else:
+        # Auto-advance status back to "in_progress" if the other participant replies
+        if msg.status == "open" and current_user.id != msg.from_user_id:
+            msg.status = "in_progress"
         
     msg.updated_at = datetime.now(timezone.utc)
 
@@ -329,3 +393,30 @@ def update_message_status(
     db.commit()
     logger.info(f"Message {message_id} status updated to {payload.status} by user {current_user.id}")
     return {"status": msg.status}
+
+
+@router.post("/public-feedback", status_code=status.HTTP_201_CREATED)
+def submit_public_feedback(
+    payload: PublicFeedbackCreate,
+    db: Session = Depends(get_db)
+):
+    """Submit public feedback from a passenger. No auth required."""
+    if not payload.subject.strip() or not payload.message.strip():
+        raise HTTPException(status_code=422, detail="Subject and message are required")
+
+    msg = Message(
+        sender_type="passenger",
+        passenger_name=payload.name.strip(),
+        passenger_email=payload.email.strip(),
+        airport_code=payload.airport.strip().upper(),
+        subject=payload.subject.strip(),
+        body=payload.message.strip(),
+        status="open",
+        direction="to_admin", # Legacy requirement for routing logic
+        category="general",
+    )
+    db.add(msg)
+    db.commit()
+    db.refresh(msg)
+    
+    return {"message": "Feedback submitted successfully", "id": msg.id}

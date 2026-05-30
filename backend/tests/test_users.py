@@ -187,3 +187,77 @@ class TestUserManagement:
         )
         assert resp.status_code == 403
         assert resp.json()["error"] == "Super admin cannot delete their own account."
+
+
+class TestSuperAdminSettings:
+    def test_super_admin_get_me(self, client, super_admin_token):
+        resp = client.get(
+            "/api/auth/me",
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["role"] == "super_admin"
+        assert data["email"] == "superadmin@smartairport.tn"
+
+    def test_super_admin_patch_settings_success(self, client, super_admin_token, db):
+        # Base64 for a small 1x1 png image
+        small_png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+        resp = client.patch(
+            "/api/users/me/settings",
+            json={
+                "full_name": "Super Boss",
+                "phone_number": "+216 98 765 432",
+                "profile_photo_url": small_png,
+            },
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "Settings updated"
+
+        # Check in DB
+        user = db.query(User).filter(User.role == "super_admin").first()
+        assert user.full_name == "Super Boss"
+        assert user.phone_number == "+21698765432"
+        assert user.profile_photo_url == small_png
+
+    def test_super_admin_patch_settings_invalid_phone(self, client, super_admin_token):
+        resp = client.patch(
+            "/api/users/me/settings",
+            json={"phone_number": "123456"},
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+        )
+        assert resp.status_code == 422
+        assert "valid Tunisian phone number" in resp.json()["error"]
+
+    def test_super_admin_patch_settings_invalid_fields(self, client, super_admin_token):
+        resp = client.patch(
+            "/api/users/me/settings",
+            json={"gender": "Male"},
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+        )
+        assert resp.status_code == 403
+        assert "read-only for Super Admin" in resp.json()["error"]
+
+    def test_super_admin_patch_settings_invalid_photo_format(self, client, super_admin_token):
+        # PDF is not a valid photo type (with valid base64 content)
+        pdf_data = "data:application/pdf;base64,JVBERi0xLjQK"
+        resp = client.patch(
+            "/api/users/me/settings",
+            json={"profile_photo_url": pdf_data},
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+        )
+        assert resp.status_code == 422
+        assert "Only JPG, PNG or JPEG files are accepted" in resp.json()["error"]
+
+    def test_super_admin_patch_settings_oversized_photo(self, client, super_admin_token):
+        # Create a payload larger than 2MB
+        large_base64 = "data:image/png;base64," + ("A" * (3 * 1024 * 1024))
+        resp = client.patch(
+            "/api/users/me/settings",
+            json={"profile_photo_url": large_base64},
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+        )
+        assert resp.status_code == 422
+        assert "File size must be under 2MB" in resp.json()["error"]
+

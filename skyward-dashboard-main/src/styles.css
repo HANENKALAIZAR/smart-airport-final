@@ -1,0 +1,171 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+@import "./styles/admin.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@layer base {
+  :root {
+    /* Aviation Navy + Amber theme */
+    --background: 217 60% 9%;
+    --foreground: 210 40% 96%;
+
+    --card: 217 50% 12%;
+    --card-foreground: 210 40% 96%;
+
+    --popover: 217 50% 12%;
+    --popover-foreground: 210 40% 96%;
+
+    --primary: 38 92% 50%;
+    --primary-foreground: 217 60% 9%;
+
+    --secondary: 217 40% 18%;
+    --secondary-foreground: 210 40% 96%;
+
+    --muted: 217 35% 16%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 217 40% 18%;
+    --accent-foreground: 210 40% 96%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217 30% 22%;
+    --input: 217 30% 22%;
+    --ring: 38 92% 50%;
+
+    --radius: 0.5rem;
+
+    --success: 160 64% 45%;
+    --success-foreground: 217 60% 9%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 217 60% 9%;
+    --danger: 0 72% 60%;
+    --danger-foreground: 0 0% 100%;
+
+    --surface-1: 217 50% 11%;
+    --surface-2: 217 45% 14%;
+    --surface-3: 217 40% 18%;
+
+    --accent-amber: 38 92% 50%;
+    --accent-amber-2: 43 96% 56%;
+
+    --info: 199 89% 60%;
+    --info-foreground: 217 60% 9%;
+    --violet: 262 83% 70%;
+    --violet-foreground: 217 60% 9%;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@theme inline {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+  --color-danger: hsl(var(--danger));
+  --color-danger-foreground: hsl(var(--danger-foreground));
+  --color-surface-1: hsl(var(--surface-1));
+  --color-surface-2: hsl(var(--surface-2));
+  --color-surface-3: hsl(var(--surface-3));
+  --color-info: hsl(var(--info));
+  --color-info-foreground: hsl(var(--info-foreground));
+  --color-violet: hsl(var(--violet));
+  --color-violet-foreground: hsl(var(--violet-foreground));
+  --color-sidebar: hsl(var(--sidebar-background));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border));
+  }
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .glass-card {
+    border-radius: 0.75rem;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--surface-2) / 0.7);
+    backdrop-filter: blur(4px);
+    box-shadow: 0 4px 24px -8px hsl(217 60% 4% / 0.6);
+  }
+}
+
+@layer utilities {
+  .font-mono-num {
+    font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .bg-gradient-cyan {
+    background-image: linear-gradient(135deg, hsl(var(--accent-amber)) 0%, hsl(var(--accent-amber-2)) 100%);
+  }
+  .bg-gradient-warning {
+    background-image: linear-gradient(135deg, hsl(var(--warning)) 0%, hsl(38 92% 60%) 100%);
+  }
+  .bg-gradient-success {
+    background-image: linear-gradient(135deg, hsl(var(--success)) 0%, hsl(160 64% 50%) 100%);
+  }
+  .bg-gradient-danger {
+    background-image: linear-gradient(135deg, hsl(var(--danger)) 0%, hsl(0 78% 65%) 100%);
+  }
+  .bg-gradient-violet {
+    background-image: linear-gradient(135deg, hsl(var(--violet)) 0%, hsl(280 80% 70%) 100%);
+  }
+  .bg-gradient-info {
+    background-image: linear-gradient(135deg, hsl(var(--info)) 0%, hsl(210 90% 65%) 100%);
+  }
+  .shadow-glow {
+    box-shadow: 0 0 20px hsl(var(--accent-amber) / 0.35), 0 4px 14px hsl(var(--accent-amber) / 0.2);
+  }
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.8); opacity: 0.7; }
+  80%, 100% { transform: scale(2); opacity: 0; }
+}
+.animate-pulse-ring { animation: pulse-ring 1.6s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }

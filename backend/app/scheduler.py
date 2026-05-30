@@ -30,6 +30,8 @@ AIRPORTS = ["TUN", "MIR", "NBE", "DJE"]  # Supported Tunisian airports (4 only)
 
 # ── Scheduler instance ────────────────────────────────────────────────────
 _scheduler: Optional[AsyncIOScheduler] = None
+_ae_ingest_running = False
+
 
 
 # ── Job functions ─────────────────────────────────────────────────────────
@@ -52,11 +54,17 @@ async def _job_collect_weather():
 
 async def _job_ae_ingest():
     """
-    Smart Aviation Edge ingestion — runs every 8 minutes.
-    Only calls the AE API for airports whose cache is actually stale (> 10 min old).
+    Smart Aviation Edge ingestion — runs every 2 minutes.
+    Only calls the AE API for airports whose cache is actually stale.
     Airports with fresh data are skipped entirely — no wasted API calls.
     Triggers data cleaner and feature engineering on updates.
     """
+    global _ae_ingest_running
+    if _ae_ingest_running:
+        logger.warning("[AE Ingest Job] Previous ingestion cycle is still running. Skipping this execution to avoid overlap.")
+        return
+    _ae_ingest_running = True
+
     from app.services.flight_cache_service import (
         is_cache_fresh, MONITORED_AIRPORTS, CACHE_TTL_MINUTES,
     )
@@ -64,6 +72,7 @@ async def _job_ae_ingest():
     from app.database import SessionLocal
 
     db = SessionLocal()
+
     skipped = 0
     refreshed = 0
     errors = 0
@@ -83,8 +92,32 @@ async def _job_ae_ingest():
                 except Exception as e:
                     errors += 1
                     logger.error(f"[AE Ingest Job] {iata}/{direction} error: {e}")
+
+        # Periodic background sweep for stale active flights
+        try:
+            from app.services.flight_reconciliation_service import reconcile_stale_flight_status
+            from app.models.ae_models import AEFlightSnapshot
+            
+            # Query all active snapshots currently in database
+            active_snaps = db.query(AEFlightSnapshot).filter(
+                AEFlightSnapshot.status.in_(["in_air", "active", "departed", "boarding", "taxiing"])
+            ).all()
+            
+            swept_count = 0
+            for snap in active_snaps:
+                if reconcile_stale_flight_status(snap, db):
+                    swept_count += 1
+            
+            if swept_count > 0:
+                db.commit()
+                logger.info(f"[Stale Reconcile Sweep] Successfully swept and auto-reconciled {swept_count} stale flights.")
+        except Exception as sweep_err:
+            logger.error(f"[Stale Reconcile Sweep] Sweep failed: {sweep_err}")
+
     finally:
         db.close()
+        _ae_ingest_running = False
+
 
     logger.info(
         f"[AE Ingest Job] Done — refreshed={refreshed} skipped={skipped} errors={errors} "
@@ -262,10 +295,12 @@ async def _job_passenger_alerts():
                     continue
 
             fn = sub.flight_number
+            from app.utils.flight_number import get_flight_alias_filter
+            alias_filter = get_flight_alias_filter(AEFlightSnapshot, fn)
             snap = (
                 db.query(AEFlightSnapshot)
                 .filter(
-                    AEFlightSnapshot.flight_number == fn
+                    alias_filter
                 )
                 .order_by(AEFlightSnapshot.collected_at.desc())
                 .first()
@@ -425,6 +460,157 @@ async def _job_passenger_alerts():
 
 # ── Lifecycle ─────────────────────────────────────────────────────────────
 
+async def _job_flightaware_enrich():
+    """
+    FlightAware live-status enrichment job — runs every 15 minutes.
+
+    Algorithm:
+      1. Skip entirely if FlightAware is disabled or circuit is OPEN.
+      2. Query AEFlightSnapshot for enrichable candidates:
+           - status IN ('scheduled', 'delayed', 'unknown')
+           - today's snapshot_date
+           - dep_scheduled or arr_scheduled in the active window
+           - LIMIT 50 (hard cap — never process more per cycle)
+      3. For each candidate:
+           a. Double-check should_enrich() filter.
+           b. Build ident candidates (ICAO preferred, IATA fallback).
+           c. For each ident: check TTL cache, then call FA.
+           d. On FA hit: reconcile and update DB.
+           e. On miss: try next ident. Log total miss at end.
+      4. Commit once after all updates.
+      5. Log summary counters.
+    """
+    from app.config import settings as _settings
+    from app.api_clients.flightaware_client import (
+        is_enabled, fetch_flight_by_ident, get_ident_candidates,
+    )
+    from app.services.flight_reconciliation_service import should_enrich, reconcile_snapshot
+    from app.services.provider_health import health_registry
+    from app.models.ae_models import AEFlightSnapshot
+    from app.database import SessionLocal
+    from datetime import datetime, timezone, timedelta
+    from sqlalchemy import or_, and_
+
+    # ── 0. Guard: disabled or circuit open ────────────────────────
+    if not is_enabled():
+        logger.debug("[FA DISABLED] FlightAware enrichment skipped — key not configured or disabled")
+        return
+
+    if await health_registry.is_circuit_open("flightaware"):
+        stats = await health_registry.get_stats("flightaware")
+        logger.warning(
+            f"[FA DISABLED] FlightAware enrichment skipped — circuit is OPEN "
+            f"(closes at {stats.get('circuit_closes_at', 'unknown')})"
+        )
+        return
+
+    now = datetime.now(timezone.utc)
+    past_limit   = now - timedelta(hours=_settings.FLIGHTAWARE_WINDOW_PAST_HOURS)
+    future_limit = now + timedelta(hours=_settings.FLIGHTAWARE_WINDOW_FUTURE_HOURS)
+    today = now.date()
+
+    db = SessionLocal()
+    checked = enriched = misses = errors = 0
+
+    try:
+        # ── 1. Query enrichable candidates (smart filter + hard LIMIT) ───────
+        candidates = (
+            db.query(AEFlightSnapshot)
+            .filter(
+                AEFlightSnapshot.snapshot_date == today,
+                AEFlightSnapshot.status.in_(["scheduled", "delayed", "unknown"]),
+                or_(
+                    and_(
+                        AEFlightSnapshot.dep_scheduled >= past_limit,
+                        AEFlightSnapshot.dep_scheduled <= future_limit,
+                    ),
+                    and_(
+                        AEFlightSnapshot.arr_scheduled >= past_limit,
+                        AEFlightSnapshot.arr_scheduled <= future_limit,
+                    ),
+                ),
+            )
+            .order_by(AEFlightSnapshot.dep_scheduled.asc())
+            .limit(50)   # hard cap — never process more per cycle
+            .all()
+        )
+
+        logger.info(
+            f"[FA Enrich Job] Starting — {len(candidates)} candidates in window "
+            f"[{past_limit.strftime('%H:%M')} – {future_limit.strftime('%H:%M')} UTC]"
+        )
+
+        # ── 2. Process each candidate ─────────────────────────────────
+        for snap in candidates:
+            checked += 1
+
+            # Double-check (service layer filter is authoritative)
+            if not should_enrich(snap, now_utc=now):
+                continue
+
+            idents = get_ident_candidates(
+                snap.flight_number,
+                snap.airline_iata,
+                snap.airline_icao,
+            )
+
+            flight_enriched = False
+            for ident in idents:
+                try:
+                    fa_data = await fetch_flight_by_ident(ident)
+                except Exception as exc:
+                    logger.error(
+                        f"[FA ERROR] flight={snap.flight_number} ident={ident}: {exc}"
+                    )
+                    await health_registry.record_failure("flightaware")
+                    errors += 1
+                    break
+
+                if fa_data is None:
+                    # Miss or disabled — try next ident
+                    continue
+
+                # FA hit — reconcile
+                try:
+                    result = reconcile_snapshot(snap, fa_data, db)
+                    if result["was_enriched"]:
+                        enriched += 1
+                    flight_enriched = True
+                    break
+                except Exception as exc:
+                    logger.error(
+                        f"[FA ERROR] reconcile failed for {snap.flight_number}/{ident}: {exc}"
+                    )
+                    errors += 1
+                    break
+
+            if not flight_enriched:
+                misses += 1
+                logger.debug(f"[FA MISS] flight={snap.flight_number} — no FA match for idents={idents}")
+
+        # ── 3. Commit all enriched rows ──────────────────────────────
+        if enriched > 0:
+            db.commit()
+
+    except Exception as exc:
+        logger.error(f"[FA Enrich Job] Fatal error: {exc}")
+        db.rollback()
+    finally:
+        db.close()
+
+    fa_stats = await health_registry.get_stats("flightaware")
+    logger.info(
+        f"[FA Enrich Job] Done — checked={checked} enriched={enriched} "
+        f"misses={misses} errors={errors} | "
+        f"circuit={fa_stats['circuit_state']} "
+        f"total_enrichments={fa_stats['total_enrichments']} "
+        f"total_failures={fa_stats['total_failures']}"
+    )
+
+
+# ── Lifecycle ─────────────────────────────────────────────────────────────
+
+
 def start_scheduler():
     """Create and start the APScheduler instance. Called from FastAPI lifespan."""
     global _scheduler
@@ -464,13 +650,14 @@ def start_scheduler():
 
     _scheduler.add_job(
         _job_ae_ingest,
-        trigger=IntervalTrigger(minutes=8),
+        trigger=IntervalTrigger(minutes=2),
         id="ae_ingest",
-        name="Smart AE ingestion — stale airports only (every 8 min)",
+        name="Smart AE ingestion — stale airports only (every 2 min)",
         replace_existing=True,
         max_instances=1,
         misfire_grace_time=60,
     )
+
 
     _scheduler.add_job(
         _job_auto_retrain,
@@ -492,11 +679,24 @@ def start_scheduler():
         misfire_grace_time=60,
     )
 
+    _scheduler.add_job(
+        _job_flightaware_enrich,
+        trigger=IntervalTrigger(minutes=settings.FLIGHTAWARE_ENRICH_INTERVAL_MINUTES),
+        id="fa_enrich",
+        name=f"FlightAware live status enrichment (every {settings.FLIGHTAWARE_ENRICH_INTERVAL_MINUTES} min)",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=120,
+    )
+
     _scheduler.start()
     logger.info(
         f"APScheduler started — "
-        f"weather=30min | predictions=30min | reconciliation=30min | ae_ingest=8min | passenger_alerts=5min | auto_retrain=6hours"
+        f"weather=30min | predictions=30min | reconciliation=30min | ae_ingest=2min | "
+        f"passenger_alerts=5min | auto_retrain=6hours | "
+        f"fa_enrich={settings.FLIGHTAWARE_ENRICH_INTERVAL_MINUTES}min"
     )
+
 
 
 def stop_scheduler():

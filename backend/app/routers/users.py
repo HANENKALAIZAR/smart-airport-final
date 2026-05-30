@@ -208,6 +208,8 @@ class AdminListItem(BaseModel):
     last_login: Optional[datetime] = None
     onboarding_active: bool = False
     verification_status: str = "pending_review"
+    profile_photo_url: Optional[str] = None
+    cin_document_back_url: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -447,6 +449,7 @@ def complete_my_profile(
     try:
         validate_profile_photo_data_url(payload.profile_photo_url)
         validate_id_document_data_url(payload.cin_document_url)
+        validate_id_document_data_url(payload.cin_document_back_url)
         validate_id_document_data_url(payload.passport_document_url)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -463,6 +466,7 @@ def complete_my_profile(
     current_user.emergency_contact_relationship = payload.emergency_contact_relationship
     current_user.cin_number = payload.cin_number.strip()
     current_user.cin_document_url = payload.cin_document_url
+    current_user.cin_document_back_url = payload.cin_document_back_url
     current_user.passport_number = pnum.upper()
     current_user.passport_document_url = payload.passport_document_url
     current_user.passport_expiry_date = pexp
@@ -511,7 +515,51 @@ def patch_my_settings(
     All other profile fields are read-only (managed by super admin).
     """
     if current_user.role == "super_admin":
-        raise HTTPException(status_code=403, detail="Super admin profile cannot be modified")
+        data = payload.model_dump(exclude_unset=True)
+        if not data:
+            raise HTTPException(status_code=422, detail="Nothing to update.")
+        
+        allowed_keys = {"full_name", "phone_number", "profile_photo_url"}
+        for key in data.keys():
+            if key not in allowed_keys:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"Field '{key}' is read-only for Super Admin.",
+                )
+        
+        if "full_name" in data:
+            val = (data["full_name"] or "").strip()
+            if not val:
+                raise HTTPException(status_code=422, detail="Full name cannot be empty")
+            current_user.full_name = val
+            
+        if "phone_number" in data:
+            raw = data["phone_number"]
+            if raw:
+                phone_norm = normalize_tunisian_phone(raw)
+                if not validate_tunisian_phone_digits(phone_norm):
+                    raise HTTPException(
+                        status_code=422,
+                        detail="Please enter a valid Tunisian phone number (e.g. +216 9X XXX XXX)",
+                    )
+                current_user.phone_number = phone_norm
+            else:
+                current_user.phone_number = None
+
+        if "profile_photo_url" in data:
+            if data["profile_photo_url"]:
+                try:
+                    validate_profile_photo_data_url(data["profile_photo_url"])
+                except ValueError as exc:
+                    raise HTTPException(status_code=422, detail=str(exc))
+                current_user.profile_photo_url = data["profile_photo_url"]
+            else:
+                current_user.profile_photo_url = None
+            
+        current_user.updated_at = datetime.now(timezone.utc)
+        db.commit()
+        return {"message": "Settings updated"}
+
     if current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Only airport admins can update these fields here.")
     data = payload.model_dump(exclude_unset=True)
@@ -567,6 +615,8 @@ def patch_my_settings(
         current_user.cin_number = num
     if "cin_document_url" in data:
          current_user.cin_document_url = data["cin_document_url"]
+    if "cin_document_back_url" in data:
+         current_user.cin_document_back_url = data["cin_document_back_url"]
     
     if "date_of_birth" in data:
         try:
@@ -837,6 +887,8 @@ def list_admins(
                 last_login=u.last_login,
                 onboarding_active=oa,
                 verification_status=vs,
+                profile_photo_url=u.profile_photo_url,
+                cin_document_back_url=u.cin_document_back_url,
             )
         )
     return rows

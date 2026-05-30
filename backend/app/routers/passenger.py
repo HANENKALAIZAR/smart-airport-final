@@ -53,16 +53,19 @@ async def _lookup_flight_snapshot(
 ) -> Optional[AEFlightSnapshot]:
     """
     Search AEFlightSnapshot for a flight by number.
-    Checks all supported airports. Returns the most recently collected snapshot.
+    Uses centralized alias-matching rules. Serves from cache or queries realtime Aviation Edge provider on cache misses.
     """
-    fn = flight_number.upper()
+    from app.utils.flight_number import get_flight_alias_filter
     today = _now_utc().date()
+    fn = flight_number.upper().replace(" ", "")
 
+    # 1. Check database cache using shared alias-matching filter
+    alias_filter = get_flight_alias_filter(AEFlightSnapshot, fn)
     row = (
         db.query(AEFlightSnapshot)
         .filter(
-            AEFlightSnapshot.flight_number == fn,
             AEFlightSnapshot.snapshot_date == today,
+            alias_filter
         )
         .order_by(AEFlightSnapshot.collected_at.desc())
         .first()
@@ -70,28 +73,93 @@ async def _lookup_flight_snapshot(
     if row:
         return row
 
-    # Not in today's cache — try triggering a live refresh via AE API
+    # 2. Cache miss — fetch directly from Aviation Edge by flight number!
     try:
-        from app.api_clients.aviation_edge_client import fetch_all_flights
-        from app.services.ae_ingestion_service import ingest_airport
-        # Refresh all supported airports (background refresh, pick up result from DB)
-        for iata in SUPPORTED_AIRPORTS:
-            await ingest_airport(iata, "departure", db)
-            await ingest_airport(iata, "arrival", db)
-        # Note: NBE Aviation Edge returns limited flights (~4 per sync)
-        # due to reduced commercial traffic. This is real API data, not a bug.
-        # Re-query after refresh
-        row = (
-            db.query(AEFlightSnapshot)
-            .filter(
-                AEFlightSnapshot.flight_number == fn,
-                AEFlightSnapshot.snapshot_date == today,
+        from app.api_clients.aviation_edge_client import fetch_flight_by_number
+        from app.services.ae_ingestion_service import _build_snapshot, _build_dataset_row
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        from app.models.ae_models import AEFlightDataset
+
+        logger.info(f"[Passenger Lookup Cache Miss] Flight {fn} not in DB cache. Querying realtime provider...")
+        flights = await fetch_flight_by_number(fn)
+        
+        if flights:
+            for flight in flights:
+                snap = _build_snapshot(
+                    flight=flight,
+                    airport_iata=flight["dep_iata"] if flight["direction"] == "departure" else flight["arr_iata"],
+                    today=today,
+                    status=flight["status"],
+                    departed_at=None,
+                    airborne_at=None,
+                    landed_at=None,
+                    last_status_change=None,
+                    last_position_update=None
+                )
+                
+                # PG UPSERT snapshot
+                stmt = (
+                    pg_insert(AEFlightSnapshot)
+                    .values(**snap)
+                    .on_conflict_do_update(
+                        index_elements=["flight_number", "snapshot_date", "airport_iata", "direction"],
+                        set_={
+                            "collected_at":     snap["collected_at"],
+                            "status":           snap["status"],
+                            "raw_status":       snap["raw_status"],
+                            "delay_minutes":    snap["delay_minutes"],
+                            "dep_actual":       snap["dep_actual"],
+                            "arr_actual":       snap["arr_actual"],
+                            "dep_estimated":    snap["dep_estimated"],
+                            "arr_estimated":    snap["arr_estimated"],
+                            "dep_gate":         snap["dep_gate"],
+                            "arr_gate":         snap["arr_gate"],
+                            "dep_terminal":     snap["dep_terminal"],
+                            "arr_terminal":     snap["arr_terminal"],
+                            "dep_delay_min":    snap["dep_delay_min"],
+                            "arr_delay_min":    snap["arr_delay_min"],
+                            "latitude":         snap["latitude"],
+                            "longitude":        snap["longitude"],
+                            "altitude_ft":      snap["altitude_ft"],
+                            "speed_kmh":        snap["speed_kmh"],
+                            "heading_deg":      snap["heading_deg"],
+                            "is_ground":        snap["is_ground"],
+                            "aircraft_type":    snap["aircraft_type"],
+                            "aircraft_reg":     snap["aircraft_reg"],
+                        },
+                    )
+                )
+                db.execute(stmt)
+                
+                # Build and UPSERT ML dataset row
+                ds_row = _build_dataset_row(snap)
+                ds_stmt = (
+                    pg_insert(AEFlightDataset)
+                    .values(**ds_row)
+                    .on_conflict_do_update(
+                        index_elements=["flight_number", "flight_date", "airport_iata", "direction"],
+                        set_={k: v for k, v in ds_row.items()
+                              if k not in ("flight_number", "flight_date", "airport_iata", "direction")},
+                    )
+                )
+                db.execute(ds_stmt)
+            
+            db.commit()
+            logger.info(f"[Passenger Lookup Cache Miss] Resolved {fn} realtime: successfully stored {len(flights)} flights")
+            
+            # Re-query DB with alias filters
+            row = (
+                db.query(AEFlightSnapshot)
+                .filter(
+                    AEFlightSnapshot.snapshot_date == today,
+                    alias_filter
+                )
+                .order_by(AEFlightSnapshot.collected_at.desc())
+                .first()
             )
-            .order_by(AEFlightSnapshot.collected_at.desc())
-            .first()
-        )
     except Exception as e:
-        logger.error(f"[Passenger] AE refresh failed for {fn}: {e}")
+        logger.error(f"[Passenger] Dynamic realtime refresh by flight number failed for {fn}: {e}")
+        db.rollback()
 
     return row
 
@@ -123,6 +191,9 @@ async def list_passenger_flights(
         for f in flights:
             if (f["flight_number"], f["direction"]) not in seen:
                 all_flights.append(f)
+
+    # Exclude stale_unresolved from passenger live departure boards
+    all_flights = [f for f in all_flights if (f.get("status") or "").lower() != "stale_unresolved"]
 
     return {
         "airport": iata,

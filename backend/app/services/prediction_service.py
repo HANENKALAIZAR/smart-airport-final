@@ -29,32 +29,49 @@ from app.schemas.schemas import PredictionOut
 
 logger = logging.getLogger(__name__)
 
-# ── Paths ─────────────────────────────────────────────────────────────────
-_MODEL_DIR       = Path(settings.MODEL_DIR)
-_CLASSIFIER_PATH = _MODEL_DIR / "delay_classifier.json"
-_REGRESSOR_PATH  = _MODEL_DIR / "delay_regressor.json"
-_EXPLAINER_PATH  = _MODEL_DIR / "shap_explainer.pkl"
-_FEAT_COLS_PATH  = _MODEL_DIR / "feature_columns.json"
+# ── Paths ─────────────────────────────────────────────────────────────────────
+_MODEL_DIR        = Path(settings.MODEL_DIR)
+_CLASSIFIER_PATH  = _MODEL_DIR / "delay_classifier.json"
+_REGRESSOR_PATH   = _MODEL_DIR / "delay_regressor.json"
+_EXPLAINER_PATH   = _MODEL_DIR / "shap_explainer.pkl"
+# V2 sidecar takes priority; fall back to legacy V1 sidecar
+_FEAT_COLS_PATH   = (
+    _MODEL_DIR / "feature_columns_v2.json"   # written by train_v2.py
+    if (_MODEL_DIR / "feature_columns_v2.json").exists()
+    else _MODEL_DIR / "feature_columns.json"  # legacy V1
+)
 
-# ── Default feature columns — MUST match train_ae_dataset.py AE_FEATURE_COLUMNS ──
+# ── Default feature columns ────────────────────────────────────────────────────
+# Used only when feature_columns_v2.json sidecar is absent.
+# Must match ALL_FEATURES in train_v2.py (V2.1: 16 features).
 _DEFAULT_FEATURE_COLUMNS = [
-    "dep_hour",
-    "is_weekend",
-    "distance_km",
-    "duration_min",
-    "airline_enc",
-    "dep_airport_enc",
-    "arr_airport_enc",
+    "dep_hour", "is_weekend", "is_peak_hour",
+    "distance_km", "duration_min",
+    "airline_enc", "dep_airport_enc", "arr_airport_enc",
+    "route_avg_delay_hist", "airline_avg_delay_hist", "hour_avg_delay_hist",
+    "route_flight_count", "airline_flight_count", "airport_departure_count",
+    "dep_month", "dep_day_of_week",
 ]
 
 FEATURE_LABELS = {
+    # V1 base features
     "dep_hour":        "Time of Day",
-    "is_weekend":      "Weekend",
+    "is_weekend":      "Weekend Flight",
+    "is_peak_hour":    "Peak Hour Departure",   # V2.1
     "distance_km":     "Flight Distance",
     "duration_min":    "Flight Duration",
-    "airline_enc":     "Airline Reliability",
+    "airline_enc":     "Airline",
     "dep_airport_enc": "Origin Airport",
     "arr_airport_enc": "Destination Airport",
+    # V2 rolling features
+    "route_avg_delay_hist":    "Route Historical Delay",
+    "airline_avg_delay_hist":  "Airline Historical Delay",
+    "hour_avg_delay_hist":     "Hour Historical Delay",
+    "route_flight_count":      "Route Traffic Volume",
+    "airline_flight_count":    "Airline Traffic Volume",
+    "airport_departure_count": "Airport Departure Load",
+    "dep_month":               "Month",
+    "dep_day_of_week":         "Day of Week",
 }
 
 # ── Module-level state (guarded by _lock) ─────────────────────────────────
@@ -76,27 +93,27 @@ _prediction_cache: TTLCache = TTLCache(maxsize=512, ttl=300)
 def load_model():
     """
     Load the trained sklearn Pipeline (StandardScaler + XGBRegressor) from
-    delay_prediction_model.pkl — the model produced by train_ae_dataset.py.
-    Also loads the feature column list from feature_columns.json sidecar.
+    delay_prediction_model.pkl — the model produced by train_v2.py.
+    Also loads the feature column list from feature_columns_v2.json sidecar
+    (falls back to feature_columns.json for legacy V1, then to _DEFAULT_FEATURE_COLUMNS).
     Thread-safe — called at startup and after training (hot-reload).
     """
-    global _model, _explainer, _regressor, _feature_columns
+    global _model, _explainer, _regressor, _feature_columns, _FEAT_COLS_PATH
 
     with _lock:
-        # Priority 1: sklearn pipeline (7-column regression model)
+        # Priority 1: sklearn pipeline (V2 regression model)
         _PKL_PATH = _MODEL_DIR / "delay_prediction_model.pkl"
         if _PKL_PATH.exists():
             try:
                 import joblib
                 _model = joblib.load(str(_PKL_PATH))
-                _regressor = _model  # same object — sklearn Pipeline has .predict()
+                _regressor = _model
                 logger.info(f"Sklearn pipeline loaded from {_PKL_PATH}")
             except Exception as e:
                 logger.warning(f"sklearn pipeline loading failed: {e} — using rule-based")
                 _model = None
                 _regressor = None
         elif _CLASSIFIER_PATH.exists():
-            # Fallback: XGBoost native format (older model)
             try:
                 import xgboost as xgb
                 _model = xgb.XGBClassifier()
@@ -117,13 +134,20 @@ def load_model():
             except Exception:
                 _explainer = None
 
-        if _FEAT_COLS_PATH.exists():
-            import json
-            _feature_columns = json.loads(_FEAT_COLS_PATH.read_text(encoding="utf-8"))
+        # Feature column sidecar: prefer V2, fall back to V1, then hardcoded default
+        v2_sidecar = _MODEL_DIR / "feature_columns_v2.json"
+        v1_sidecar = _MODEL_DIR / "feature_columns.json"
+        sidecar = v2_sidecar if v2_sidecar.exists() else (v1_sidecar if v1_sidecar.exists() else None)
+        if sidecar:
+            try:
+                _feature_columns = json.loads(sidecar.read_text(encoding="utf-8"))
+                logger.info(f"Feature columns loaded from sidecar: {sidecar.name} ({len(_feature_columns)} features)")
+            except Exception as e:
+                logger.warning(f"Sidecar load failed ({e}) — using default columns")
+                _feature_columns = _DEFAULT_FEATURE_COLUMNS[:]
         else:
             _feature_columns = _DEFAULT_FEATURE_COLUMNS[:]
 
-        # Invalidate cache on reload
         _prediction_cache.clear()
 
         logger.info(
@@ -188,46 +212,138 @@ def _rule_based(features: np.ndarray, cols: list) -> tuple[float, int, dict]:
     return risk, predicted_delay, contributions
 
 
+def _compute_real_shap(model, features: np.ndarray, cols: list) -> dict:
+    """
+    Compute real SHAP values using shap.TreeExplainer on the XGBoost regressor
+    inside the sklearn Pipeline.
+
+    Returns a dict: {
+        "base_value": float,
+        "feature_contributions": {
+            "<Human Label>": {"shap": float, "value": float}
+        },
+        "narrative": str  (human-readable explanation for airport admins)
+    }
+
+    Falls back gracefully if shap is not installed or the model is not XGBoost.
+    """
+    import shap
+    from sklearn.pipeline import Pipeline as SklearnPipeline
+
+    result = {"base_value": None, "feature_contributions": {}, "narrative": ""}
+
+    try:
+        if not isinstance(model, SklearnPipeline):
+            return result
+
+        scaler    = model.named_steps.get("scaler")
+        regressor = model.named_steps.get("regressor")
+        if regressor is None or scaler is None:
+            return result
+
+        # Scale the input (SHAP must receive the same transformed input as the regressor)
+        X_scaled = scaler.transform(features)
+
+        # TreeExplainer works directly on tree models — no background data needed
+        explainer  = shap.TreeExplainer(regressor)
+        shap_vals  = explainer.shap_values(X_scaled)   # shape: (1, n_features)
+        base_val   = float(explainer.expected_value)
+        sv         = shap_vals[0]                       # shape: (n_features,)
+
+        contributions = {}
+        for i, col in enumerate(cols):
+            label = FEATURE_LABELS.get(col, col)
+            raw   = float(features[0][i]) if i < features.shape[1] else 0.0
+            contributions[label] = {
+                "shap":  round(float(sv[i]), 4),
+                "value": round(raw, 4),
+            }
+
+        result["base_value"]            = round(base_val, 4)
+        result["feature_contributions"] = contributions
+        result["narrative"]             = _generate_narrative(contributions, base_val)
+
+    except ImportError:
+        logger.debug("[SHAP] shap library not installed — skipping real SHAP")
+    except Exception as e:
+        logger.warning(f"[SHAP] Real SHAP computation failed: {e}")
+
+    return result
+
+
+def _generate_narrative(contributions: dict, base_value: float) -> str:
+    """
+    Generate a human-readable explanation sentence from SHAP values.
+
+    Example output:
+        "This flight has elevated delay risk mainly because the route historically
+         has frequent delays (+8.3 min) and the departure hour is usually congested
+         (+5.1 min). The airline is performing well (-3.2 min baseline offset)."
+    """
+    # Sort by absolute SHAP impact, descending
+    sorted_contrib = sorted(
+        contributions.items(),
+        key=lambda x: abs(x[1]["shap"]),
+        reverse=True,
+    )
+
+    # Separate positive (delay-increasing) and negative (delay-reducing)
+    drivers     = [(k, v) for k, v in sorted_contrib if v["shap"] > 0.5]
+    mitigators  = [(k, v) for k, v in sorted_contrib if v["shap"] < -0.5]
+
+    parts = []
+
+    if drivers:
+        top_drivers = drivers[:3]
+        driver_text = ", ".join(
+            f"{k} (+{v['shap']:.1f} min)" for k, v in top_drivers
+        )
+        parts.append(f"This flight has elevated delay risk mainly because: {driver_text}")
+    else:
+        parts.append("No strong delay risk factors were detected for this flight.")
+
+    if mitigators:
+        top_mit = mitigators[:2]
+        mit_text = ", ".join(
+            f"{k} ({v['shap']:.1f} min)" for k, v in top_mit
+        )
+        parts.append(f"Positive factors reducing delay risk: {mit_text}.")
+
+    if base_value > 10:
+        parts.append(
+            f"The model's baseline average delay for this type of flight is {base_value:.1f} min."
+        )
+
+    return " ".join(parts)
+
+
 def _ml_prediction(features: np.ndarray, cols: list) -> tuple[float, int, dict]:
     """
     Run the sklearn Pipeline or XGBoost model.
     The sklearn Pipeline (delay_prediction_model.pkl) predicts delay_minutes directly
     (regression). The risk score is derived from the delay estimate.
+    Real SHAP is computed via shap.TreeExplainer for the regression path.
     """
-    import joblib
     from sklearn.pipeline import Pipeline as SklearnPipeline
-
-    explanation = {"base_value": None, "feature_contributions": {}}
 
     if isinstance(_model, SklearnPipeline):
         # Regression pipeline: predicts delay_minutes
-        delay_raw = float(max(0, _model.predict(features)[0]))
+        delay_raw    = float(max(0, _model.predict(features)[0]))
         # Map delay minutes to a 0-100 risk score:
         # 0 min → 0%, 15 min → 30%, 30 min → 55%, 60+ min → 85%+
-        risk_score = min(100.0, delay_raw / 60.0 * 85.0 + (5.0 if delay_raw > 0 else 0))
+        risk_score   = min(100.0, delay_raw / 60.0 * 85.0 + (5.0 if delay_raw > 0 else 0))
         predicted_delay = int(round(delay_raw))
 
-        # Build simple importance-based explanation
-        try:
-            regressor = _model.named_steps.get("regressor")
-            if regressor is not None and hasattr(regressor, "feature_importances_"):
-                importances = regressor.feature_importances_
-                for i, col in enumerate(cols):
-                    label = FEATURE_LABELS.get(col, col)
-                    raw = float(features[0][i]) if not np.isnan(features[0][i]) else 0.0
-                    explanation["feature_contributions"][label] = {
-                        "shap": round(float(importances[i] * raw), 4),
-                        "value": round(raw, 4),
-                    }
-        except Exception as e:
-            logger.debug(f"Feature importance extraction failed: {e}")
+        # Real SHAP explanation (TreeExplainer on the XGBoost regressor)
+        explanation = _compute_real_shap(_model, features, cols)
 
     else:
         # XGBoost classifier (legacy path — predict_proba)
-        proba = _model.predict_proba(features)[0]
-        risk_score = float(proba[1]) * 100
+        proba       = _model.predict_proba(features)[0]
+        risk_score  = float(proba[1]) * 100
         predicted_delay = int(risk_score * 1.5)
 
+        explanation = {"base_value": None, "feature_contributions": {}, "narrative": ""}
         if _explainer is not None:
             try:
                 shap_vals = _explainer.shap_values(features)
@@ -237,14 +353,17 @@ def _ml_prediction(features: np.ndarray, cols: list) -> tuple[float, int, dict]:
                     if isinstance(_explainer.expected_value, (list, np.ndarray))
                     else _explainer.expected_value
                 )
-                explanation["base_value"] = base_value
+                contributions = {}
                 for i, col in enumerate(cols):
                     label = FEATURE_LABELS.get(col, col)
-                    raw = float(features[0][i]) if not np.isnan(features[0][i]) else None
-                    explanation["feature_contributions"][label] = {
-                        "shap": round(float(sv[i]), 4),
+                    raw   = float(features[0][i]) if not np.isnan(features[0][i]) else None
+                    contributions[label] = {
+                        "shap":  round(float(sv[i]), 4),
                         "value": round(raw, 4) if raw is not None else None,
                     }
+                explanation["base_value"]            = base_value
+                explanation["feature_contributions"] = contributions
+                explanation["narrative"]             = _generate_narrative(contributions, base_value)
             except Exception as e:
                 logger.warning(f"SHAP explanation failed: {e}")
 
@@ -295,6 +414,49 @@ def _run_prediction(
     flight_number: Optional[str] = None,
 ) -> PredictionOut:
     cols = _feature_columns
+
+    # ── Feature enrichment ────────────────────────────────────────────────
+    # When the incoming dict comes from live_feature_builder (7 keys) but
+    # the loaded model expects 16 features, we must enrich on the fly.
+    if isinstance(features_obj, dict):
+        enriched = dict(features_obj)
+
+        # Add is_peak_hour if missing (computed from dep_hour)
+        if "is_peak_hour" in cols and "is_peak_hour" not in enriched:
+            h = int(enriched.get("dep_hour") or 0)
+            enriched["is_peak_hour"] = 1 if (7 <= h <= 9 or 17 <= h <= 20) else 0
+
+        # Add rolling features if any are missing and db is available
+        rolling_needed = [c for c in cols if c not in enriched and c in (
+            "route_avg_delay_hist", "airline_avg_delay_hist", "hour_avg_delay_hist",
+            "route_flight_count", "airline_flight_count", "airport_departure_count",
+            "dep_month", "dep_day_of_week",
+        )]
+        if rolling_needed and db is not None:
+            try:
+                from app.ml.rolling_features import get_rolling_features_for_inference
+                from datetime import date
+                dep_iata    = enriched.get("dep_iata") or enriched.get("dep_airport")
+                arr_iata    = enriched.get("arr_iata") or enriched.get("arr_airport")
+                airline_iata = enriched.get("airline_iata") or enriched.get("airline")
+                dep_hour    = int(enriched.get("dep_hour") or 0)
+                rolling = get_rolling_features_for_inference(
+                    dep_iata=dep_iata, arr_iata=arr_iata,
+                    airline_iata=airline_iata, dep_hour=dep_hour,
+                    flight_date=date.today(), db=db,
+                )
+                for k, v in rolling.items():
+                    if k not in enriched:
+                        enriched[k] = v
+            except Exception as enrich_err:
+                logger.debug(f"[PredictionService] Rolling feature enrichment failed: {enrich_err}")
+                # Fill missing rolling features with 0
+                for c in rolling_needed:
+                    enriched.setdefault(c, 0.0)
+
+        features_obj = enriched
+    # ──────────────────────────────────────────────────────────────────
+
     features = _extract_features(features_obj, cols)
     key = _cache_key(features)
 
@@ -331,7 +493,6 @@ def _run_prediction(
 
     _prediction_cache[key] = result
 
-    # Persist asynchronously-safe (best-effort)
     _persist_prediction(result, db, flight_id=flight_id, flight_number=flight_number)
 
     return result

@@ -97,14 +97,16 @@ def reconcile_snapshot(
     snap: AEFlightSnapshot,
     fa_data: dict,
     db: Session,
+    fa_call_reason: str = "",
 ) -> dict:
     """
     Apply FlightAware enrichment data to an existing AEFlightSnapshot row.
 
     Parameters:
-      snap    — ORM row for the existing AE snapshot (will be modified in-place)
-      fa_data — normalized dict returned by normalize_fa_flight()
-      db      — SQLAlchemy session (used to flush the update)
+      snap           — ORM row for the existing AE snapshot (will be modified in-place)
+      fa_data        — normalized dict returned by normalize_fa_flight()
+      db             — SQLAlchemy session (used to flush the update)
+      fa_call_reason — why FA was called (e.g. 'ae_dep_actual_missing'); stored on the row
 
     Returns:
       {
@@ -141,15 +143,31 @@ def reconcile_snapshot(
             f"status: {old_status} → {fa_status}"
         )
 
-    # ── 2. dep_actual (only if AE has no value yet) ────────────────────────────
+    # ── 2. dep_actual — preserve AE original, then apply FA if AE is missing ──
     if snap.dep_actual is None and fa_data.get("dep_actual") is not None:
+        # Preserve the original AE value (None in this case, stored for audit clarity)
+        if snap.ae_dep_actual is None:
+            snap.ae_dep_actual = snap.dep_actual  # will be None, stored for schema completeness
         snap.dep_actual = fa_data["dep_actual"]
+        snap.displayed_dep_source = "flightaware"
         changed_fields.append("dep_actual")
+        changed_fields.append("displayed_dep_source")
+    elif snap.dep_actual is not None and snap.displayed_dep_source is None:
+        # Mark existing value as AE-sourced
+        snap.displayed_dep_source = "aviation_edge"
+        changed_fields.append("displayed_dep_source")
 
-    # ── 3. arr_actual (only if AE has no value yet) ────────────────────────────
+    # ── 3. arr_actual — same pattern ──────────────────────────────────────────
     if snap.arr_actual is None and fa_data.get("arr_actual") is not None:
+        if snap.ae_arr_actual is None:
+            snap.ae_arr_actual = snap.arr_actual
         snap.arr_actual = fa_data["arr_actual"]
+        snap.displayed_arr_source = "flightaware"
         changed_fields.append("arr_actual")
+        changed_fields.append("displayed_arr_source")
+    elif snap.arr_actual is not None and snap.displayed_arr_source is None:
+        snap.displayed_arr_source = "aviation_edge"
+        changed_fields.append("displayed_arr_source")
 
     # ── 4. dep_estimated (if FA is fresher than current collected_at) ──────────
     fa_dep_est = _tz(fa_data.get("dep_estimated"))
@@ -192,7 +210,53 @@ def reconcile_snapshot(
     # ── 7. NEVER touch dep_scheduled / arr_scheduled ───────────────────────────
     # (Enforced by not including them in the reconciliation logic above.)
 
-    # ── 8. Audit metadata (always update on any enrichment attempt) ────────────
+    # ── 8. Gate / terminal enrichment (FA-sourced, kept separate from AE values) ─
+    fa_dep_gate     = fa_data.get("dep_gate")
+    fa_arr_gate     = fa_data.get("arr_gate")
+    fa_dep_terminal = fa_data.get("dep_terminal")
+    fa_arr_terminal = fa_data.get("arr_terminal")
+
+    if fa_dep_gate and not snap.fa_dep_gate:
+        snap.fa_dep_gate = fa_dep_gate
+        changed_fields.append("fa_dep_gate")
+        # Also backfill the AE dep_gate if it was empty (best-available value)
+        if not snap.dep_gate:
+            snap.dep_gate = fa_dep_gate
+            changed_fields.append("dep_gate")
+        logger.info(
+            f"[FA GATE] flight={snap.flight_number} dep_gate={fa_dep_gate} "
+            f"(source=flightaware, reason={fa_call_reason or 'enrichment'})"
+        )
+
+    if fa_arr_gate and not snap.fa_arr_gate:
+        snap.fa_arr_gate = fa_arr_gate
+        changed_fields.append("fa_arr_gate")
+        if not snap.arr_gate:
+            snap.arr_gate = fa_arr_gate
+            changed_fields.append("arr_gate")
+
+    if fa_dep_terminal and not snap.fa_dep_terminal:
+        snap.fa_dep_terminal = fa_dep_terminal
+        changed_fields.append("fa_dep_terminal")
+        if not snap.dep_terminal:
+            snap.dep_terminal = fa_dep_terminal
+            changed_fields.append("dep_terminal")
+
+    if fa_arr_terminal and not snap.fa_arr_terminal:
+        snap.fa_arr_terminal = fa_arr_terminal
+        changed_fields.append("fa_arr_terminal")
+        if not snap.arr_terminal:
+            snap.arr_terminal = fa_arr_terminal
+            changed_fields.append("arr_terminal")
+
+    # ── 9. Cooldown / call tracking (always update) ───────────────────────────
+    snap.fa_last_called_at   = now
+    snap.fa_call_count       = (snap.fa_call_count or 0) + 1
+    snap.fa_call_reason      = fa_call_reason or "enrichment"
+    # Clear the verification flag — FA was just called for this flight
+    snap.needs_fa_verification = False
+
+    # ── 10. Audit metadata (always update on any enrichment attempt) ───────────
     ident_used = fa_data.get("flight_number") or snap.flight_number
     snap.last_verified_by = "flightaware"
     snap.last_verified_at = now
@@ -205,27 +269,32 @@ def reconcile_snapshot(
         "status_from_fa":  fa_data.get("fa_status_raw") or "",
         "changed_fields":  changed_fields,
         "enriched_at":     now.isoformat(),
+        "call_reason":     fa_call_reason or "enrichment",
+        "dep_gate_from_fa":    fa_dep_gate,
+        "arr_gate_from_fa":    fa_arr_gate,
+        "dep_terminal_from_fa": fa_dep_terminal,
+        "arr_terminal_from_fa": fa_arr_terminal,
     }
     snap.provider_sources = existing_sources
 
-    # ── 9. Raw FA payload storage ──────────────────────────────────────────────
+    # ── 11. Raw FA payload storage ─────────────────────────────────────────────
     raw = fa_data.get("_raw")
     if raw is not None:
         snap.raw_flightaware_payload = raw
 
-    # ── 10. Flush to DB ────────────────────────────────────────────────────────
+    # ── 12. Flush to DB ────────────────────────────────────────────────────────
     was_enriched = len(changed_fields) > 0
+    db.add(snap)
     if was_enriched:
-        db.add(snap)
         logger.info(
             f"[FA ENRICHED] flight={snap.flight_number} airport={snap.airport_iata} "
-            f"direction={snap.direction} changed={changed_fields}"
+            f"direction={snap.direction} reason={fa_call_reason or 'enrichment'} "
+            f"changed={changed_fields}"
         )
     else:
-        # Still update audit fields so we know we checked
-        db.add(snap)
         logger.debug(
-            f"[FA HIT] flight={snap.flight_number} — no field changes needed (data already current)"
+            f"[FA HIT] flight={snap.flight_number} — no field changes needed "
+            f"(reason={fa_call_reason or 'enrichment'}, data already current)"
         )
 
     return {

@@ -1,254 +1,386 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Zap, CheckCircle, Clock, AlertTriangle, Navigation, TrendingUp, Users, RefreshCw, ChevronDown } from 'lucide-react';
-import { useAirport } from '../../context/AirportContext';
-import { apiGetAllAiSuggestions } from '../../services/adminApi';
+import {
+    Zap, CheckCircle, Clock, AlertTriangle, Navigation, TrendingUp,
+    Users, RefreshCw, ChevronDown, User, Calendar, ShieldAlert
+} from 'lucide-react';
+import { apiGetAiAlerts } from '../../services/adminApi';
+import { useAdminTheme } from '../../hooks/useAdminPrefs';
 
-interface Suggestion {
-    id: string;
-    priority: 'high' | 'medium' | 'low';
-    category: string;
-    title: string;
-    message: string;
-    recommendedAction: string;
-    flightNumber?: string | null;
-    airportIata?: string | null;
+interface AIAlert {
+    flight_number: string;
+    airport_iata: string;
+    airport_name: string;
+    risk_pct: number;
+    cause: string;
+    recommendation: string;
+    decision: string;
+    acted_by_admin_name: string | null;
+    decided_at: string | null;
+    created_at: string | null;
     route?: string | null;
-    predictedDelay?: number | null;
-    createdAt: string;
-    source: string;
+    delay_formatted?: string | null;
 }
 
-interface SuggestionSummary {
-    totalSuggestions: number;
-    highPriority: number;
-    mediumPriority: number;
-    lowPriority: number;
-    airportsScanned?: string[];
-    generatedAt: string;
-}
+const AIRPORTS = ['ALL', 'TUN', 'MIR', 'DJE', 'NBE'] as const;
+type AirportFilter = typeof AIRPORTS[number];
 
-const PRIORITY_CONFIG = {
-    high:   { color: '#EF4444', bg: 'rgba(239,68,68,0.08)',  border: 'rgba(239,68,68,0.22)',  label: 'HIGH' },
-    medium: { color: '#F59E0B', bg: 'rgba(245,158,11,0.08)', border: 'rgba(245,158,11,0.22)', label: 'MED' },
-    low:    { color: '#22C55E', bg: 'rgba(34,197,94,0.06)',  border: 'rgba(34,197,94,0.18)',  label: 'LOW' },
+// Theme-aware color configurations for the airports
+const AIRPORT_THEMES: Record<
+    string,
+    {
+        dark: { bg: string; color: string; border: string };
+        light: { bg: string; color: string; border: string };
+    }
+> = {
+    TUN: {
+        dark: { bg: 'rgba(59, 130, 246, 0.12)', color: '#60A5FA', border: 'rgba(59, 130, 246, 0.3)' },
+        light: { bg: 'rgba(37, 99, 235, 0.08)', color: '#2563EB', border: 'rgba(37, 99, 235, 0.2)' }
+    },
+    MIR: {
+        dark: { bg: 'rgba(139, 92, 246, 0.12)', color: '#A78BFA', border: 'rgba(139, 92, 246, 0.3)' },
+        light: { bg: 'rgba(124, 58, 237, 0.08)', color: '#7C3AED', border: 'rgba(124, 58, 237, 0.2)' }
+    },
+    DJE: {
+        dark: { bg: 'rgba(236, 72, 153, 0.12)', color: '#F472B6', border: 'rgba(236, 72, 153, 0.3)' },
+        light: { bg: 'rgba(219, 39, 119, 0.08)', color: '#DB2677', border: 'rgba(219, 39, 119, 0.2)' }
+    },
+    NBE: {
+        dark: { bg: 'rgba(20, 184, 166, 0.12)', color: '#2DD4BF', border: 'rgba(20, 184, 166, 0.3)' },
+        light: { bg: 'rgba(13, 148, 136, 0.08)', color: '#0D9488', border: 'rgba(13, 148, 136, 0.2)' }
+    },
+    default: {
+        dark: { bg: 'rgba(255, 255, 255, 0.08)', color: '#9CA3AF', border: 'rgba(255, 255, 255, 0.15)' },
+        light: { bg: 'rgba(15, 23, 42, 0.06)', color: '#475569', border: 'rgba(15, 23, 42, 0.12)' }
+    }
 };
 
-const CATEGORY_ICONS: Record<string, any> = {
-    delay:               AlertTriangle,
-    coordination:        Users,
-    congestion:          TrendingUp,
-    prediction:          Zap,
-    route_reliability:   Navigation,
-    airline_reliability: Navigation,
-    operational:         Clock,
-};
-
-function formatDelay(min: number | null | undefined) {
-    if (!min) return null;
-    const h = Math.floor(min / 60);
-    const m = min % 60;
-    return h > 0 ? `${h}h ${m}m` : `${m}m`;
+function formatDateTime(iso: string | null) {
+    if (!iso) return '—';
+    try {
+        const d = new Date(iso);
+        const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+        const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+        return `${dateStr}, ${timeStr}`;
+    } catch {
+        return '—';
+    }
 }
 
-function formatTime(iso: string) {
-    try { return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); }
-    catch { return '—'; }
-}
+export default function SuperAdminAIAlerts({ selectedDate }: { selectedDate: Date }) {
+    const [theme] = useAdminTheme();
+    const isLight = theme === 'light';
 
-/**
- * SuperAdminAIAlerts
- * ===================
- * Displays AI Operational Suggestions across all Tunisian airports for super admin.
- * Suggestions are generated from real DB conditions — no hardcoded text.
- */
-export default function SuperAdminAIAlerts() {
-    const { selectedAirport } = useAirport();
-    const airportIata = selectedAirport?.iata || '';
+    const [alerts, setAlerts] = useState<AIAlert[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [activeFilter, setActiveFilter] = useState<AirportFilter>('ALL');
+    const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+    const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
 
-    const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-    const [summary, setSummary] = useState<SuggestionSummary | null>(null);
-    const [loading, setLoading] = useState(false);
-    const [expanded, setExpanded] = useState<Set<string>>(new Set());
-    const [filterPriority, setFilterPriority] = useState<'all' | 'high' | 'medium' | 'low'>('all');
-
-    const fetchSuggestions = useCallback(async () => {
+    const fetchAlerts = useCallback(async () => {
         setLoading(true);
-        const iata = airportIata || null;
-        const { data, error } = await apiGetAllAiSuggestions(iata, null);
+        const { data, error } = await apiGetAiAlerts('', 'approved');
         if (!error && data) {
-            setSuggestions(data.suggestions || []);
-            setSummary(data.summary || null);
+            const sorted = [...data].sort((a, b) => {
+                const timeA = new Date(a.decided_at || a.created_at || 0).getTime();
+                const timeB = new Date(b.decided_at || b.created_at || 0).getTime();
+                return timeB - timeA;
+            });
+            setAlerts(sorted);
+            setLastRefreshed(new Date());
         }
         setLoading(false);
-    }, [airportIata]);
+    }, []);
 
     useEffect(() => {
-        fetchSuggestions();
-        const iv = setInterval(fetchSuggestions, 300_000);
+        fetchAlerts();
+        const iv = setInterval(fetchAlerts, 30_000);
         return () => clearInterval(iv);
-    }, [fetchSuggestions]);
+    }, [fetchAlerts]);
 
-    const toggleExpanded = (id: string) => {
-        setExpanded(prev => {
+    const toggleExpand = (cardKey: string) => {
+        setExpandedCards(prev => {
             const next = new Set(prev);
-            next.has(id) ? next.delete(id) : next.add(id);
+            next.has(cardKey) ? next.delete(cardKey) : next.add(cardKey);
             return next;
         });
     };
 
-    const visible = filterPriority === 'all'
-        ? suggestions
-        : suggestions.filter(s => s.priority === filterPriority);
+    const filteredAlerts = activeFilter === 'ALL'
+        ? alerts
+        : alerts.filter(a => a.airport_iata === activeFilter);
 
-    const highCount = (summary?.highPriority) || 0;
+    const getCountForFilter = (filter: AirportFilter) => {
+        if (filter === 'ALL') return alerts.length;
+        return alerts.filter(a => a.airport_iata === filter).length;
+    };
 
     return (
         <div className="ai-alerts-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
             {/* Header */}
-            <div className="ai-alerts-panel__header" style={{ flexShrink: 0 }}>
+            <div className="ai-alerts-panel__header" style={{ flexShrink: 0, borderBottom: '1px solid var(--adm-border)' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-                    <Zap size={15} style={{ color: '#F59E0B' }} />
-                    <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>AI Operational Suggestions</span>
-                    {highCount > 0 && (
+                    <Zap size={15} style={{ color: 'var(--adm-accent)' }} />
+                    <span style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--adm-text)' }}>
+                        Approved AI Recommendations
+                    </span>
+                    {alerts.length > 0 && (
                         <span style={{
-                            background: '#EF4444', color: '#fff', borderRadius: 999,
-                            fontSize: '0.62rem', fontWeight: 800, padding: '1px 6px', minWidth: 18, textAlign: 'center'
-                        }}>{highCount}</span>
+                            background: 'var(--adm-accent-light)',
+                            color: 'var(--adm-accent)',
+                            borderRadius: 999,
+                            fontSize: '0.62rem',
+                            fontWeight: 800,
+                            padding: '1px 6px',
+                            border: '1px solid var(--adm-accent-light)'
+                        }}>
+                            {alerts.length} Approved
+                        </span>
                     )}
                 </div>
-                <button onClick={fetchSuggestions}
+                <button onClick={fetchAlerts}
                     style={{ background: 'none', border: 'none', color: 'var(--adm-text-sub)', cursor: 'pointer', padding: 4, borderRadius: 6 }}
-                    title="Refresh">
-                    <RefreshCw size={13} style={{ opacity: loading ? 0.4 : 1 }} />
+                    title="Refresh Feed">
+                    <RefreshCw size={13} style={{ opacity: loading ? 0.4 : 1 }} className={loading ? 'animate-spin' : ''} />
                 </button>
             </div>
 
-            {/* Priority filter */}
-            {summary && (
-                <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--adm-border)', display: 'flex', gap: 6, flexWrap: 'wrap', flexShrink: 0 }}>
-                    {(['all', 'high', 'medium', 'low'] as const).map(p => {
-                        const cfg = p === 'all' ? null : PRIORITY_CONFIG[p];
-                        const count = p === 'all' ? summary.totalSuggestions
-                            : p === 'high' ? summary.highPriority
-                            : p === 'medium' ? summary.mediumPriority
-                            : summary.lowPriority;
-                        const active = filterPriority === p;
-                        return (
-                            <button key={p} onClick={() => setFilterPriority(p)} style={{
-                                padding: '2px 8px', borderRadius: 999,
-                                border: `1px solid ${active ? (cfg?.border || 'var(--adm-accent)') : 'var(--adm-border)'}`,
-                                background: active ? (cfg?.bg || 'rgba(245,158,11,0.08)') : 'transparent',
-                                color: active ? (cfg?.color || 'var(--adm-accent)') : 'var(--adm-text-sub)',
-                                fontSize: '0.65rem', fontWeight: 700, cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.05em'
+            {/* Airport Filter Tabs */}
+            <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--adm-border)', display: 'flex', gap: 5, flexWrap: 'wrap', flexShrink: 0, background: 'rgba(255,255,255,0.01)' }}>
+                {AIRPORTS.map(filter => {
+                    const active = activeFilter === filter;
+                    const count = getCountForFilter(filter);
+                    return (
+                        <button
+                            key={filter}
+                            onClick={() => setActiveFilter(filter)}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 4,
+                                padding: '3px 9px',
+                                borderRadius: 999,
+                                border: `1px solid ${active ? 'var(--adm-accent)' : 'var(--adm-border)'}`,
+                                background: active ? 'var(--adm-accent-light)' : 'transparent',
+                                color: active ? 'var(--adm-accent)' : 'var(--adm-text-sub)',
+                                fontSize: '0.68rem',
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s',
+                            }}
+                        >
+                            <span>{filter}</span>
+                            <span style={{
+                                fontSize: '0.58rem',
+                                background: active ? 'var(--adm-accent-glow)' : 'var(--adm-input-bg)',
+                                color: active ? 'var(--adm-accent)' : 'var(--adm-text-sub)',
+                                padding: '1px 4px',
+                                borderRadius: 4,
+                                minWidth: 12,
+                                textAlign: 'center'
                             }}>
-                                {p === 'all' ? `All (${count})` : `${p} (${count})`}
-                            </button>
-                        );
-                    })}
-                </div>
-            )}
+                                {count}
+                            </span>
+                        </button>
+                    );
+                })}
+            </div>
 
-            {/* List */}
-            <div className="ai-alerts-panel__list" style={{ flex: 1, overflowY: 'auto' }}>
-                {loading && (
-                    <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--adm-text-sub)', fontSize: '0.78rem' }}>
-                        <RefreshCw size={18} style={{ opacity: 0.4, marginBottom: 8 }} /><br />
-                        Scanning all airports…
+            {/* Recommendations Feed List */}
+            <div className="ai-alerts-panel__list" style={{ flex: 1, overflowY: 'auto', padding: '0.75rem' }}>
+                {loading && alerts.length === 0 && (
+                    <div style={{ padding: '2rem 1.5rem', textAlign: 'center', color: 'var(--adm-text-sub)', fontSize: '0.76rem' }}>
+                        <RefreshCw size={18} style={{ opacity: 0.5, marginBottom: 8 }} className="animate-spin" /><br />
+                        Loading approved recommendations...
                     </div>
                 )}
 
-                {!loading && visible.length === 0 && (
-                    <div className="ai-alerts-panel__empty">
-                        <CheckCircle size={24} style={{ color: '#22C55E' }} />
-                        <p style={{ fontWeight: 600, marginTop: 8, marginBottom: 4 }}>No operational AI suggestions</p>
-                        <p style={{ fontSize: '0.72rem', color: 'var(--adm-text-sub)', margin: 0 }}>
-                            No AI suggestions for the selected period.
+                {!loading && filteredAlerts.length === 0 && (
+                    <div className="ai-alerts-panel__empty" style={{ padding: '2rem 1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                        <CheckCircle size={24} style={{ color: '#22C55E', opacity: 0.8 }} />
+                        <p style={{ fontWeight: 600, fontSize: '0.78rem', marginTop: 8, marginBottom: 4, color: 'var(--adm-text)' }}>
+                            No approved recommendations found
+                        </p>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--adm-text-sub)', margin: 0, textAlign: 'center' }}>
+                            {activeFilter === 'ALL'
+                                ? 'Operational recommendations approved by airport admins will appear here.'
+                                : `No approvals have been recorded for ${activeFilter} yet.`}
                         </p>
                     </div>
                 )}
 
-                {!loading && visible.map(s => {
-                    const cfg = PRIORITY_CONFIG[s.priority] || PRIORITY_CONFIG.low;
-                    const Icon = CATEGORY_ICONS[s.category] || AlertTriangle;
-                    const isExpanded = expanded.has(s.id);
-                    const delayStr = formatDelay(s.predictedDelay);
+                {filteredAlerts.map((a, index) => {
+                    const cardKey = `${a.airport_iata}-${a.flight_number}-${index}`;
+                    const isExpanded = expandedCards.has(cardKey);
+                    const riskKey = a.risk_pct >= 70 ? 'high' : a.risk_pct >= 40 ? 'medium' : 'low';
+
+                    // Theme-aware risk parameters
+                    const riskColor = riskKey === 'high' ? '#EF4444' : riskKey === 'medium' ? 'var(--adm-accent)' : '#22C55E';
+                    const riskBg = riskKey === 'high' ? 'rgba(239, 68, 68, 0.08)' : riskKey === 'medium' ? 'var(--adm-accent-light)' : 'rgba(34, 197, 94, 0.06)';
+                    const riskBorder = riskKey === 'high' ? 'rgba(239, 68, 68, 0.25)' : riskKey === 'medium' ? 'rgba(234, 88, 12, 0.25)' : 'rgba(34, 197, 94, 0.25)';
+                    const riskLabel = riskKey === 'high' ? 'HIGH RISK' : riskKey === 'medium' ? 'MODERATE' : 'LOW RISK';
+
+                    const apTheme = AIRPORT_THEMES[a.airport_iata] || AIRPORT_THEMES.default;
+                    const apColor = isLight ? apTheme.light : apTheme.dark;
 
                     return (
-                        <div key={s.id}
-                            className="ai-alert-card"
-                            style={{ background: cfg.bg, border: `1px solid ${cfg.border}`, cursor: 'pointer' }}
-                            onClick={() => toggleExpanded(s.id)}>
-                            {/* Top row */}
-                            <div className="ai-alert-card__top" style={{ gap: 8, alignItems: 'flex-start' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
-                                    <Icon size={13} style={{ color: cfg.color, flexShrink: 0, marginTop: 1 }} />
-                                    <div>
-                                        <span className="ai-alert-card__title" style={{ color: 'var(--adm-text)', fontWeight: 700, fontSize: '0.76rem', lineHeight: 1.3 }}>
-                                            {s.title}
-                                        </span>
-                                        {s.airportIata && (
-                                            <span style={{ display: 'block', fontSize: '0.65rem', color: 'var(--adm-text-sub)', marginTop: 1 }}>
-                                                {s.airportIata}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
-                                    {delayStr && (
-                                        <span style={{ fontSize: '0.62rem', fontWeight: 700, color: cfg.color, padding: '1px 5px', borderRadius: 5, border: `1px solid ${cfg.border}` }}>
-                                            +{delayStr}
+                        <div
+                            key={cardKey}
+                            style={{
+                                background: 'var(--adm-card)',
+                                border: '1px solid var(--adm-border)',
+                                borderLeft: `4px solid ${riskColor}`,
+                                borderRadius: 10,
+                                padding: '10px 12px',
+                                marginBottom: 10,
+                                cursor: 'pointer',
+                                transition: 'transform 0.15s, border-color 0.15s',
+                                boxShadow: 'var(--adm-shadow)',
+                            }}
+                            onClick={() => toggleExpand(cardKey)}
+                        >
+                            {/* Card Top Section: Badges & Identifiers */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    {/* Airport Badge */}
+                                    <span style={{
+                                        fontSize: '0.62rem',
+                                        fontWeight: 800,
+                                        background: apColor.bg,
+                                        color: apColor.color,
+                                        border: `1px solid ${apColor.border}`,
+                                        padding: '1px 5px',
+                                        borderRadius: 4,
+                                        letterSpacing: '0.02em'
+                                    }}>
+                                        {a.airport_iata}
+                                    </span>
+                                    {/* Flight Badge */}
+                                    <span style={{
+                                        fontFamily: 'monospace',
+                                        fontSize: '0.74rem',
+                                        fontWeight: 700,
+                                        color: 'var(--adm-text)',
+                                        background: 'var(--adm-input-bg)',
+                                        padding: '1px 5px',
+                                        borderRadius: 4,
+                                        border: '1px solid var(--adm-border)'
+                                    }}>
+                                        {a.flight_number}
+                                    </span>
+                                    {/* Route */}
+                                    {a.route && (
+                                        <span style={{ fontSize: '0.68rem', color: 'var(--adm-text-sub)', fontWeight: 600 }}>
+                                            {a.route}
                                         </span>
                                     )}
-                                    <span style={{ fontSize: '0.58rem', fontWeight: 800, letterSpacing: '0.07em', color: cfg.color, padding: '1px 5px', borderRadius: 999, border: `1px solid ${cfg.border}`, textTransform: 'uppercase' }}>
-                                        {cfg.label}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    {/* Delay Info */}
+                                    {a.delay_formatted && (
+                                        <span style={{
+                                            fontSize: '0.65rem',
+                                            fontWeight: 700,
+                                            color: riskColor,
+                                            background: riskBg,
+                                            border: `1px solid ${riskBorder}`,
+                                            padding: '1px 5px',
+                                            borderRadius: 4,
+                                        }}>
+                                            {a.delay_formatted}
+                                        </span>
+                                    )}
+                                    {/* Risk level badge */}
+                                    <span style={{
+                                        fontSize: '0.56rem',
+                                        fontWeight: 800,
+                                        color: riskColor,
+                                        background: riskBg,
+                                        border: `1px solid ${riskBorder}`,
+                                        padding: '1px 5px',
+                                        borderRadius: 999,
+                                        letterSpacing: '0.04em'
+                                    }}>
+                                        {riskLabel}
                                     </span>
-                                    <ChevronDown size={11} style={{ color: 'var(--adm-text-sub)', transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                                    <ChevronDown
+                                        size={12}
+                                        style={{
+                                            color: 'var(--adm-text-sub)',
+                                            transform: isExpanded ? 'rotate(180deg)' : 'none',
+                                            transition: 'transform 0.2s',
+                                            marginLeft: 2
+                                        }}
+                                    />
                                 </div>
                             </div>
 
-                            {/* Context tags */}
-                            {(s.flightNumber || s.route) && (
-                                <div style={{ display: 'flex', gap: 5, marginTop: 5, flexWrap: 'wrap' }}>
-                                    {s.flightNumber && (
-                                        <span style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--adm-text-sub)', background: 'rgba(255,255,255,0.05)', border: '1px solid var(--adm-border)', padding: '1px 5px', borderRadius: 4, fontFamily: 'monospace' }}>
-                                            {s.flightNumber}
-                                        </span>
-                                    )}
-                                    {s.route && (
-                                        <span style={{ fontSize: '0.62rem', color: 'var(--adm-text-sub)', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--adm-border)', padding: '1px 5px', borderRadius: 4 }}>
-                                            {s.route}
-                                        </span>
-                                    )}
+                            {/* Situation Context */}
+                            {a.cause && (
+                                <div style={{ marginTop: 8, fontSize: '0.72rem', color: 'var(--adm-text-sub)', lineHeight: 1.45 }}>
+                                    <span style={{ fontWeight: 600, color: 'var(--adm-text-muted)' }}>Situation: </span>
+                                    {a.cause}
                                 </div>
                             )}
 
-                            {/* Situation */}
-                            <div className="ai-alert-card__issue" style={{ marginTop: 8, fontSize: '0.71rem', lineHeight: 1.5, color: 'var(--adm-text-sub)' }}>
-                                {s.message}
+                            {/* Collapsible Actionable Recommendation */}
+                            <div style={{
+                                marginTop: 8,
+                                padding: '8px 10px',
+                                background: 'var(--adm-input-bg)',
+                                border: '1px solid var(--adm-border)',
+                                borderRadius: 6,
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                                    <span style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--adm-accent)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                                        Approved Action Plan
+                                    </span>
+                                </div>
+                                <p style={{
+                                    margin: 0,
+                                    fontSize: '0.72rem',
+                                    color: 'var(--adm-text)',
+                                    lineHeight: 1.5,
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: isExpanded ? 'none' : 2,
+                                    WebkitBoxOrient: 'vertical',
+                                }}>
+                                    {a.recommendation}
+                                </p>
                             </div>
 
-                            {/* Expanded action */}
-                            {isExpanded && (
-                                <div style={{ marginTop: 8, padding: '7px 9px', background: 'rgba(255,255,255,0.04)', borderRadius: 7, border: '1px solid rgba(255,255,255,0.06)' }}>
-                                    <span style={{ fontSize: '0.6rem', fontWeight: 700, color: cfg.color, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 4 }}>
-                                        Recommended Action
-                                    </span>
-                                    <span style={{ fontSize: '0.71rem', color: 'var(--adm-text)', lineHeight: 1.55 }}>
-                                        {s.recommendedAction}
-                                    </span>
-                                </div>
-                            )}
-
-                            {/* Footer */}
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
-                                <span style={{ fontSize: '0.6rem', color: 'var(--adm-text-sub)', opacity: 0.55 }}>
-                                    {s.source} · {formatTime(s.createdAt)}
+                            {/* Card Footer: Metadata */}
+                            <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginTop: 8,
+                                paddingTop: 6,
+                                borderTop: '1px solid var(--adm-border)',
+                                fontSize: '0.6rem',
+                                color: 'var(--adm-text-muted)'
+                            }}>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                    <User size={10} style={{ opacity: 0.7 }} />
+                                    <span style={{ color: 'var(--adm-text-sub)' }}>{a.acted_by_admin_name || 'System'} ({a.airport_name})</span>
+                                </span>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                    <Calendar size={10} style={{ opacity: 0.7 }} />
+                                    <span style={{ color: 'var(--adm-text-sub)' }}>{formatDateTime(a.decided_at || a.created_at)}</span>
                                 </span>
                             </div>
                         </div>
                     );
                 })}
             </div>
+
+            {/* Footer with last scanned date */}
+            {lastRefreshed && (
+                <div style={{ padding: '0.4rem 0.75rem', borderTop: '1px solid var(--adm-border)', fontSize: '0.62rem', color: 'var(--adm-text-muted)', flexShrink: 0, background: 'rgba(0,0,0,0.02)' }}>
+                    Feed Active · Updated {lastRefreshed.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </div>
+            )}
         </div>
     );
 }

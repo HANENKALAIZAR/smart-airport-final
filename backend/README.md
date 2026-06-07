@@ -46,12 +46,26 @@ uvicorn app.main:app --reload --port 8000
 
 API docs available at: http://localhost:8000/docs
 
-### 5. Train the AI model (first time only)
+### 5. ML Model — Production Training
 
-The trained model files are included in `app/ai/model/`. If you need to retrain:
+> ⚠️ **Do not use `data/legacy/` files for training.** Those files contain synthetic mock data
+> and are archived for historical reference only.
+
+The production ML model is trained automatically every 6 hours by the APScheduler job.
+Training source: **`ae_flight_dataset` PostgreSQL table** (populated by Aviation Edge API ingestion).
+Training pipeline: **`app/ai/train_v2.py`** — multi-model (XGBoost / LightGBM / CatBoost / RandomForest),
+15-feature set with rolling historical statistics, 5-fold time-series cross-validation.
+
+To manually trigger a training run via CLI (development only):
 
 ```bash
-python -m app.ai.train_model
+python -m app.ai.train_v2
+```
+
+To check the active model version and live metrics:
+
+```bash
+curl http://localhost:8000/api/ml/dashboard
 ```
 
 ---
@@ -127,8 +141,11 @@ backend/
 │   │   ├── passenger_rights.py    # EC 261/2004 rights logic
 │   │   └── live_feature_builder.py
 │   └── ai/
-│       ├── train_model.py         # Training script
-│       └── model/                 # Trained model artifacts
+│       ├── train_v2.py           # PRODUCTION training pipeline (15 features, multi-model)
+│       ├── train_ae_dataset.py   # Legacy V1 pipeline (7 features) — kept for reference
+│       ├── mlops_controller.py   # Champion/challenger promotion, drift detection
+│       ├── future_predictions.py # Batch inference (auto-detects V1 vs V2 features)
+│       └── model/                # Trained model artifacts (.pkl, evaluation report)
 ├── migrations/              # Alembic migrations
 ├── tests/                   # Pytest test suite
 ├── database/

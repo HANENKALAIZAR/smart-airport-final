@@ -1,14 +1,15 @@
 """
-[DEPRECATED — kept for reference only]
+[DEPRECATED — kept for historical reference only. DO NOT RUN.]
 ===========================================================
-This file trained on a CSV dataset (data/flights_dataset.csv) using a
-classification+regression pipeline with weather/congestion features.
+This file trained on the legacy mock CSV dataset (data/legacy/flights_dataset.csv).
+The CSV data is synthetic and has been archived to backend/data/legacy/.
 
-It has been SUPERSEDED by:
-  → app/ai/train_ae_dataset.py  (production AE pipeline, 100% real data)
+This file has been SUPERSEDED by:
+  → app/ai/train_v2.py  (ACTIVE production pipeline — 15 features, multi-model,
+                          trained on real AEFlightDataset from Aviation Edge API)
 
 DO NOT invoke this file in production. The active APScheduler auto-retrain
-job calls train_ae_model() from train_ae_dataset.py exclusively.
+job calls train_v2() from train_v2.py via mlops_controller.run_auto_retrain().
 ===========================================================
 
 Smart Airport Operations – XGBoost Model Training (Legacy CSV)
@@ -44,7 +45,7 @@ from app.ai.ml_config import CLASSIFIER_PARAMS, REGRESSOR_PARAMS
 
 # ── Paths ────────────────────────────────────────────────────
 
-DATA_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "flights_dataset.csv"
+DATA_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "legacy" / "flights_dataset.csv"
 MODEL_DIR = Path(__file__).resolve().parent / "model"
 
 FEATURE_COLUMNS = [

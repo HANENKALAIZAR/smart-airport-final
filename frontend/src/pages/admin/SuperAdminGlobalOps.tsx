@@ -408,6 +408,22 @@ export default function SuperAdminGlobalOps() {
     const airports   = kpiData?.airports ?? [];
     const globalData = kpiData?.global   ?? {};
 
+    // Transform/map raw data to chart data with clamped values
+    const chartData = airports.filter(a => a.has_data).map(apt => {
+        const rawOtp = apt.on_time_rate;
+        const rawRel = apt.reliability_score;
+        const otp = Math.min(100, Math.max(0, (typeof rawOtp === 'number' && !isNaN(rawOtp)) ? rawOtp : 0));
+        const rel = Math.min(100, Math.max(0, (typeof rawRel === 'number' && !isNaN(rawRel)) ? rawRel * 100 : 0));
+        return {
+            iata: apt.iata,
+            onTime: otp,
+            reliability: rel,
+        };
+    });
+    console.log("Performance chart raw data", airports);
+    console.log("Performance chart transformed data", chartData);
+
+
     const radarMetrics: RadarMetric[] = airports.length > 0 ? [
         { label: 'OTP',          value: globalData.global_on_time_rate ?? 0 },
         { label: 'Reliability',  value: Math.round((airports.reduce((s, a) => s + (a.reliability_score ?? 0), 0) / Math.max(airports.length, 1)) * 100) },
@@ -435,19 +451,19 @@ export default function SuperAdminGlobalOps() {
                             <span style={{ position: 'absolute', display: 'inline-flex', width: '100%', height: '100%', borderRadius: '50%', background: '#34D399', animation: 'ping 1.5s cubic-bezier(0,0,0.2,1) infinite', opacity: 0.75 }} />
                             <span style={{ position: 'relative', display: 'inline-flex', width: 8, height: 8, borderRadius: '50%', background: '#34D399' }} />
                         </span>
-                        Live{lastUpdated && ` · Updated ${lastUpdated.toLocaleTimeString()}`}
+                        Live{lastUpdated && ` · ${t('globalOps_updated') || 'Updated'} ${lastUpdated.toLocaleTimeString()}`}
                     </div>
                     <h1 style={{ fontSize: '2.75rem', fontWeight: 600, letterSpacing: '-0.03em', color: 'var(--adm-text)', lineHeight: 1.1 }}>
                         {t('globalOps') || 'Global Operations'}{' '}
                         <span style={{ background: 'linear-gradient(135deg,#06b6d4,#22d3ee)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Center</span>
                     </h1>
                     <p style={{ marginTop: 8, maxWidth: 540, fontSize: '0.9rem', color: 'var(--adm-text-muted)' }}>
-                        Multi-airport system monitoring · real-time AI-assisted performance intelligence.
+                        {t('globalOps_subtitle') || 'Multi-airport system monitoring · real-time AI-assisted performance intelligence.'}
                     </p>
                 </div>
                 <button onClick={load} className="admin-btn admin-btn--outline admin-btn--compact">
                     <RefreshCw size={14} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-                    <span>Refresh</span>
+                    <span>{t('refresh') || 'Refresh'}</span>
                 </button>
             </header>
 
@@ -455,7 +471,7 @@ export default function SuperAdminGlobalOps() {
             {error && (
                 <div style={{ marginBottom: '1.5rem', padding: '0.75rem 1rem', borderRadius: 10, background: 'rgba(248,113,113,0.10)', border: '1px solid rgba(248,113,113,0.28)', color: '#FCA5A5', fontSize: '0.84rem', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <AlertTriangle size={15} />
-                    Failed to load: {error}. Ensure the backend is running and you are logged in.
+                    {t('globalOps_failed_load') || 'Failed to load:'} {error}. {t('globalOps_failed_load_hint') || 'Ensure the backend is running and you are logged in.'}
                 </div>
             )}
 
@@ -472,15 +488,15 @@ export default function SuperAdminGlobalOps() {
             <section className="glass-card" style={{ marginBottom: '2rem', overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--adm-border)', padding: '1.25rem 1.5rem' }}>
                     <div>
-                        <h2 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--adm-text)' }}>Airport Performance Overview</h2>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted)', marginTop: 2 }}>Live OTP, delays and AI risk across the network</p>
+                        <h2 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--adm-text)' }}>{t('globalOps_table_title') || 'Airport Performance Overview'}</h2>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted)', marginTop: 2 }}>{t('globalOps_table_subtitle') || 'Live OTP, delays and AI risk across the network'}</p>
                     </div>
                     <span style={{ borderRadius: 999, border: '1px solid var(--adm-border)', background: 'rgba(255,255,255,0.04)', padding: '4px 12px', fontSize: '0.75rem', fontWeight: 500, color: 'var(--adm-text-muted)' }}>
-                        {airports.length} stations
+                        {airports.length} {t('globalOps_stations') || 'stations'}
                     </span>
                 </div>
                 {loading ? (
-                    <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--adm-text-muted)', fontSize: '0.875rem' }}>Loading live data…</div>
+                    <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--adm-text-muted)', fontSize: '0.875rem' }}>{t('loading') || 'Loading…'}</div>
                 ) : airports.length === 0 ? (
                     <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--adm-text-muted)', fontSize: '0.875rem' }}>
                         No data yet. Run <code style={{ color: 'var(--adm-accent)', fontFamily: 'monospace' }}>POST /api/intelligence/run-all</code> to seed the intelligence layer.
@@ -521,7 +537,7 @@ export default function SuperAdminGlobalOps() {
                                                 </div>
                                             </td>
                                             <td style={{ padding: '1rem 1.5rem', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: 'var(--adm-text)' }}>
-                                                {apt.has_data ? apt.total_historical_flights.toLocaleString() : <span style={{ color: 'var(--adm-text-muted)' }}>No data</span>}
+                                                {apt.has_data ? apt.total_historical_flights.toLocaleString() : <span style={{ color: 'var(--adm-text-muted)' }}>{t('no_data') || 'No data'}</span>}
                                             </td>
                                             <td style={{ padding: '1rem 1.5rem', fontVariantNumeric: 'tabular-nums', fontWeight: 600, color: apt.avg_delay_min != null && apt.avg_delay_min > 20 ? '#F87171' : '#F59E0B' }}>
                                                 {apt.avg_delay_min != null ? `${apt.avg_delay_min} min` : '—'}
@@ -560,15 +576,15 @@ export default function SuperAdminGlobalOps() {
                 <div className="glass-card" style={{ padding: '1.5rem' }}>
                     <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                         <div>
-                            <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--adm-text)' }}>Performance Comparison</h3>
-                            <p style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted)', marginTop: 2 }}>On-time percentage vs reliability by station</p>
+                            <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--adm-text)' }}>{t('globalOps_performance_comparison') || 'Performance Comparison'}</h3>
+                            <p style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted)', marginTop: 2 }}>{t('globalOps_performance_comparison_sub') || 'On-time percentage vs reliability by station'}</p>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: '0.75rem' }}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--adm-text-muted)' }}>
-                                <span style={{ width: 10, height: 10, borderRadius: 2, background: 'linear-gradient(90deg,#34D399,#10b981)', display: 'inline-block' }} /> On-Time
+                                <span style={{ width: 10, height: 10, borderRadius: 2, background: 'linear-gradient(90deg,#34D399,#10b981)', display: 'inline-block' }} /> {t('globalOps_legend_on_time') || 'On-Time'}
                             </span>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--adm-text-muted)' }}>
-                                <span style={{ width: 10, height: 10, borderRadius: 2, background: 'linear-gradient(90deg,#06b6d4,#22d3ee)', display: 'inline-block' }} /> Reliability
+                                <span style={{ width: 10, height: 10, borderRadius: 2, background: 'linear-gradient(90deg,#06b6d4,#22d3ee)', display: 'inline-block' }} /> {t('globalOps_legend_reliability') || 'Reliability'}
                             </span>
                         </div>
                     </div>
@@ -581,26 +597,27 @@ export default function SuperAdminGlobalOps() {
                                 ))}
                             </div>
                             {/* Bars */}
-                            <div style={{ position: 'relative', display: 'flex', flex: 1, alignItems: 'flex-end', gap: 24, borderLeft: '1px solid var(--adm-border)', paddingLeft: 16 }}>
+                            <div style={{ position: 'relative', display: 'flex', flex: 1, height: '100%', alignItems: 'stretch', gap: 24, borderLeft: '1px solid var(--adm-border)', paddingLeft: 16 }}>
                                 {/* Horizontal grid lines */}
                                 <div style={{ pointerEvents: 'none', position: 'absolute', inset: 0, marginLeft: 16, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                                     {[0,1,2,3,4].map(i => <div key={i} style={{ borderTop: '1px dashed rgba(255,255,255,0.07)' }} />)}
                                 </div>
                                 {airports.filter(a => a.has_data).map((apt, i) => {
-                                    const otp = apt.on_time_rate ?? 0;
-                                    const rel = apt.reliability_score != null ? apt.reliability_score * 100 : 0;
+                                    const matched = chartData.find(c => c.iata === apt.iata);
+                                    const otp = matched ? matched.onTime : 0;
+                                    const rel = matched ? matched.reliability : 0;
                                     return (
                                         <div key={apt.iata} style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, height: '100%' }}>
-                                            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: '100%', width: '100%', justifyContent: 'center' }}>
+                                            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: '100%', width: '100%', justifyContent: 'center', flexShrink: 0 }}>
                                                 {/* OTP bar */}
-                                                <div style={{ flex: 1, background: 'rgba(255,255,255,0.04)', borderRadius: '4px 4px 0 0', display: 'flex', alignItems: 'flex-end', maxWidth: 20 }}>
+                                                <div style={{ flex: 1, height: '100%', background: 'rgba(255,255,255,0.04)', borderRadius: '4px 4px 0 0', display: 'flex', alignItems: 'flex-end', maxWidth: 20 }}>
                                                     <div
                                                         title={`On-Time: ${otp}%`}
                                                         style={{ width: '100%', background: 'linear-gradient(180deg,#34D399,#10b981)', borderRadius: '3px 3px 0 0', minHeight: 2, height: `${otp}%`, transition: 'height 1s ease-out' }}
                                                     />
                                                 </div>
                                                 {/* Reliability bar */}
-                                                <div style={{ flex: 1, background: 'rgba(255,255,255,0.04)', borderRadius: '4px 4px 0 0', display: 'flex', alignItems: 'flex-end', maxWidth: 20 }}>
+                                                <div style={{ flex: 1, height: '100%', background: 'rgba(255,255,255,0.04)', borderRadius: '4px 4px 0 0', display: 'flex', alignItems: 'flex-end', maxWidth: 20 }}>
                                                     <div
                                                         title={`Reliability: ${rel.toFixed(0)}%`}
                                                         style={{ width: '100%', background: 'linear-gradient(180deg,#06b6d4,#22d3ee)', borderRadius: '3px 3px 0 0', minHeight: 2, height: `${rel}%`, transition: 'height 1s ease-out' }}
@@ -615,7 +632,7 @@ export default function SuperAdminGlobalOps() {
                         </div>
                     ) : (
                         <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--adm-text-muted)', fontSize: '0.875rem' }}>
-                            {loading ? 'Loading…' : 'No data — run the intelligence pipeline first.'}
+                            {loading ? (t('loading') || 'Loading…') : (t('globalOps_no_data_pipeline') || 'No data — run the intelligence pipeline first.')}
                         </div>
                     )}
                 </div>
@@ -623,17 +640,17 @@ export default function SuperAdminGlobalOps() {
                 {/* Radar — Global System Health */}
                 <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '1.5rem' }}>
                     <div style={{ width: '100%', marginBottom: 8 }}>
-                        <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--adm-text)' }}>Global System Health</h3>
-                        <p style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted)', marginTop: 2 }}>Composite operational signals</p>
+                        <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--adm-text)' }}>{t('globalOps_system_health') || 'Global System Health'}</h3>
+                        <p style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted)', marginTop: 2 }}>{t('globalOps_system_health_sub') || 'Composite operational signals'}</p>
                     </div>
                     <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px 0' }}>
                         {radarMetrics.length > 0
                             ? <RadarChart metrics={radarMetrics} size={280} />
-                            : <div style={{ color: 'var(--adm-text-muted)', fontSize: '0.875rem', padding: '2rem' }}>{loading ? 'Loading…' : 'No data available.'}</div>
+                            : <div style={{ color: 'var(--adm-text-muted)', fontSize: '0.875rem', padding: '2rem' }}>{loading ? (t('loading') || 'Loading…') : (t('no_data') || 'No data available.')}</div>
                         }
                     </div>
                     <div style={{ marginTop: 8, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 12, border: '1px solid var(--adm-border)', background: 'rgba(255,255,255,0.04)', padding: '0.75rem 1rem' }}>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted)' }}>Composite score</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted)' }}>{t('globalOps_composite_score') || 'Composite score'}</span>
                         <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: '1.125rem', fontWeight: 600, color: 'var(--adm-accent)' }}>
                             {radarMetrics.length > 0
                                 ? (radarMetrics.reduce((s, m) => s + m.value, 0) / radarMetrics.length).toFixed(1)

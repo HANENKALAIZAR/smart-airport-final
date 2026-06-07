@@ -83,6 +83,20 @@ async def get_airport_flights(
         if age is not None:
             final_age = age
 
+    from app.models.ae_models import AESyncLog
+    from datetime import timezone
+    from sqlalchemy import func
+
+    last_sync = (
+        db.query(func.max(AESyncLog.finished_at))
+        .filter(
+            AESyncLog.airport_iata == iata,
+            AESyncLog.status.in_(["ok", "partial"]),
+        )
+        .scalar()
+    )
+    last_sync_iso = last_sync.replace(tzinfo=timezone.utc).isoformat() if last_sync else None
+
     return {
         "airport":        iata,
         "airport_name":   AIRPORTS[iata],
@@ -94,6 +108,7 @@ async def get_airport_flights(
         "api_calls_made": api_calls_made,
         "source":         "api" if api_calls_made > 0 else "db_cache",
         "flights":        all_flights,
+        "last_sync_time": last_sync_iso,
     }
 
 

@@ -1,8 +1,12 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
 import LanguageDetector from "i18next-browser-languagedetector";
+import enFlat from "./en";
+import frFlat from "./fr";
+import arFlat from "./ar";
 
 const en = {
+  ...enFlat,
   nav: {
     dashboard: "Dashboard",
     flights: "My Flights",
@@ -36,6 +40,9 @@ const en = {
     duration: "Duration",
     distance: "Distance",
     aircraft: "Aircraft",
+    status: "Status",
+    estimated: "Estimated",
+    airline: "Airline",
   },
   dashboard: {
     greeting: "Welcome back",
@@ -150,10 +157,28 @@ const en = {
     sugg_rights: "What are my rights?",
     sugg_hotels: "Hotels near the airport",
     sugg_alt: "Find an alternative flight"
+  },
+  explore: {
+    title: "Explore",
+    explore_airport: "Explore the airport",
+    sections: "{{count}} sections",
+    about: "About Airport",
+    about_desc: "Infrastructure, airlines and destinations",
+    faq: "FAQ",
+    faq_desc: "Answers to traveller questions",
+    contact: "Contact",
+    contact_desc: "Reach each airport directly",
+    featured: "Featured",
+    assistant_title: "Smart AI Assistant",
+    assistant_desc: "Ask anything about flights, services or your rights — instant answers in 3 languages.",
+    try_assistant: "Try the assistant",
+    live_info: "Live information across 4 Tunisian airports",
+    browse_all: "Browse all"
   }
 };
 
 const fr = {
+  ...frFlat,
   nav: {
     dashboard: "Tableau de bord",
     flights: "Mes vols",
@@ -187,6 +212,9 @@ const fr = {
     duration: "Durée",
     distance: "Distance",
     aircraft: "Appareil",
+    status: "Statut",
+    estimated: "Estimé",
+    airline: "Compagnie",
   },
   dashboard: {
     greeting: "Bon retour",
@@ -301,10 +329,28 @@ const fr = {
     sugg_rights: "Quels sont mes droits ?",
     sugg_hotels: "Hôtels près de l'aéroport",
     sugg_alt: "Trouver un vol alternatif"
+  },
+  explore: {
+    title: "Explorer",
+    explore_airport: "Explorer l'aéroport",
+    sections: "{{count}} rubriques",
+    about: "À propos de l'aéroport",
+    about_desc: "Infrastructures, compagnies et destinations",
+    faq: "FAQ",
+    faq_desc: "Réponses aux questions des voyageurs",
+    contact: "Contact",
+    contact_desc: "Contacter chaque aéroport directement",
+    featured: "À la une",
+    assistant_title: "Assistant IA Intelligent",
+    assistant_desc: "Posez n'importe quelle question sur les vols, services ou vos droits — réponses instantanées en 3 langues.",
+    try_assistant: "Essayer l'assistant",
+    live_info: "Informations en direct sur 4 aéroports tunisiens",
+    browse_all: "Tout parcourir"
   }
 };
 
 const ar = {
+  ...arFlat,
   nav: {
     dashboard: "لوحة التحكم",
     flights: "رحلاتي",
@@ -338,6 +384,9 @@ const ar = {
     duration: "المدة",
     distance: "المسافة",
     aircraft: "الطائرة",
+    status: "الحالة",
+    estimated: "المتوقعة",
+    airline: "شركة الطيران",
   },
   dashboard: {
     greeting: "أهلاً بعودتك",
@@ -452,6 +501,23 @@ const ar = {
     sugg_rights: "ما هي حقوقي؟",
     sugg_hotels: "فنادق بالقرب من المطار",
     sugg_alt: "البحث عن رحلة بديلة"
+  },
+  explore: {
+    title: "استكشف",
+    explore_airport: "استكشف المطار",
+    sections: "{{count}} أقسام",
+    about: "عن المطار",
+    about_desc: "البنية التحتية، شركات الطيران والوجهات",
+    faq: "الأسئلة الشائعة",
+    faq_desc: "إجابات على أسئلة المسافرين",
+    contact: "اتصل بنا",
+    contact_desc: "اتصل بكل مطار مباشرة",
+    featured: "مميز",
+    assistant_title: "المساعد الذكي بالذكاء الاصطناعي",
+    assistant_desc: "اسأل عن أي شيء يخص الرحلات أو الخدمات أو حقوقك — إجابات فورية بثلاث لغات.",
+    try_assistant: "جرب المساعد",
+    live_info: "معلومات مباشرة عبر 4 مطارات تونسية",
+    browse_all: "تصفح الكل"
   }
 };
 

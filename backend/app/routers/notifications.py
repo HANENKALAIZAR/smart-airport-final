@@ -116,13 +116,19 @@ def ai_alert_generated(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Airport admin only: persist an AI alert for their airport (no super-admin ping here)."""
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Only airport admins can send this notification.")
+    """Airport admin or super admin: persist an AI alert for an airport."""
+    if current_user.role not in ("admin", "super_admin"):
+        raise HTTPException(status_code=403, detail="Only admins can send this notification.")
 
-    iata = (current_user.airport_iata or "").strip()
-    if not iata:
-        raise HTTPException(status_code=422, detail="Admin airport is missing.")
+    # Super admin may pass airport_iata in body; airport admin always uses their own airport.
+    if current_user.role == "super_admin":
+        iata = (getattr(body, "airport_iata", None) or "").strip()
+        if not iata:
+            raise HTTPException(status_code=422, detail="airport_iata is required in body for super_admin.")
+    else:
+        iata = (current_user.airport_iata or "").strip()
+        if not iata:
+            raise HTTPException(status_code=422, detail="Admin airport is missing.")
 
     airport_name = AIRPORT_DISPLAY.get(iata, iata)
 
@@ -146,6 +152,8 @@ def ai_alert_generated(
             acted_by_admin_id=None,
             decided_at=None,
             created_at=datetime.now(timezone.utc),
+            route=(body.route or "").strip() or None,
+            delay_formatted=(body.delay_formatted or "").strip() or None,
         )
     )
     db.commit()
@@ -158,14 +166,24 @@ def ai_alert_action(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Airport admin only: persist decision + notify super admins with a summary ping."""
-    if current_user.role != "admin":
-        raise HTTPException(status_code=403, detail="Only airport admins can send this notification.")
-    iata = (current_user.airport_iata or "").strip()
+    """Airport admin or super admin: persist decision.
+    Super admins are notified ONLY when action == 'approved'.
+    """
+    if current_user.role not in ("admin", "super_admin"):
+        raise HTTPException(status_code=403, detail="Only admins can send this notification.")
+
+    # Resolve airport IATA
+    if current_user.role == "super_admin":
+        iata = (getattr(body, "airport_iata", None) or "").strip()
+        if not iata:
+            iata = ""
+    else:
+        iata = (current_user.airport_iata or "").strip()
+
     airport_name = AIRPORT_DISPLAY.get(iata, iata or "Unknown airport")
-    act = "Approved" if body.action == "approved" else "Rejected"
     fn = (body.flight_number or "").strip() or "Flight"
 
+    # Look up the persisted alert
     alert = (
         db.query(AIAlert)
         .filter(AIAlert.airport_iata == iata, AIAlert.flight_number == fn)
@@ -178,22 +196,44 @@ def ai_alert_action(
     alert.decision = body.action
     alert.acted_by_admin_id = current_user.id
     alert.decided_at = datetime.now(timezone.utc)
+    if getattr(body, "route", None):
+        alert.route = body.route
+    if getattr(body, "delay_formatted", None):
+        alert.delay_formatted = body.delay_formatted
     db.commit()
 
-    msg = f"AI Alert for {fn} has been {act} by {current_user.full_name} — {airport_name}."
-    notify_all_super_admins(
-        db,
-        kind="ai_alert_action",
-        body=msg,
-        context={
-            "flight_number": fn,
-            "action": body.action,
-            "admin_id": current_user.id,
-            "airport_iata": iata,
-            "airport_name": airport_name,
-        },
-    )
-    db.commit()
+    # ── Notify super admins ONLY on approval ──────────────────
+    if body.action == "approved":
+        admin_name  = current_user.full_name
+        route_str   = (body.route or "").strip() or (alert.route or "").strip() or "—"
+        delay_str   = (body.delay_formatted or "").strip() or (alert.delay_formatted or "").strip() or "—"
+        rec_text    = (alert.recommendation or "").strip() or "—"
+
+        notify_body = (
+            f"Admin {admin_name} from {airport_name} approved an AI operational recommendation.\n\n"
+            f"Flight: {fn}\n"
+            f"Route: {route_str}\n"
+            f"Delay: {delay_str}\n"
+            f"Recommendation: {rec_text}"
+        )
+        notify_all_super_admins(
+            db,
+            kind="ai_alert_approved",
+            body=notify_body,
+            context={
+                "flight_number": fn,
+                "action": "approved",
+                "admin_name": admin_name,
+                "admin_id": current_user.id,
+                "airport_iata": iata,
+                "airport_name": airport_name,
+                "route": route_str,
+                "delay_formatted": delay_str,
+                "recommendation": rec_text,
+            },
+        )
+        db.commit()
+
     return {"ok": True}
 
 
@@ -205,24 +245,31 @@ def list_ai_alerts(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Super Admin: list AI alerts for the selected airport.
-    Airport Admin: allowed (filtered to own airport) for future UI reuse.
+    Super Admin: list AI alerts across all airports (or filtered by airport_iata).
+    Airport Admin: always filtered to their own airport.
+    Returns airport_iata in each row so the UI can filter client-side.
     """
     if current_user.role not in ("super_admin", "admin"):
         raise HTTPException(status_code=403, detail="Forbidden.")
 
+    # Airport admin is always scoped to their own airport
     if current_user.role == "admin":
         airport_iata = current_user.airport_iata or ""
 
     airport_iata = (airport_iata or "").strip()
-    if not airport_iata:
+
+    # Super admin: if no airport specified → return all airports (no 422)
+    # Airport admin: always requires a valid IATA
+    if current_user.role == "admin" and not airport_iata:
         raise HTTPException(status_code=422, detail="airport_iata is required.")
 
-    q = db.query(AIAlert).filter(AIAlert.airport_iata == airport_iata).order_by(AIAlert.created_at.desc())
+    q = db.query(AIAlert).order_by(AIAlert.decided_at.desc(), AIAlert.created_at.desc())
+    if airport_iata:
+        q = q.filter(AIAlert.airport_iata == airport_iata)
     if decision and decision != "all":
         q = q.filter(AIAlert.decision == decision)
 
-    rows = q.limit(200).all()
+    rows = q.limit(500).all()
 
     results = []
     for a in rows:
@@ -230,18 +277,20 @@ def list_ai_alerts(
         if a.acted_by_admin_id:
             acted_user = db.query(User).filter(User.id == a.acted_by_admin_id).first()
             acted_name = acted_user.full_name if acted_user else None
-        ts = a.decided_at or a.created_at
         results.append(
             {
                 "flight_number": a.flight_number,
+                "airport_iata": a.airport_iata,
                 "airport_name": a.airport_name,
                 "risk_pct": int(a.risk_pct or 0),
                 "cause": a.cause,
                 "recommendation": a.recommendation,
                 "decision": a.decision,
                 "acted_by_admin_name": acted_name,
-                "timestamp": ts.isoformat() if ts else None,
+                "decided_at": a.decided_at.isoformat() if a.decided_at else None,
                 "created_at": a.created_at.isoformat() if a.created_at else None,
+                "route": a.route,
+                "delay_formatted": a.delay_formatted,
             }
         )
     return results

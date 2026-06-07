@@ -69,16 +69,19 @@ def get_full_analytics(
         AEFlightDataset.delay_minutes > 15
     ).scalar() or 0
 
-    on_time_rate = 0.0
-    if valid_base > 0:
-        on_time_rate = round(((valid_base - delayed_flights) / valid_base) * 100, 1)
+    on_time_rate = None
+    average_delay = None
+    if total_flights > 0:
+        on_time_rate = 0.0
+        if valid_base > 0:
+            on_time_rate = round(((valid_base - delayed_flights) / valid_base) * 100, 1)
 
-    avg_delay_row = db.query(func.avg(AEFlightDataset.delay_minutes)).filter(
-        *ds_filter, 
-        AEFlightDataset.final_status.notin_(['cancelled', 'scheduled']),
-        AEFlightDataset.delay_minutes > 15
-    ).scalar()
-    average_delay = round(float(avg_delay_row), 1) if avg_delay_row else 0.0
+        avg_delay_row = db.query(func.avg(AEFlightDataset.delay_minutes)).filter(
+            *ds_filter, 
+            AEFlightDataset.final_status.notin_(['cancelled', 'scheduled']),
+            AEFlightDataset.delay_minutes > 15
+        ).scalar()
+        average_delay = round(float(avg_delay_row), 1) if avg_delay_row else 0.0
 
     # ==========================================
     # DAILY PERFORMANCE

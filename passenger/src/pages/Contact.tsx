@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { useTranslation } from "react-i18next";
 import {
   Select,
   SelectContent,
@@ -43,45 +44,6 @@ interface AirportContact {
   address: string;
 }
 
-const airportContacts: AirportContact[] = [
-  {
-    code: "TUN",
-    email: "info.tun@oaca.nat.tn",
-    pressEmail: "press.tun@oaca.nat.tn",
-    lostFoundPhone: "+216 71 755 200",
-    lostFoundEmail: "lostfound.tun@oaca.nat.tn",
-    hours: "24/7 (passenger services) · 08:00–17:00 (admin)",
-    address: "Aéroport Tunis–Carthage, Route X20, 2035 Tunis, Tunisia",
-  },
-  {
-    code: "MIR",
-    email: "monastir@tav.aero",
-    pressEmail: "press.mir@tav.aero",
-    lostFoundPhone: "+216 73 521 314",
-    lostFoundEmail: "lostfound.mir@tav.aero",
-    hours: "06:00–23:00 daily",
-    address: "Aéroport Monastir Habib Bourguiba, 5065 Skanes, Monastir, Tunisia",
-  },
-  {
-    code: "NBE",
-    email: "enfidha@tav.aero",
-    pressEmail: "press.nbe@tav.aero",
-    lostFoundPhone: "+216 73 100 712",
-    lostFoundEmail: "lostfound.nbe@tav.aero",
-    hours: "24/7 (passenger services)",
-    address: "Aéroport Enfidha–Hammamet, Route Régionale 24, 4030 Enfidha, Tunisia",
-  },
-  {
-    code: "DJE",
-    email: "info.dje@oaca.nat.tn",
-    pressEmail: "press.dje@oaca.nat.tn",
-    lostFoundPhone: "+216 75 650 247",
-    lostFoundEmail: "lostfound.dje@oaca.nat.tn",
-    hours: "06:00–23:00 daily",
-    address: "Aéroport Djerba–Zarzis, Mellita, 4116 Djerba, Tunisia",
-  },
-];
-
 function ContactRow({
   icon: Icon,
   label,
@@ -114,6 +76,7 @@ function ContactRow({
 }
 
 export default function Contact() {
+  const { t } = useTranslation();
   const { toast } = useToast();
   const [activeCode, setActiveCode] = useState<TunisianAirportCode>("TUN");
   const [submitting, setSubmitting] = useState(false);
@@ -125,13 +88,52 @@ export default function Contact() {
     message: "",
   });
 
+  const airportContacts: AirportContact[] = useMemo(() => [
+    {
+      code: "TUN",
+      email: "info.tun@oaca.nat.tn",
+      pressEmail: "press.tun@oaca.nat.tn",
+      lostFoundPhone: "+216 71 755 200",
+      lostFoundEmail: "lostfound.tun@oaca.nat.tn",
+      hours: t("contact_hours_tun", "24/7 (passenger services) · 08:00–17:00 (admin)"),
+      address: t("contact_address_tun", "Aéroport Tunis–Carthage, Route X20, 2035 Tunis, Tunisia"),
+    },
+    {
+      code: "MIR",
+      email: "monastir@tav.aero",
+      pressEmail: "press.mir@tav.aero",
+      lostFoundPhone: "+216 73 521 314",
+      lostFoundEmail: "lostfound.mir@tav.aero",
+      hours: t("contact_hours_mir", "06:00–23:00 daily"),
+      address: t("contact_address_mir", "Aéroport Monastir Habib Bourguiba, 5065 Skanes, Monastir, Tunisia"),
+    },
+    {
+      code: "NBE",
+      email: "enfidha@tav.aero",
+      pressEmail: "press.nbe@tav.aero",
+      lostFoundPhone: "+216 73 100 712",
+      lostFoundEmail: "lostfound.nbe@tav.aero",
+      hours: t("contact_hours_nbe", "24/7 (passenger services)"),
+      address: t("contact_address_nbe", "Aéroport Enfidha–Hammamet, Route Régionale 24, 4030 Enfidha, Tunisia"),
+    },
+    {
+      code: "DJE",
+      email: "info.dje@oaca.nat.tn",
+      pressEmail: "press.dje@oaca.nat.tn",
+      lostFoundPhone: "+216 75 650 247",
+      lostFoundEmail: "lostfound.dje@oaca.nat.tn",
+      hours: t("contact_hours_dje", "06:00–23:00 daily"),
+      address: t("contact_address_dje", "Aéroport Djerba–Zarzis, Mellita, 4116 Djerba, Tunisia"),
+    },
+  ], [t]);
+
   const activeAirport = useMemo(
     () => airportsInfo.find((a) => a.code === activeCode)!,
     [activeCode]
   );
   const activeContact = useMemo(
     () => airportContacts.find((c) => c.code === activeCode)!,
-    [activeCode]
+    [activeCode, airportContacts]
   );
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -140,8 +142,8 @@ export default function Contact() {
     // 1. Basic validation
     if (!form.name.trim() || !form.email.trim() || !form.message.trim()) {
       toast({
-        title: "Missing information",
-        description: "Please fill in your name, email and message.",
+        title: t("contact_missing_info", "Missing information"),
+        description: t("contact_fill_fields", "Please fill in your name, email and message."),
         variant: "destructive",
       });
       return;
@@ -151,8 +153,8 @@ export default function Contact() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(form.email.trim())) {
       toast({
-        title: "Invalid Email Address",
-        description: "Please enter a valid email format.",
+        title: t("contact_invalid_email", "Invalid Email Address"),
+        description: t("contact_valid_email_format", "Please enter a valid email format."),
         variant: "destructive",
       });
       return;
@@ -161,8 +163,8 @@ export default function Contact() {
     // 3. Minimum length validation
     if (form.message.trim().length < 10) {
       toast({
-        title: "Message Too Short",
-        description: "Please enter a message containing at least 10 characters.",
+        title: t("contact_message_too_short", "Message Too Short"),
+        description: t("contact_message_min_chars", "Please enter a message containing at least 10 characters."),
         variant: "destructive",
       });
       return;
@@ -195,7 +197,7 @@ export default function Contact() {
 
       if (!response.ok) {
         toast({
-          title: "Submission Failed",
+          title: t("contact_network_error", "Submission Failed"),
           description: resData?.error || resData?.detail || "Could not send message. Please try again.",
           variant: "destructive",
         });
@@ -205,13 +207,13 @@ export default function Contact() {
       if (resData.appended) {
         // Spam/duplicate merged warning
         toast({
-          title: "Duplicate Request Detected",
+          title: t("contact_duplicate_req", "Duplicate Request Detected"),
           description: `Your previous request is already being processed. Reference ID: ${resData.reference_id}`,
           variant: "default",
         });
       } else {
         toast({
-          title: "Message Sent Successfully",
+          title: t("contact_success_title", "Message Sent Successfully"),
           description: `Your message has been sent to the selected airport operations team. Ticket ID: ${resData.reference_id}`,
         });
       }
@@ -226,7 +228,7 @@ export default function Contact() {
       });
     } catch (err: any) {
       toast({
-        title: "Network Error",
+        title: t("contact_network_error", "Network Error"),
         description: "Cannot connect to the helpdesk server. Please try again later.",
         variant: "destructive",
       });
@@ -255,15 +257,13 @@ export default function Contact() {
           >
             <Badge className="bg-primary/15 text-primary border-primary/30 hover:bg-primary/20 mb-5">
               <Sparkles className="h-3 w-3 me-1.5" />
-              Contact us
+              {t("footer_contact_us", "Contact us")}
             </Badge>
             <h1 className="font-display text-4xl md:text-6xl font-semibold tracking-tight text-foreground leading-[1.05]">
-              Get in touch with<br />
-              <span className="bg-gradient-amber bg-clip-text text-transparent">any Tunisian airport</span>
+              {t("contact_headline", "Get in touch with any Tunisian airport")}
             </h1>
             <p className="mt-5 text-lg text-muted-foreground leading-relaxed max-w-2xl">
-              Direct phone numbers, emails and addresses for each airport — or send us a message
-              and we'll route it to the right team.
+              {t("contact_desc")}
             </p>
           </motion.div>
         </div>
@@ -323,36 +323,36 @@ export default function Contact() {
             <Card className="p-5 md:p-6 border-border/60 space-y-3">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <Building2 className="h-3.5 w-3.5 text-primary" />
-                General contact
+                {t("footer_contact_info", "General contact")}
               </div>
               <div className="grid sm:grid-cols-2 gap-3">
                 <ContactRow
                   icon={Phone}
-                  label="Switchboard"
+                  label={t("contact_switchboard", "Switchboard")}
                   value={activeAirport.phone}
                   href={`tel:${activeAirport.phone.replace(/\s/g, "")}`}
                 />
                 <ContactRow
                   icon={Mail}
-                  label="Email"
+                  label={t("contact_email", "Email")}
                   value={activeContact.email}
                   href={`mailto:${activeContact.email}`}
                 />
                 <ContactRow
                   icon={MapPin}
-                  label="Address"
+                  label={t("contact_address", "Address")}
                   value={activeContact.address}
                 />
-                <ContactRow icon={Clock} label="Hours" value={activeContact.hours} />
+                <ContactRow icon={Clock} label={t("contact_hours", "Hours")} value={activeContact.hours} />
                 <ContactRow
                   icon={Globe}
-                  label="Website"
+                  label={t("about_official_website", "Website")}
                   value={activeAirport.website.replace(/^https?:\/\//, "")}
                   href={activeAirport.website}
                 />
                 <ContactRow
                   icon={Compass}
-                  label="Coordinates"
+                  label={t("admin_nav_map", "Coordinates")}
                   value={`${activeAirport.coordinates.lat.toFixed(3)}°N · ${activeAirport.coordinates.lng.toFixed(3)}°E`}
                 />
               </div>
@@ -361,30 +361,30 @@ export default function Contact() {
             <Card className="p-5 md:p-6 border-border/60 space-y-3">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <MessageSquare className="h-3.5 w-3.5 text-primary" />
-                Specialised desks
+                {t("contact_specialised_desks", "Specialised desks")}
               </div>
               <div className="grid sm:grid-cols-2 gap-3">
                 <ContactRow
                   icon={Phone}
-                  label="Lost & found"
+                  label={t("contact_lost_found_label", "Lost & found")}
                   value={activeContact.lostFoundPhone}
                   href={`tel:${activeContact.lostFoundPhone.replace(/\s/g, "")}`}
                 />
                 <ContactRow
                   icon={Mail}
-                  label="Lost & found email"
+                  label={t("contact_lost_found_email", "Lost & found email")}
                   value={activeContact.lostFoundEmail}
                   href={`mailto:${activeContact.lostFoundEmail}`}
                 />
                 <ContactRow
                   icon={Mail}
-                  label="Press & media"
+                  label={t("contact_press_media", "Press & media")}
                   value={activeContact.pressEmail}
                   href={`mailto:${activeContact.pressEmail}`}
                 />
                 <ContactRow
                   icon={Building2}
-                  label="Operator"
+                  label={t("contact_operator", "Operator")}
                   value={activeAirport.operator}
                 />
               </div>
@@ -394,8 +394,7 @@ export default function Contact() {
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="h-5 w-5 text-primary mt-0.5 shrink-0" />
                 <div className="text-sm text-foreground/90 leading-relaxed">
-                  Reply times: typically <strong>under 24 hours</strong> on business days, up to{" "}
-                  <strong>48 hours</strong> on weekends and public holidays.
+                  {t("contact_reply_times")}
                 </div>
               </div>
             </Card>
@@ -406,16 +405,16 @@ export default function Contact() {
         <div className="lg:sticky lg:top-32 lg:self-start">
           <Card className="p-6 md:p-8 border-border/60 bg-card/60 backdrop-blur-md">
             <h3 className="font-display text-2xl font-semibold text-foreground">
-              Send us a message
+              {t("contact_send_message", "Send us a message")}
             </h3>
             <p className="text-sm text-muted-foreground mt-2">
-              We'll route your message to the airport you select below.
+              {t("contact_route_message_desc", "We'll route your message to the airport you select below.")}
             </p>
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="name">Full name</Label>
+                  <Label htmlFor="name">{t("contact_your_name", "Full name")}</Label>
                   <Input
                     id="name"
                     name="name"
@@ -425,7 +424,7 @@ export default function Contact() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="email">{t("contact_email_address", "Email")}</Label>
                   <Input
                     id="email"
                     name="email"
@@ -439,7 +438,7 @@ export default function Contact() {
 
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="airport">Airport</Label>
+                  <Label htmlFor="airport">{t("admin_login_airport_label", "Airport")}</Label>
                   <Select
                     name="airport"
                     value={form.airport}
@@ -462,7 +461,7 @@ export default function Contact() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="subject">Subject</Label>
+                  <Label htmlFor="subject">{t("admin_login_role_label", "Subject")}</Label>
                   <Select
                     name="subject"
                     value={form.subject}
@@ -472,12 +471,12 @@ export default function Contact() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="general">General inquiry</SelectItem>
-                      <SelectItem value="flight">Flight information</SelectItem>
-                      <SelectItem value="baggage">Baggage / lost & found</SelectItem>
-                      <SelectItem value="assistance">Special assistance</SelectItem>
-                      <SelectItem value="press">Press & media</SelectItem>
-                      <SelectItem value="feedback">Feedback or complaint</SelectItem>
+                      <SelectItem value="general">{t("contact_subject_general", "General inquiry")}</SelectItem>
+                      <SelectItem value="flight">{t("contact_subject_flight", "Flight information")}</SelectItem>
+                      <SelectItem value="baggage">{t("contact_subject_baggage", "Baggage / lost & found")}</SelectItem>
+                      <SelectItem value="assistance">{t("contact_subject_assistance", "Special assistance")}</SelectItem>
+                      <SelectItem value="press">{t("contact_subject_press", "Press & media")}</SelectItem>
+                      <SelectItem value="feedback">{t("contact_subject_feedback_complaint", "Feedback or complaint")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -485,7 +484,7 @@ export default function Contact() {
 
               <div className="space-y-1.5">
                 <div className="flex justify-between items-baseline">
-                  <Label htmlFor="message">Message</Label>
+                  <Label htmlFor="message">{t("contact_your_message", "Message")}</Label>
                   <span className="text-[10px] text-muted-foreground font-mono">
                     {form.message.length} chars {form.message.length < 10 && "(min 10)"}
                   </span>
@@ -509,17 +508,17 @@ export default function Contact() {
                 className="w-full rounded-full bg-gradient-amber text-primary-foreground hover:opacity-90 shadow-amber font-medium gap-2"
               >
                 {submitting ? (
-                  "Sending…"
+                  t("loading", "Sending…")
                 ) : (
                   <>
                     <Send className="h-4 w-4" />
-                    Send message
+                    {t("contact_send_btn", "Send message")}
                   </>
                 )}
               </Button>
 
               <p className="text-[11px] text-muted-foreground text-center">
-                By sending, you agree we may use your email solely to reply to your inquiry.
+                {t("contact_terms_note")}
               </p>
             </form>
           </Card>
@@ -528,7 +527,7 @@ export default function Contact() {
 
       <footer className="border-t border-border/60 py-8 mt-8">
         <div className="max-w-[1400px] mx-auto px-4 md:px-8 text-center text-sm text-muted-foreground">
-          © {new Date().getFullYear()} Smart Airport · Public information platform for Tunisian airports
+          © {new Date().getFullYear()} {t("about_footer_info")}
         </div>
       </footer>
     </div>

@@ -1,0 +1,18 @@
+[
+  "dep_hour",
+  "is_weekend",
+  "is_peak_hour",
+  "distance_km",
+  "duration_min",
+  "airline_enc",
+  "dep_airport_enc",
+  "arr_airport_enc",
+  "route_avg_delay_hist",
+  "airline_avg_delay_hist",
+  "hour_avg_delay_hist",
+  "route_flight_count",
+  "airline_flight_count",
+  "airport_departure_count",
+  "dep_month",
+  "dep_day_of_week"
+]

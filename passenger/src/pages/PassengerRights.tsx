@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useTranslation } from "react-i18next";
 import {
   Scale,
   Plane,
@@ -23,7 +24,7 @@ import {
 
 type Region = "eu" | "us" | "ca" | "gcc";
 
-const regions: {
+interface RegionData {
   id: Region;
   name: string;
   flag: string;
@@ -34,92 +35,7 @@ const regions: {
   denied: string;
   baggage: string;
   compensation: { label: string; value: string }[];
-}[] = [
-  {
-    id: "eu",
-    name: "European Union",
-    flag: "🇪🇺",
-    law: "EC Regulation 261/2004",
-    summary:
-      "Applies to all flights departing from an EU airport, and to flights arriving in the EU operated by an EU carrier.",
-    delay:
-      "Care (meals, refreshments, communication) from 2h. Compensation owed when arrival delay at final destination is 3h+ and the cause is within the airline's control.",
-    cancellation:
-      "Right to a refund or rerouting + care. Compensation owed unless notified 14+ days in advance, or due to extraordinary circumstances.",
-    denied:
-      "Involuntary denied boarding entitles you to immediate compensation, refund/rerouting and care.",
-    baggage:
-      "Montreal Convention applies: up to ~1,519 SDR (~€1,800) for delayed, lost or damaged baggage.",
-    compensation: [
-      { label: "Short flights (≤1,500 km)", value: "€250" },
-      { label: "Medium (1,500–3,500 km)", value: "€400" },
-      { label: "Long (>3,500 km)", value: "€600" },
-    ],
-  },
-  {
-    id: "us",
-    name: "United States",
-    flag: "🇺🇸",
-    law: "DOT 14 CFR — Airline Passenger Protections",
-    summary:
-      "No federal cash compensation for delays. Airlines must honor their own customer service plans (DOT dashboard).",
-    delay:
-      "Refund required for 'significant' delays if you choose not to travel. Meals & hotel often provided per airline policy.",
-    cancellation:
-      "Full cash refund (not just credit) if the flight is cancelled or significantly changed and you don't accept rebooking.",
-    denied:
-      "Involuntary bumping: 200% of one-way fare (max $1,075) for short delays, 400% (max $2,150) for longer delays.",
-    baggage:
-      "Up to $3,800 per passenger for domestic checked baggage liability.",
-    compensation: [
-      { label: "Bump 0–1h late", value: "$0" },
-      { label: "Bump 1–2h late", value: "200% fare" },
-      { label: "Bump 2h+ late", value: "400% fare" },
-    ],
-  },
-  {
-    id: "ca",
-    name: "Canada",
-    flag: "🇨🇦",
-    law: "Air Passenger Protection Regulations (APPR)",
-    summary:
-      "Compensation depends on airline size (large vs small) and whether the disruption is within the carrier's control.",
-    delay:
-      "Standards of treatment from 2h (food, drink, communication). Compensation only for delays within carrier control and not safety-related.",
-    cancellation:
-      "Refund or rebooking required. Compensation up to CA$1,000 for large carriers when cause is within carrier control.",
-    denied:
-      "Up to CA$2,400 for involuntary denied boarding (9h+ delay) on large carriers.",
-    baggage:
-      "Up to ~CA$2,350 (1,288 SDR) per passenger under Montreal Convention.",
-    compensation: [
-      { label: "3–6h delay (large)", value: "CA$400" },
-      { label: "6–9h delay (large)", value: "CA$700" },
-      { label: "9h+ delay (large)", value: "CA$1,000" },
-    ],
-  },
-  {
-    id: "gcc",
-    name: "GCC States",
-    flag: "🇸🇦",
-    law: "GCC Civil Aviation — Passenger Protection Regulation",
-    summary:
-      "Harmonized framework across Saudi Arabia, UAE, Kuwait, Qatar, Bahrain and Oman. Strong baggage & assistance protections.",
-    delay:
-      "Care from 2h (refreshments, communication). Hotel & transport from 6h overnight. Refund or alternative if delay exceeds 5h.",
-    cancellation:
-      "Right to refund or alternative transport, plus care. Compensation when notified less than 14 days in advance.",
-    denied:
-      "Involuntary denied boarding entitles you to immediate compensation, alternative transport and full care.",
-    baggage:
-      "Compensation aligned with Montreal Convention limits (~1,519 SDR).",
-    compensation: [
-      { label: "Short flights", value: "SAR 1,500" },
-      { label: "Medium flights", value: "SAR 3,000" },
-      { label: "Long flights", value: "SAR 4,500" },
-    ],
-  },
-];
+}
 
 type IssueType = "delay" | "cancellation" | "denied" | "baggage";
 
@@ -129,35 +45,34 @@ function evaluateClaim(input: {
   hours: number;
   noticeDays: number;
   controllable: boolean;
+  t: (key: string, fallback?: string) => string;
 }) {
-  const { region, issue, hours, noticeDays, controllable } = input;
+  const { region, issue, hours, noticeDays, controllable, t } = input;
 
   if (issue === "baggage") {
     return {
       eligible: true,
-      title: "Likely eligible — Baggage claim",
-      detail:
-        "File a Property Irregularity Report (PIR) at the airport within 7 days for damage, 21 days for delay. Keep receipts for essentials.",
-      amount: "Up to ~€1,800 / $3,800 (region dependent)",
+      title: t("rights_baggage_eligible_title", "Likely eligible — Baggage claim"),
+      detail: t("rights_baggage_eligible_detail", "File a Property Irregularity Report (PIR) at the airport within 7 days for damage, 21 days for delay. Keep receipts for essentials."),
+      amount: t("rights_baggage_eligible_amount", "Up to ~€1,800 / $3,800 (region dependent)"),
     };
   }
 
   if (issue === "denied") {
     return {
       eligible: true,
-      title: "Likely eligible — Denied boarding",
-      detail:
-        "Involuntary denied boarding triggers immediate compensation, rerouting or refund, and care.",
+      title: t("rights_denied_eligible_title", "Likely eligible — Denied boarding"),
+      detail: t("rights_denied_eligible_detail", "Involuntary denied boarding triggers immediate compensation, rerouting or refund, and care."),
       amount:
         region === "us"
           ? hours >= 2
-            ? "Up to $2,150 (400% fare)"
-            : "Up to $1,075 (200% fare)"
+            ? t("rights_amount_us_denied_high", "Up to $2,150 (400% fare)")
+            : t("rights_amount_us_denied_low", "Up to $1,075 (200% fare)")
           : region === "ca"
-            ? "Up to CA$2,400"
+            ? t("rights_amount_ca_denied", "Up to CA$2,400")
             : region === "gcc"
-              ? "SAR 1,500–4,500"
-              : "€250–€600",
+              ? t("rights_amount_gcc_denied", "SAR 1,500–4,500")
+              : t("rights_amount_eu_denied", "€250–€600"),
     };
   }
 
@@ -165,26 +80,23 @@ function evaluateClaim(input: {
     if (noticeDays >= 14) {
       return {
         eligible: false,
-        title: "Likely not eligible for compensation",
-        detail:
-          "You were notified 14+ days in advance. You're still entitled to a refund or rerouting.",
-        amount: "Refund / rerouting only",
+        title: t("rights_cancel_not_eligible_title", "Likely not eligible for compensation"),
+        detail: t("rights_cancel_not_eligible_detail", "You were notified 14+ days in advance. You're still entitled to a refund or rerouting."),
+        amount: t("rights_amount_refund_only", "Refund / rerouting only"),
       };
     }
     if (!controllable) {
       return {
         eligible: false,
-        title: "Compensation unlikely (extraordinary circumstances)",
-        detail:
-          "Weather, ATC, security or strikes typically exempt the airline. You're still entitled to care and a refund or rerouting.",
-        amount: "Refund / rerouting + care",
+        title: t("rights_cancel_extraordinary_title", "Compensation unlikely (extraordinary circumstances)"),
+        detail: t("rights_cancel_extraordinary_detail", "Weather, ATC, security or strikes typically exempt the airline. You're still entitled to care and a refund or rerouting."),
+        amount: t("rights_amount_refund_care", "Refund / rerouting + care"),
       };
     }
     return {
       eligible: true,
-      title: "Likely eligible — Cancellation",
-      detail:
-        "Cancellation within 14 days and within the carrier's control. You can claim compensation in addition to refund or rerouting.",
+      title: t("rights_cancel_eligible_title", "Likely eligible — Cancellation"),
+      detail: t("rights_cancel_eligible_detail", "Cancellation within 14 days and within the carrier's control. You can claim compensation in addition to refund or rerouting."),
       amount:
         region === "eu"
           ? "€250–€600"
@@ -192,7 +104,7 @@ function evaluateClaim(input: {
             ? "CA$125–CA$1,000"
             : region === "gcc"
               ? "SAR 1,500–4,500"
-              : "Refund + airline policy",
+              : t("rights_amount_refund_policy", "Refund + airline policy"),
     };
   }
 
@@ -202,21 +114,19 @@ function evaluateClaim(input: {
       eligible: hours >= 3,
       title:
         hours >= 3
-          ? "May be eligible — significant delay"
-          : "Not eligible for cash compensation",
-      detail:
-        "US has no statutory cash compensation for delays, but you can refuse travel and get a full refund for significant delays. Airlines may provide meals/hotel per their policy.",
-      amount: hours >= 3 ? "Refund + airline care" : "—",
+          ? t("rights_delay_us_eligible_title", "May be eligible — significant delay")
+          : t("rights_delay_us_not_eligible_title", "Not eligible for cash compensation"),
+      detail: t("rights_delay_us_detail", "US has no statutory cash compensation for delays, but you can refuse travel and get a full refund for significant delays. Airlines may provide meals/hotel per their policy."),
+      amount: hours >= 3 ? t("rights_amount_refund_care_us", "Refund + airline care") : "—",
     };
   }
 
   if (!controllable) {
     return {
       eligible: false,
-      title: "Compensation unlikely (extraordinary circumstances)",
-      detail:
-        "The disruption appears outside the airline's control. You're still entitled to care.",
-      amount: "Care + refund if delay is long enough",
+      title: t("rights_delay_extraordinary_title", "Compensation unlikely (extraordinary circumstances)"),
+      detail: t("rights_delay_extraordinary_detail", "The disruption appears outside the airline's control. You're still entitled to care."),
+      amount: t("rights_amount_care_refund", "Care + refund if delay is long enough"),
     };
   }
 
@@ -224,15 +134,15 @@ function evaluateClaim(input: {
     if (hours < 3)
       return {
         eligible: false,
-        title: "Not yet eligible — delay under 3h",
-        detail: "EU 261 compensation kicks in at 3h+ arrival delay.",
-        amount: "Care only (meals, refreshments)",
+        title: t("rights_delay_eu_under3h_title", "Not yet eligible — delay under 3h"),
+        detail: t("rights_delay_eu_under3h_detail", "EU 261 compensation kicks in at 3h+ arrival delay."),
+        amount: t("rights_amount_care_only", "Care only (meals, refreshments)"),
       };
     return {
       eligible: true,
-      title: "Likely eligible — EU 261 delay",
-      detail: "Arrival delay of 3h+ on a controllable disruption.",
-      amount: "€250 / €400 / €600 by distance",
+      title: t("rights_delay_eu_eligible_title", "Likely eligible — EU 261 delay"),
+      detail: t("rights_delay_eu_eligible_detail", "Arrival delay of 3h+ on a controllable disruption."),
+      amount: t("rights_amount_eu_delay", "€250 / €400 / €600 by distance"),
     };
   }
 
@@ -240,14 +150,14 @@ function evaluateClaim(input: {
     if (hours < 3)
       return {
         eligible: false,
-        title: "Not yet eligible — delay under 3h",
-        detail: "APPR compensation begins at 3h arrival delay.",
-        amount: "Standards of treatment only",
+        title: t("rights_delay_ca_under3h_title", "Not yet eligible — delay under 3h"),
+        detail: t("rights_delay_ca_under3h_detail", "APPR compensation begins at 3h arrival delay."),
+        amount: t("rights_amount_treatment_only", "Standards of treatment only"),
       };
     return {
       eligible: true,
-      title: "Likely eligible — APPR delay",
-      detail: "Controllable delay 3h+ on a Canadian flight.",
+      title: t("rights_delay_ca_eligible_title", "Likely eligible — APPR delay"),
+      detail: t("rights_delay_ca_eligible_detail", "Controllable delay 3h+ on a Canadian flight."),
       amount: "CA$400 / CA$700 / CA$1,000",
     };
   }
@@ -256,22 +166,23 @@ function evaluateClaim(input: {
   if (hours < 2)
     return {
       eligible: false,
-      title: "Not yet eligible — delay under 2h",
-      detail: "GCC care obligations begin at 2h.",
+      title: t("rights_delay_gcc_under2h_title", "Not yet eligible — delay under 2h"),
+      detail: t("rights_delay_gcc_under2h_detail", "GCC care obligations begin at 2h."),
       amount: "—",
     };
   return {
     eligible: hours >= 5,
-    title: hours >= 5 ? "Likely eligible — GCC delay" : "Care only at this stage",
+    title: hours >= 5 ? t("rights_delay_gcc_eligible_title", "Likely eligible — GCC delay") : t("rights_delay_gcc_care_title", "Care only at this stage"),
     detail:
       hours >= 5
-        ? "Delay of 5h+ entitles you to compensation, refund or alternative transport."
-        : "You're entitled to refreshments and communication while you wait.",
-    amount: hours >= 5 ? "SAR 1,500–4,500" : "Care only",
+        ? t("rights_delay_gcc_eligible_detail", "Delay of 5h+ entitles you to compensation, refund or alternative transport.")
+        : t("rights_delay_gcc_care_detail", "You're entitled to refreshments and communication while you wait."),
+    amount: hours >= 5 ? "SAR 1,500–4,500" : t("rights_amount_care_only", "Care only"),
   };
 }
 
 export default function PassengerRights() {
+  const { t } = useTranslation();
   const [region, setRegion] = useState<Region>("eu");
   const [issue, setIssue] = useState<IssueType>("delay");
   const [hours, setHours] = useState<number>(3);
@@ -280,12 +191,79 @@ export default function PassengerRights() {
   const [flightNo, setFlightNo] = useState<string>("");
   const [submitted, setSubmitted] = useState(false);
 
+  const regions: RegionData[] = useMemo(() => [
+    {
+      id: "eu",
+      name: t("rights_region_eu", "European Union"),
+      flag: "🇪🇺",
+      law: t("rights_law_eu", "EC Regulation 261/2004"),
+      summary: t("rights_summary_eu", "Applies to all flights departing from an EU airport, and to flights arriving in the EU operated by an EU carrier."),
+      delay: t("rights_delay_eu", "Care (meals, refreshments, communication) from 2h. Compensation owed when arrival delay at final destination is 3h+ and the cause is within the airline's control."),
+      cancellation: t("rights_cancellation_eu", "Right to a refund or rerouting + care. Compensation owed unless notified 14+ days in advance, or due to extraordinary circumstances."),
+      denied: t("rights_denied_eu", "Involuntary denied boarding entitles you to immediate compensation, refund/rerouting and care."),
+      baggage: t("rights_baggage_eu", "Montreal Convention applies: up to ~1,519 SDR (~€1,800) for delayed, lost or damaged baggage."),
+      compensation: [
+        { label: t("rights_short_flights", "Short flights (≤1,500 km)"), value: "€250" },
+        { label: t("rights_medium_flights", "Medium (1,500–3,500 km)"), value: "€400" },
+        { label: t("rights_long_flights", "Long (>3,500 km)"), value: "€600" },
+      ],
+    },
+    {
+      id: "us",
+      name: t("rights_region_us", "United States"),
+      flag: "🇺🇸",
+      law: t("rights_law_us", "DOT 14 CFR — Airline Passenger Protections"),
+      summary: t("rights_summary_us", "No federal cash compensation for delays. Airlines must honor their own customer service plans (DOT dashboard)."),
+      delay: t("rights_delay_us", "Refund required for 'significant' delays if you choose not to travel. Meals & hotel often provided per airline policy."),
+      cancellation: t("rights_cancellation_us", "Full cash refund (not just credit) if the flight is cancelled or significantly changed and you don't accept rebooking."),
+      denied: t("rights_denied_us", "Involuntary bumping: 200% of one-way fare (max $1,075) for short delays, 400% (max $2,150) for longer delays."),
+      baggage: t("rights_baggage_us", "Up to $3,800 per passenger for domestic checked baggage liability."),
+      compensation: [
+        { label: t("rights_us_bump_short", "Bump 0–1h late"), value: "$0" },
+        { label: t("rights_us_bump_medium", "Bump 1–2h late"), value: "200% fare" },
+        { label: t("rights_us_bump_long", "Bump 2h+ late"), value: "400% fare" },
+      ],
+    },
+    {
+      id: "ca",
+      name: t("rights_region_ca", "Canada"),
+      flag: "🇨🇦",
+      law: t("rights_law_ca", "Air Passenger Protection Regulations (APPR)"),
+      summary: t("rights_summary_ca", "Compensation depends on airline size (large vs small) and whether the disruption is within the carrier's control."),
+      delay: t("rights_delay_ca", "Standards of treatment from 2h (food, drink, communication). Compensation only for delays within carrier control and not safety-related."),
+      cancellation: t("rights_cancellation_ca", "Refund or rebooking required. Compensation up to CA$1,000 for large carriers when cause is within carrier control."),
+      denied: t("rights_denied_ca", "Up to CA$2,400 for involuntary denied boarding (9h+ delay) on large carriers."),
+      baggage: t("rights_baggage_ca", "Up to ~CA$2,350 (1,288 SDR) per passenger under Montreal Convention."),
+      compensation: [
+        { label: t("rights_ca_delay_short", "3–6h delay (large)"), value: "CA$400" },
+        { label: t("rights_ca_delay_medium", "6–9h delay (large)"), value: "CA$700" },
+        { label: t("rights_ca_delay_long", "9h+ delay (large)"), value: "CA$1,000" },
+      ],
+    },
+    {
+      id: "gcc",
+      name: t("rights_region_gcc", "GCC States"),
+      flag: "🇸🇦",
+      law: t("rights_law_gcc", "GCC Civil Aviation — Passenger Protection Regulation"),
+      summary: t("rights_summary_gcc", "Harmonized framework across Saudi Arabia, UAE, Kuwait, Qatar, Bahrain and Oman. Strong baggage & assistance protections."),
+      delay: t("rights_delay_gcc", "Care from 2h (refreshments, communication). Hotel & transport from 6h overnight. Refund or alternative if delay exceeds 5h."),
+      cancellation: t("rights_cancellation_gcc", "Right to refund or alternative transport, plus care. Compensation when notified less than 14 days in advance."),
+      denied: t("rights_denied_gcc", "Involuntary denied boarding entitles you to immediate compensation, alternative transport and full care."),
+      baggage: t("rights_baggage_gcc", "Compensation aligned with Montreal Convention limits (~1,519 SDR)."),
+      compensation: [
+        { label: t("rights_short_flights", "Short flights"), value: "SAR 1,500" },
+        { label: t("rights_medium_flights", "Medium flights"), value: "SAR 3,000" },
+        { label: t("rights_long_flights", "Long flights"), value: "SAR 4,500" },
+      ],
+    },
+  ], [t]);
+
   const result = useMemo(
-    () => evaluateClaim({ region, issue, hours, noticeDays, controllable }),
-    [region, issue, hours, noticeDays, controllable]
+    () => evaluateClaim({ region, issue, hours, noticeDays, controllable, t }),
+    [region, issue, hours, noticeDays, controllable, t]
   );
 
-  const active = regions.find((r) => r.id === region)!;
+  const active = useMemo(() => regions.find((r) => r.id === region)!, [regions, region]);
 
   return (
     <div className="min-h-screen bg-background">
@@ -297,15 +275,14 @@ export default function PassengerRights() {
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-secondary text-xs uppercase tracking-[0.18em] text-muted-foreground mb-6">
               <Scale className="h-3.5 w-3.5 text-primary" />
-              Passenger Rights
+              {t("rights_eyebrow", "Passenger Rights")}
             </div>
             <h1 className="font-display text-4xl md:text-6xl leading-[1.05] tracking-tight text-foreground">
-              Know what you're owed.
-              <span className="block text-primary">Claim with confidence.</span>
+              {t("rights_headline", "Know what you're owed.")}
+              <span className="block text-primary">{t("rights_headline_accent", "Claim with confidence.")}</span>
             </h1>
             <p className="mt-6 text-lg text-muted-foreground max-w-2xl">
-              A clear guide to passenger compensation rights across the EU, US, Canada and the GCC —
-              plus a free eligibility checker for delays, cancellations, denied boarding and baggage issues.
+              {t("rights_description")}
             </p>
           </div>
         </div>
@@ -318,10 +295,10 @@ export default function PassengerRights() {
             <div>
               <div className="text-xs uppercase tracking-[0.18em] text-primary mb-2 flex items-center gap-2">
                 <Globe2 className="h-3.5 w-3.5" />
-                Compare regions
+                {t("rights_compare_regions", "Compare regions")}
               </div>
               <h2 className="font-display text-3xl md:text-4xl text-foreground">
-                Your rights, region by region.
+                {t("rights_region_by_region", "Your rights, region by region.")}
               </h2>
             </div>
           </div>
@@ -347,7 +324,7 @@ export default function PassengerRights() {
                   <Card className="lg:col-span-1 p-6 bg-card border-border">
                     <div className="text-4xl mb-3">{r.flag}</div>
                     <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                      Governing rule
+                      {t("rights_governing_rule", "Governing rule")}
                     </div>
                     <h3 className="font-display text-xl mt-1 text-foreground">{r.law}</h3>
                     <p className="text-sm text-muted-foreground mt-4 leading-relaxed">
@@ -369,22 +346,22 @@ export default function PassengerRights() {
                   <div className="lg:col-span-2 grid sm:grid-cols-2 gap-4">
                     <RightCard
                       icon={<Clock className="h-5 w-5" />}
-                      title="Delays"
+                      title={t("rights_delay", "Delays")}
                       body={r.delay}
                     />
                     <RightCard
                       icon={<Ban className="h-5 w-5" />}
-                      title="Cancellations"
+                      title={t("rights_cancellation", "Cancellations")}
                       body={r.cancellation}
                     />
                     <RightCard
                       icon={<Plane className="h-5 w-5" />}
-                      title="Denied boarding"
+                      title={t("rights_denied", "Denied boarding")}
                       body={r.denied}
                     />
                     <RightCard
                       icon={<Luggage className="h-5 w-5" />}
-                      title="Baggage"
+                      title={t("rights_baggage", "Baggage")}
                       body={r.baggage}
                     />
                   </div>
@@ -401,14 +378,13 @@ export default function PassengerRights() {
           <div className="max-w-2xl mb-10">
             <div className="text-xs uppercase tracking-[0.18em] text-primary mb-2 flex items-center gap-2">
               <ShieldCheck className="h-3.5 w-3.5" />
-              Free eligibility checker
+              {t("rights_eligibility_checker", "Free eligibility checker")}
             </div>
             <h2 className="font-display text-3xl md:text-4xl text-foreground">
-              Check your claim in 60 seconds.
+              {t("rights_check_in_60_sec", "Check your claim in 60 seconds.")}
             </h2>
             <p className="mt-3 text-muted-foreground">
-              Answer a few questions about your disruption and we'll estimate whether you can claim
-              compensation under {active.law}.
+              {t("rights_checker_desc")}
             </p>
           </div>
 
@@ -417,7 +393,7 @@ export default function PassengerRights() {
               <div className="space-y-6">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="flight">Flight number (optional)</Label>
+                    <Label htmlFor="flight">{t("rights_flight_number", "Flight number (optional)")}</Label>
                     <Input
                       id="flight"
                       name="flight_number"
@@ -428,7 +404,7 @@ export default function PassengerRights() {
                     />
                   </div>
                   <div>
-                    <Label>Region of departure</Label>
+                    <Label>{t("rights_departure_region", "Region of departure")}</Label>
                     <Select name="region" value={region} onValueChange={(v) => setRegion(v as Region)}>
                       <SelectTrigger className="mt-2">
                         <SelectValue />
@@ -445,17 +421,17 @@ export default function PassengerRights() {
                 </div>
 
                 <div>
-                  <Label className="mb-3 block">What happened?</Label>
+                  <Label className="mb-3 block">{t("rights_what_happened", "What happened?")}</Label>
                   <RadioGroup
                     value={issue}
                     onValueChange={(v) => setIssue(v as IssueType)}
                     className="grid sm:grid-cols-2 gap-3"
                   >
                     {[
-                      { id: "delay", label: "Delay", icon: Clock },
-                      { id: "cancellation", label: "Cancellation", icon: Ban },
-                      { id: "denied", label: "Denied boarding", icon: Plane },
-                      { id: "baggage", label: "Baggage issue", icon: Luggage },
+                      { id: "delay", label: t("rights_delay", "Delay"), icon: Clock },
+                      { id: "cancellation", label: t("rights_cancellation", "Cancellation"), icon: Ban },
+                      { id: "denied", label: t("rights_denied", "Denied boarding"), icon: Plane },
+                      { id: "baggage", label: t("rights_baggage", "Baggage issue"), icon: Luggage },
                     ].map((o) => (
                       <label
                         key={o.id}
@@ -476,7 +452,7 @@ export default function PassengerRights() {
 
                 {(issue === "delay" || issue === "denied") && (
                   <div>
-                    <Label htmlFor="hours">Delay at final destination (hours)</Label>
+                    <Label htmlFor="hours">{t("rights_delay_hours", "Delay at final destination (hours)")}</Label>
                     <Input
                       id="hours"
                       name="delay_hours"
@@ -492,7 +468,7 @@ export default function PassengerRights() {
 
                 {issue === "cancellation" && (
                   <div>
-                    <Label htmlFor="notice">How many days notice did you receive?</Label>
+                    <Label htmlFor="notice">{t("rights_notice_days", "How many days notice did you receive?")}</Label>
                     <Input
                       id="notice"
                       name="notice_days"
@@ -508,7 +484,7 @@ export default function PassengerRights() {
 
                 {issue !== "baggage" && (
                   <div>
-                    <Label className="mb-3 block">Was the cause within the airline's control?</Label>
+                    <Label className="mb-3 block">{t("rights_is_controllable", "Was the cause within the airline's control?")}</Label>
                     <RadioGroup
                       value={controllable ? "yes" : "no"}
                       onValueChange={(v) => setControllable(v === "yes")}
@@ -521,7 +497,7 @@ export default function PassengerRights() {
                         }`}
                       >
                         <RadioGroupItem value="yes" id="ctrl-yes" />
-                        <span className="text-sm">Yes (technical, crew, scheduling)</span>
+                        <span className="text-sm">{t("rights_control_yes", "Yes (technical, crew, scheduling)")}</span>
                       </label>
                       <label
                         htmlFor="ctrl-no"
@@ -530,7 +506,7 @@ export default function PassengerRights() {
                         }`}
                       >
                         <RadioGroupItem value="no" id="ctrl-no" />
-                        <span className="text-sm">No (weather, ATC, strike)</span>
+                        <span className="text-sm">{t("rights_control_no", "No (weather, ATC, strike)")}</span>
                       </label>
                     </RadioGroup>
                   </div>
@@ -541,7 +517,7 @@ export default function PassengerRights() {
                   className="w-full bg-gradient-amber text-primary-foreground shadow-amber font-medium"
                   onClick={() => setSubmitted(true)}
                 >
-                  Check eligibility
+                  {t("rights_check_btn", "Check eligibility")}
                 </Button>
               </div>
             </Card>
@@ -552,9 +528,9 @@ export default function PassengerRights() {
                   <div className="h-14 w-14 mx-auto rounded-full bg-secondary grid place-items-center mb-4">
                     <Scale className="h-6 w-6 text-muted-foreground" />
                   </div>
-                  <h3 className="font-display text-xl text-foreground">Your result</h3>
+                  <h3 className="font-display text-xl text-foreground">{t("rights_your_result", "Your result")}</h3>
                   <p className="text-sm text-muted-foreground mt-2">
-                    Fill in the form and tap "Check eligibility" to see your claim estimate.
+                    {t("rights_result_empty")}
                   </p>
                 </div>
               ) : (
@@ -570,7 +546,7 @@ export default function PassengerRights() {
                       </div>
                     )}
                     <Badge variant={result.eligible ? "default" : "secondary"}>
-                      {result.eligible ? "Likely eligible" : "Likely not eligible"}
+                      {result.eligible ? t("rights_likely_eligible", "Likely eligible") : t("rights_likely_not_eligible", "Likely not eligible")}
                     </Badge>
                   </div>
 
@@ -581,7 +557,7 @@ export default function PassengerRights() {
 
                   <div className="mt-5 p-4 rounded-lg bg-secondary">
                     <div className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                      Estimated amount
+                      {t("rights_est_amount", "Estimated amount")}
                     </div>
                     <div className="font-display text-2xl text-primary mt-1">{result.amount}</div>
                   </div>
@@ -589,8 +565,7 @@ export default function PassengerRights() {
                   <div className="mt-5 flex items-start gap-2 text-xs text-muted-foreground">
                     <AlertTriangle className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
                     <p>
-                      This estimate is informational only and does not constitute legal advice.
-                      Final eligibility depends on the airline's evidence and applicable law.
+                      {t("rights_disclaimer_text")}
                     </p>
                   </div>
                 </div>
@@ -603,7 +578,7 @@ export default function PassengerRights() {
       {/* Footer note */}
       <section className="py-12 border-t border-border">
         <div className="max-w-[1400px] mx-auto px-4 md:px-8 text-center text-sm text-muted-foreground">
-          Smart Airport Companion · Passenger Rights guide
+          Smart Airport Companion · {t("rights_eyebrow", "Passenger Rights")} guide
         </div>
       </section>
     </div>

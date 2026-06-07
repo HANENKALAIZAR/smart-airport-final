@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { airportsInfo, type AirportInfo } from "@/data/airportsInfo";
+import { useTranslation } from "react-i18next";
 import {
   Plane,
   MapPin,
@@ -57,6 +58,7 @@ function StatCard({
 }
 
 function AirportPanel({ airport }: { airport: AirportInfo }) {
+  const { t } = useTranslation();
   const [airlineFilter, setAirlineFilter] = useState<string>("all");
 
   const filteredAirlines = useMemo(() => {
@@ -65,6 +67,15 @@ function AirportPanel({ airport }: { airport: AirportInfo }) {
   }, [airport.airlines, airlineFilter]);
 
   const types = ["all", "national", "international", "low-cost", "charter"] as const;
+
+  const getAirlineTypeLabel = (type: string) => {
+    if (type === "all") return t("about_all_airlines", "All");
+    if (type === "national") return t("about_airline_national", "National");
+    if (type === "international") return t("about_airline_intl", "International");
+    if (type === "low-cost") return t("about_airline_lowcost", "Low cost");
+    if (type === "charter") return t("about_airline_charter", "Charter");
+    return type;
+  };
 
   return (
     <motion.div
@@ -106,12 +117,36 @@ function AirportPanel({ airport }: { airport: AirportInfo }) {
           </div>
 
           <div className="grid grid-cols-2 gap-3 self-start">
-            <StatCard icon={Users} label="Annual passengers" value={`${airport.passengers2023Millions}M`} hint={`${airport.capacityMillions}M capacity`} />
-            <StatCard icon={Building2} label="Terminals" value={`${airport.terminals}`} hint={`${airport.runways} runway${airport.runways > 1 ? "s" : ""}`} />
-            <StatCard icon={Globe} label="Destinations" value={`${airport.destinationsCount}`} hint="direct routes" />
-            <StatCard icon={Package} label="Cargo / yr" value={`${(airport.cargoTons / 1000).toFixed(1)}k t`} hint="freight handled" />
-            <StatCard icon={Calendar} label="Since" value={`${airport.established}`} />
-            <StatCard icon={Mountain} label="Elevation" value={`${airport.elevationM} m`} />
+            <StatCard
+              icon={Users}
+              label={t("about_annual_passengers", "Annual passengers")}
+              value={`${airport.passengers2023Millions}M`}
+              hint={t("about_capacity", { capacity: airport.capacityMillions })}
+            />
+            <StatCard
+              icon={Building2}
+              label={t("about_terminals", "Terminals")}
+              value={`${airport.terminals}`}
+              hint={
+                airport.runways === 1
+                  ? t("about_runways_one", "1 runway")
+                  : t("about_runways_other", { count: airport.runways })
+              }
+            />
+            <StatCard
+              icon={Globe}
+              label={t("about_destinations_count", "Destinations")}
+              value={`${airport.destinationsCount}`}
+              hint={t("about_direct_routes", "direct routes")}
+            />
+            <StatCard
+              icon={Package}
+              label={t("about_cargo_yr", "Cargo / yr")}
+              value={`${(airport.cargoTons / 1000).toFixed(1)}k t`}
+              hint={t("about_freight_handled", "freight handled")}
+            />
+            <StatCard icon={Calendar} label={t("about_since", "Since")} value={`${airport.established}`} />
+            <StatCard icon={Mountain} label={t("about_elevation", "Elevation")} value={`${airport.elevationM} m`} />
           </div>
         </div>
 
@@ -123,7 +158,7 @@ function AirportPanel({ airport }: { airport: AirportInfo }) {
             <Phone className="h-4 w-4 text-primary" /> {airport.phone}
           </a>
           <a href={airport.website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 text-foreground/80 hover:text-primary">
-            <Globe className="h-4 w-4 text-primary" /> Official website
+            <Globe className="h-4 w-4 text-primary" /> {t("about_official_website", "Official website")}
           </a>
           <span className="inline-flex items-center gap-2 text-foreground/80 ms-auto">
             <Compass className="h-4 w-4 text-primary" />
@@ -137,10 +172,10 @@ function AirportPanel({ airport }: { airport: AirportInfo }) {
         <div className="flex flex-wrap items-end justify-between gap-4 mb-5">
           <div>
             <h3 className="font-display text-2xl font-semibold text-foreground">
-              Compagnies aériennes desservant {airport.shortName}
+              {t("about_airlines_serving_title", { airport: airport.shortName })}
             </h3>
             <p className="text-muted-foreground text-sm mt-1">
-              {airport.airlines.length} airlines currently operate scheduled or seasonal flights.
+              {t("about_airlines_desc", { count: airport.airlines.length })}
             </p>
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -154,7 +189,7 @@ function AirportPanel({ airport }: { airport: AirportInfo }) {
                     : "bg-card/40 text-muted-foreground border-border/60 hover:text-foreground hover:border-primary/40"
                 }`}
               >
-                {t === "all" ? "All" : t.replace("-", " ")}
+                {getAirlineTypeLabel(t)}
               </button>
             ))}
           </div>
@@ -183,7 +218,7 @@ function AirportPanel({ airport }: { airport: AirportInfo }) {
                         variant="outline"
                         className={`mt-2 text-[10px] uppercase tracking-wider border ${airlineTypeStyle[al.type]}`}
                       >
-                        {al.type.replace("-", " ")}
+                        {getAirlineTypeLabel(al.type)}
                       </Badge>
                     </div>
                   </div>
@@ -200,7 +235,7 @@ function AirportPanel({ airport }: { airport: AirportInfo }) {
           <div className="flex items-center gap-2 mb-5">
             <Navigation className="h-5 w-5 text-primary" />
             <h3 className="font-display text-xl font-semibold text-foreground">
-              Top destinations
+              {t("about_top_destinations", "Top destinations")}
             </h3>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -223,7 +258,7 @@ function AirportPanel({ airport }: { airport: AirportInfo }) {
           <div className="flex items-center gap-2 mb-5">
             <MapPin className="h-5 w-5 text-primary" />
             <h3 className="font-display text-xl font-semibold text-foreground">
-              Getting to {airport.shortName}
+              {t("about_getting_to", { airport: airport.shortName })}
             </h3>
           </div>
           <div className="space-y-3">
@@ -241,6 +276,7 @@ function AirportPanel({ airport }: { airport: AirportInfo }) {
 }
 
 export default function About() {
+  const { t } = useTranslation();
   const [activeCode, setActiveCode] = useState(airportsInfo[0].code);
   const [query, setQuery] = useState("");
 
@@ -284,15 +320,14 @@ export default function About() {
           >
             <Badge className="bg-primary/15 text-primary border-primary/30 hover:bg-primary/20 mb-5">
               <Sparkles className="h-3 w-3 me-1.5" />
-              About our airports
+              {t("about_eyebrow", "About our airports")}
             </Badge>
             <h1 className="font-display text-4xl md:text-6xl font-semibold tracking-tight text-foreground leading-[1.05]">
-              Discover Tunisia's<br />
-              <span className="bg-gradient-amber bg-clip-text text-transparent">international gateways</span>
+              {t("about_headline_prefix", "Discover Tunisia's")}<br />
+              <span className="bg-gradient-amber bg-clip-text text-transparent">{t("about_headline_accent", "international gateways")}</span>
             </h1>
             <p className="mt-5 text-lg text-muted-foreground leading-relaxed max-w-2xl">
-              Detailed information on each Tunisian airport — infrastructure, airlines serving them,
-              top destinations and how to get there. Updated for travellers who want the full picture.
+              {t("about_desc_text")}
             </p>
 
             <div className="mt-8 max-w-md relative">
@@ -302,7 +337,7 @@ export default function About() {
                 name="query"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search airport, city or IATA code…"
+                placeholder={t("about_search_placeholder", "Search airport, city or IATA code…")}
                 className="h-12 pl-11 rounded-full bg-card/70 backdrop-blur-md border-border/60 focus-visible:ring-primary/40"
               />
             </div>
@@ -334,7 +369,7 @@ export default function About() {
             );
           })}
           {visibleAirports.length === 0 && (
-            <div className="text-sm text-muted-foreground py-2">No airport matches your search.</div>
+            <div className="text-sm text-muted-foreground py-2">{t("about_no_results", "No airport matches your search.")}</div>
           )}
         </div>
       </section>
@@ -349,21 +384,21 @@ export default function About() {
         <div className="mt-16 rounded-3xl border border-border/60 bg-gradient-to-br from-primary/10 via-card to-card p-8 md:p-12 flex flex-col md:flex-row items-start md:items-center gap-6 md:gap-10">
           <div className="flex-1">
             <h3 className="font-display text-2xl md:text-3xl font-semibold text-foreground">
-              Need real-time flight info?
+              {t("about_need_flight_info", "Need real-time flight info?")}
             </h3>
             <p className="text-muted-foreground mt-2 max-w-xl">
-              Check live flight status, gate and terminal information across all Tunisian airports.
+              {t("about_live_status_desc")}
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Button asChild size="lg" className="rounded-full bg-gradient-amber text-primary-foreground hover:opacity-90 shadow-amber">
               <Link to="/flights">
-                Live flights
+                {t("about_live_flights_btn", "Live flights")}
                 <ArrowRight className="h-4 w-4 ms-1.5" />
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="rounded-full">
-              <Link to="/services">Airport services</Link>
+              <Link to="/services">{t("about_airport_services_btn", "Airport services")}</Link>
             </Button>
           </div>
         </div>
@@ -371,7 +406,7 @@ export default function About() {
 
       <footer className="border-t border-border/60 py-8 mt-8">
         <div className="max-w-[1400px] mx-auto px-4 md:px-8 text-center text-sm text-muted-foreground">
-          © {new Date().getFullYear()} Smart Airport · Public information platform for Tunisian airports
+          © {new Date().getFullYear()} {t("about_footer_info")}
         </div>
       </footer>
     </div>

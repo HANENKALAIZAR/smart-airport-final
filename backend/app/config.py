@@ -33,7 +33,7 @@ class Settings(BaseSettings):
 
     SECRET_KEY: str = ""
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
 
     MODEL_DIR: str = str(Path(__file__).resolve().parent / "ai" / "model")
 
@@ -45,11 +45,14 @@ class Settings(BaseSettings):
     FLIGHTAWARE_API_KEY: str = ""
     FLIGHTAWARE_BASE_URL: str = "https://aeroapi.flightaware.com/aeroapi"
     FLIGHTAWARE_ENABLED: bool = True
-    FLIGHTAWARE_ENRICH_INTERVAL_MINUTES: int = 15   # scheduler job interval
+    FLIGHTAWARE_ENRICH_INTERVAL_MINUTES: int = 20   # scheduler job interval (increased: calls are now targeted)
     FLIGHTAWARE_CACHE_TTL_SECONDS: int = 180         # per-ident TTL dedup cache
     FLIGHTAWARE_TIMEOUT_SECONDS: float = 5.0         # HTTP timeout (hard limit)
     FLIGHTAWARE_WINDOW_PAST_HOURS: int = 2           # enrich flights up to 2h ago
     FLIGHTAWARE_WINDOW_FUTURE_HOURS: int = 12        # enrich flights up to 12h ahead
+    FLIGHTAWARE_COOLDOWN_MINUTES: int = 20           # min gap between FA calls for same flight
+    FLIGHTAWARE_ENRICH_MAX_PER_CYCLE: int = 20       # hard cap of FA calls per scheduler cycle
+    FLIGHTAWARE_GATE_HORIZON_HOURS: int = 4          # call FA for gate enrichment if dep is within 4h
 
     COLLECTION_INTERVAL_HOURS: int = 12
     MIN_TRAIN_SAMPLES: int = 300

@@ -1,20 +1,28 @@
 """
-Live Feature Builder (v11)
+Live Feature Builder (v12)
 ===========================
-Builds the 7-column feature vector used by the production XGBoost model
-(delay_prediction_model.pkl / delay_classifier.json) from a live
-AviationEdge / AEFlightSnapshot flight dict.
+Builds the base feature vector from a live AviationEdge / AEFlightSnapshot
+flight dict, then adds routing metadata so prediction_service._run_prediction()
+can enrich with rolling historical features (V2 pipeline).
 
-Feature columns (MUST match train_ae_dataset.py AE_FEATURE_COLUMNS):
-  dep_hour, is_weekend, distance_km, duration_min,
-  airline_enc, dep_airport_enc, arr_airport_enc
+Keys returned:
+  Base (computed here):
+    dep_hour, is_weekend, is_peak_hour, distance_km, duration_min,
+    airline_enc, dep_airport_enc, arr_airport_enc
+  Routing metadata (passed through for rolling enrichment):
+    dep_iata, arr_iata, airline_iata
 
-v11 changes:
-  - Removed 18-column weather/congestion vector (caused feature shape mismatch).
-  - Now uses the same 7 columns the production model was trained on.
-  - DB-backed encoders from feature_engineering.py PersistentLabelEncoder.
-  - DB-backed Haversine distance when Airport lat/lon is stored.
-  - Cold-start safe: all values have sensible defaults.
+  Rolling features (added by prediction_service._run_prediction() if the
+  loaded model expects them):
+    route_avg_delay_hist, airline_avg_delay_hist, hour_avg_delay_hist,
+    route_flight_count, airline_flight_count, airport_departure_count,
+    dep_month, dep_day_of_week
+
+v12 changes:
+  - Added is_peak_hour (07-09 / 17-20 departure window flag).
+  - Added dep_iata, arr_iata, airline_iata pass-through keys so rolling
+    features can be fetched by prediction_service without re-parsing the dict.
+  - No schema changes required.
 """
 
 import logging
@@ -112,7 +120,7 @@ def _get_encodings(airline_iata: str, dep_iata: str, arr_iata: str) -> tuple[int
 
 def build_features(flight: dict, db=None) -> dict:
     """
-    Build the 7-feature dict required by the production XGBoost model.
+    Build the feature dict required by the production V2 model.
 
     Args:
         flight: Normalized AviationEdge / AEFlightSnapshot dict.
@@ -121,9 +129,11 @@ def build_features(flight: dict, db=None) -> dict:
         db:     Optional SQLAlchemy session (enables DB-backed distance).
 
     Returns:
-        Dict matching AE_FEATURE_COLUMNS in train_ae_dataset.py:
-            dep_hour, is_weekend, distance_km, duration_min,
-            airline_enc, dep_airport_enc, arr_airport_enc
+        Dict with base features + routing metadata:
+            dep_hour, is_weekend, is_peak_hour,
+            distance_km, duration_min,
+            airline_enc, dep_airport_enc, arr_airport_enc,
+            dep_iata, arr_iata, airline_iata   (for rolling lookup in prediction_service)
     """
     dep_ts = _parse_scheduled(
         flight.get("dep_scheduled") or flight.get("dep_estimated")
@@ -141,6 +151,8 @@ def build_features(flight: dict, db=None) -> dict:
     dep_hour   = ref.hour
     dow        = ref.weekday()
     is_weekend = int(dow >= 5)
+    # Peak hour: morning rush (07-09) or evening rush (17-20)
+    is_peak_hour = int(7 <= dep_hour <= 9 or 17 <= dep_hour <= 20)
 
     # Distance
     distance_km = _get_distance_km(dep_iata, arr_iata, db)
@@ -152,7 +164,6 @@ def build_features(flight: dict, db=None) -> dict:
         if 0 < diff < 1440:
             duration_min = round(diff)
     if duration_min is None:
-        # Estimate from distance at 800 km/h cruise speed
         duration_min = max(30, round(distance_km / 800 * 60))
 
     # Categorical encodings
@@ -161,11 +172,17 @@ def build_features(flight: dict, db=None) -> dict:
     )
 
     return {
+        # Base features (match ALL_FEATURES base in train_v2.py)
         "dep_hour":        dep_hour,
         "is_weekend":      is_weekend,
+        "is_peak_hour":    is_peak_hour,
         "distance_km":     distance_km,
         "duration_min":    duration_min,
         "airline_enc":     airline_enc,
         "dep_airport_enc": dep_airport_enc,
         "arr_airport_enc": arr_airport_enc,
+        # Routing metadata — used by prediction_service to fetch rolling features
+        "dep_iata":        dep_iata or None,
+        "arr_iata":        arr_iata or None,
+        "airline_iata":    airline_iata or None,
     }

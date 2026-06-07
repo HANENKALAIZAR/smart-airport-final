@@ -166,6 +166,8 @@ def get_rolling_features_for_inference(
 
     This is prediction-safe: ae_aviation_stats contains only historical aggregates
     computed from past data — never from the flight being predicted.
+
+    Route key format: '{dep_iata}->{arr_iata}' (ASCII arrow, matches training)
     """
     from app.models.ae_models import AEAviationStats
 
@@ -178,33 +180,36 @@ def get_rolling_features_for_inference(
         ).first()
         return row
 
-    route_key = f"{dep_iata or 'UNK'}\u2192{arr_iata or 'UNK'}"
+    # Route key MUST match training: '->' (ASCII), not '→' (Unicode)
+    route_key = f"{dep_iata or 'UNK'}->{arr_iata or 'UNK'}"
     route_stat   = _get_stat("route",   route_key)
     airline_stat = _get_stat("airline", airline_iata or "UNK")
     hour_stat    = _get_stat("hour",    str(dep_hour) if dep_hour is not None else "UNK")
     airport_stat = _get_stat("airport", dep_iata or "UNK")
 
-    gm = 21.0  # approximate global mean delay; updated after each training run
+    # Global mean: read from ae_aviation_stats (written by train_v2 after each run).
+    # Falls back to 21.0 (approximate Tunisian airport average) if not yet populated.
+    global_row = _get_stat("global", "all")
+    gm = float(global_row.avg_delay_min) if (global_row and global_row.avg_delay_min is not None) else 21.0
 
     try:
-        import datetime
         if isinstance(flight_date, str):
             d = pd.to_datetime(flight_date, errors="coerce")
         else:
             d = pd.Timestamp(flight_date) if flight_date else None
-        dep_month       = d.month       if d and not pd.isnull(d) else 0
-        dep_day_of_week = d.dayofweek   if d and not pd.isnull(d) else 0
+        dep_month       = d.month       if d is not None and not pd.isnull(d) else 0
+        dep_day_of_week = d.dayofweek   if d is not None and not pd.isnull(d) else 0
     except Exception:
         dep_month = 0
         dep_day_of_week = 0
 
     return {
-        "route_avg_delay_hist":   float(route_stat.avg_delay_min)   if route_stat   and route_stat.avg_delay_min   is not None else gm,
-        "airline_avg_delay_hist": float(airline_stat.avg_delay_min) if airline_stat and airline_stat.avg_delay_min is not None else gm,
-        "hour_avg_delay_hist":    float(hour_stat.avg_delay_min)    if hour_stat    and hour_stat.avg_delay_min    is not None else gm,
-        "route_flight_count":     int(route_stat.total_flights)     if route_stat   and route_stat.total_flights   is not None else 0,
-        "airline_flight_count":   int(airline_stat.total_flights)   if airline_stat and airline_stat.total_flights is not None else 0,
-        "airport_departure_count":int(airport_stat.total_flights)   if airport_stat and airport_stat.total_flights is not None else 0,
-        "dep_month":              dep_month,
-        "dep_day_of_week":        dep_day_of_week,
+        "route_avg_delay_hist":    float(route_stat.avg_delay_min)    if route_stat   and route_stat.avg_delay_min   is not None else gm,
+        "airline_avg_delay_hist":  float(airline_stat.avg_delay_min)  if airline_stat and airline_stat.avg_delay_min is not None else gm,
+        "hour_avg_delay_hist":     float(hour_stat.avg_delay_min)     if hour_stat    and hour_stat.avg_delay_min    is not None else gm,
+        "route_flight_count":      int(route_stat.total_flights)      if route_stat   and route_stat.total_flights   is not None else 0,
+        "airline_flight_count":    int(airline_stat.total_flights)    if airline_stat and airline_stat.total_flights is not None else 0,
+        "airport_departure_count": int(airport_stat.total_flights)   if airport_stat and airport_stat.total_flights is not None else 0,
+        "dep_month":               dep_month,
+        "dep_day_of_week":         dep_day_of_week,
     }

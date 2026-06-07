@@ -33,16 +33,25 @@ export default function AdminPreview() {
   // Role is now fixed (no role-selection screen / toggle button).
   const role: "superadmin" | "admin" = "superadmin";
 
-  // Compute date label after mount to avoid SSR/CSR mismatch with timezone-dependent locale formatting.
+  // Use today's date initially.
+  const [isoDate, setIsoDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
   const [dateLabel, setDateLabel] = useState("");
+  
   useEffect(() => {
-    setDateLabel(new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long", year: "numeric" }));
-  }, []);
+    // Recompute dateLabel whenever isoDate changes
+    try {
+      const d = new Date(isoDate);
+      setDateLabel(d.toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long", year: "numeric" }));
+    } catch {
+      setDateLabel(new Date().toLocaleDateString("en-US", { weekday: "long", day: "numeric", month: "long", year: "numeric" }));
+    }
+  }, [isoDate]);
+  
   const dir = "ltr";
 
   let page: React.ReactNode = null;
   switch (active) {
-    case "dashboard": page = <DashboardPage dateLabel={dateLabel} role={role} onOpenAnalytics={() => setActive("analytics")} />; break;
+    case "dashboard": page = <DashboardPage dateLabel={dateLabel} isoDate={isoDate} role={role} onOpenAnalytics={() => setActive("analytics")} />; break;
     case "messages": page = <MessagesPage />; break;
     case "users": page = <SuperAdminUsers />; break;
     case "analytics": page = <ReportsPage />; break;
@@ -51,7 +60,7 @@ export default function AdminPreview() {
     case "profile": page = <AdminProfilePage />; break;
     case "settings": page = <SettingsPage />; break;
     case "global": page = <GlobalOpsPage />; break;
-    default: page = <DashboardPage dateLabel={dateLabel} role={role} onOpenAnalytics={() => setActive("analytics")} />;
+    default: page = <DashboardPage dateLabel={dateLabel} isoDate={isoDate} role={role} onOpenAnalytics={() => setActive("analytics")} />;
   }
 
   return (
@@ -133,7 +142,18 @@ export default function AdminPreview() {
               />
             </button>
 
-            <button className="admin-header__date">
+            <button className="admin-header__date" style={{ position: "relative", overflow: "hidden" }}>
+              <input
+                type="date"
+                value={isoDate}
+                onChange={(e) => {
+                  if (e.target.value) setIsoDate(e.target.value);
+                }}
+                style={{
+                  position: "absolute", top: 0, left: 0, width: "100%", height: "100%",
+                  opacity: 0, cursor: "pointer",
+                }}
+              />
               <CalendarIcon size={20} className="admin-header__date-icon" />
               <span>{dateLabel}</span>
             </button>

@@ -26,6 +26,7 @@ const STATUS_META: Record<string, { labelKey: string; dot: string; glowClass?: s
     departed:  { labelKey: 'status_label_departed',  dot: '#9B9C9E' },
     landed:    { labelKey: 'status_label_landed',    dot: '#6366F1' },
     stale_unresolved: { labelKey: 'status_label_unavailable', dot: '#94A3B8' },
+    pending:   { labelKey: 'status_label_pending', dot: '#F59E0B' },
 };
 
 
@@ -33,16 +34,28 @@ interface FlightRow {
     id: number;
     flight_number: string;
     airline_name: string;
+    airline_iata?: string;
+    airline_icao?: string;
     dep_iata: string;
     arr_iata: string;
     dep_airport: string;
     arr_airport: string;
     dep_scheduled: string;
     arr_scheduled: string;
+    dep_actual?: string | null;
+    arr_actual?: string | null;
     dep_terminal?: string | null;
     arr_terminal?: string | null;
     dep_gate?: string | null;
     arr_gate?: string | null;
+    // FA-sourced gate/terminal (separate columns)
+    fa_dep_gate?: string | null;
+    fa_arr_gate?: string | null;
+    fa_dep_terminal?: string | null;
+    fa_arr_terminal?: string | null;
+    // Source tracking for displayed times
+    displayed_dep_source?: string | null;  // 'aviation_edge' | 'flightaware'
+    displayed_arr_source?: string | null;
     delay_minutes?: number | null;
     status: string;
     direction: 'departure' | 'arrival';
@@ -243,8 +256,9 @@ function formatDelay(minutes: number | null | undefined, includePlus = true): st
     const h = Math.floor(minutes / 60);
     const m = Math.floor(minutes % 60);
     const prefix = includePlus ? '+' : '';
-    if (h > 0) return `${prefix}${h}h ${m}m`;
-    return `${prefix}${m}m`;
+    if (h > 0 && m > 0) return `${prefix}${h}h ${m}min`;
+    if (h > 0) return `${prefix}${h}h`;
+    return `${prefix}${m}min`;
 }
 
 interface AdminDashboardProps {
@@ -300,6 +314,8 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
     const [flights, setFlights] = useState<FlightRow[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
+    const [lastPagedDate, setLastPagedDate] = useState<string | null>(null);
 
     const [search, setSearch] = useState('');
     // Draft filter values
@@ -336,7 +352,8 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
         if (onDateChange) onDateChange(d);
     };
 
-    const dateLabel = new Date().toLocaleDateString(t('__locale__') === 'fr' ? 'fr-FR' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const { language } = useLanguage();
+    const dateLabel = new Date().toLocaleDateString(language === 'fr' ? 'fr-FR' : language === 'ar' ? 'ar-SA' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
     const fetchFlights = useCallback(async () => {
         try {
@@ -351,15 +368,56 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const json = await res.json();
             const rawList = json.flights || [];
-            const fetched = rawList.map((f: any) => ({ ...f, status: normalizeFlightStatus(f.status) }));
-            setFlights(fetched);
+            
+            const fetched = rawList.map((f: any) => {
+                let s = normalizeFlightStatus(f.status);
+                if (!f.status || f.status === 'unknown' || f.status === 'null' || s === 'stale_unresolved') {
+                    const schedStr = f.direction === 'arrival' ? f.arr_scheduled : f.dep_scheduled;
+                    if (schedStr) {
+                        const schedTime = new Date(schedStr).getTime();
+                        const now = Date.now();
+                        s = schedTime > now ? 'scheduled' : 'pending';
+                    } else {
+                        s = 'pending';
+                    }
+                }
+                return { ...f, status: s };
+            });
+
+            // Sort by scheduled time ascending
+            const sorted = fetched.sort((a: FlightRow, b: FlightRow) => {
+                const tA = new Date(a.direction === 'arrival' ? a.arr_scheduled : a.dep_scheduled).getTime();
+                const tB = new Date(b.direction === 'arrival' ? b.arr_scheduled : b.dep_scheduled).getTime();
+                return tA - tB;
+            });
+            
+            setFlights(sorted);
+            setLastSyncTime(json.last_sync_time || null);
+
+            if (lastPagedDate !== dateStr && sorted.length > 0) {
+                const now = Date.now();
+                let closestIdx = 0;
+                let minDiff = Infinity;
+                sorted.forEach((f: FlightRow, idx: number) => {
+                    const t = new Date(f.direction === 'arrival' ? f.arr_scheduled : f.dep_scheduled).getTime();
+                    const diff = Math.abs(t - now);
+                    if (diff < minDiff) {
+                        minDiff = diff;
+                        closestIdx = idx;
+                    }
+                });
+                const newPage = Math.floor(closestIdx / PAGE_SIZE) + 1;
+                setPage(newPage);
+                setLastPagedDate(dateStr);
+            }
+
         } catch {
             setError(t('admin_dash_live_feed_unavailable') || 'Live feed unavailable');
             setFlights([]);
         } finally {
             setLoading(false);
         }
-    }, [selectedAirport.iata, localDate]);
+    }, [selectedAirport.iata, localDate, lastPagedDate]);
 
     useEffect(() => {
         fetchFlights();
@@ -375,9 +433,9 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
         const delayed = flights.filter(f => f.status === 'delayed').length;
         const cancelled = flights.filter(f => f.status === 'cancelled').length;
         const onTime = flights.filter(f => f.status === 'on_time' || f.status === 'scheduled').length;
-        const onTimePct = total > 0 ? Math.round((onTime / total) * 1000) / 10 : 100;
+        const onTimePct = total > 0 ? Math.round((onTime / total) * 1000) / 10 : null;
         const validDelays = flights.map(f => f.delay_minutes).filter((d): d is number => d != null);
-        const avgDelay = validDelays.length > 0 ? Math.round(validDelays.reduce((s, d) => s + d, 0) / validDelays.length) : 0;
+        const avgDelay = total > 0 && validDelays.length > 0 ? Math.round(validDelays.reduce((s, d) => s + d, 0) / validDelays.length) : null;
         const activeDeparting = flights.filter(f => 
             f.direction === 'departure' && 
             ['boarding', 'taxiing', 'in_air'].includes(f.status)
@@ -403,13 +461,43 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
         setRiskFilter(draftRisk);
         setAirportFilter(draftAirport);
         setTimeFilter(draftTime);
-        setPage(1);
+        
+        const nextFiltered = flights.filter(f => {
+            if (draftStatus !== 'all' && f.status !== draftStatus) return false;
+            if (draftRisk !== 'all') {
+                const r = (f.delay_minutes ?? 0) > 30 ? 'high' : (f.delay_minutes ?? 0) > 10 ? 'medium' : 'low';
+                if (r !== draftRisk) return false;
+            }
+            if (draftAirport !== 'all') {
+                const icao = IATA_TO_ICAO[draftAirport];
+                const matchesDep = f.dep_iata === draftAirport || (icao && f.dep_iata === icao);
+                const matchesArr = f.arr_iata === draftAirport || (icao && f.arr_iata === icao);
+                if (!matchesDep && !matchesArr) return false;
+            }
+            if (directionTab !== 'all' && f.direction !== directionTab) return false;
+            const time = formatTime(f.direction === 'arrival' ? f.arr_scheduled : f.dep_scheduled);
+            if (!inTimeRange(time, draftTime)) return false;
+            if (search.trim()) {
+                const q = search.toLowerCase();
+                const cleanQuery = q.replace(/\s+/g, "").toLowerCase();
+                const numericPart = f.flight_number.replace(/^[A-Za-z]+/, "").toLowerCase();
+                const iataVariant = f.airline_iata ? `${f.airline_iata}${numericPart}`.toLowerCase() : "";
+                const icaoVariant = f.airline_icao ? `${f.airline_icao}${numericPart}`.toLowerCase() : "";
+                
+                const hay = `${f.flight_number} ${iataVariant} ${icaoVariant} ${f.airline_name} ${f.dep_iata} ${f.arr_iata}`.toLowerCase();
+                if (!hay.includes(cleanQuery) && !hay.includes(q)) return false;
+            }
+            return true;
+        });
+        const newTotal = Math.max(1, Math.ceil(nextFiltered.length / PAGE_SIZE));
+        setPage(p => Math.min(p, newTotal));
     };
 
     const resetFilters = () => {
         setDraftStatus('all'); setDraftRisk('all'); setDraftAirport('all'); setDraftTime('all');
         setStatusFilter('all'); setRiskFilter('all'); setAirportFilter('all'); setTimeFilter('all');
-        setSearch(''); setPage(1);
+        setSearch('');
+        setPage(1);
     };
 
     const filtered = useMemo(() => flights.filter(f => {
@@ -503,6 +591,9 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                     -ms-overflow-style: none;
                     scrollbar-width: none;
                 }
+                @media (max-width: 1024px) {
+                    .col-low-priority { display: none !important; }
+                }
             ` }} />
             {/* ── Page Header ── */}
             <div className="admin-page__header">
@@ -520,12 +611,35 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                 </div>
             </div>
 
+            {/* Sync Failure / Empty State Banner */}
+            {!loading && flights.length === 0 && (
+                <div style={{
+                    background: 'rgba(239, 68, 68, 0.08)',
+                    border: '1px solid rgba(239, 68, 68, 0.22)',
+                    padding: '1rem 1.25rem',
+                    borderRadius: 12,
+                    marginBottom: '1.5rem',
+                    color: '#EF4444',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4
+                }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <AlertTriangle size={16} style={{ color: '#EF4444' }} />
+                        Real-time flight data is currently unavailable.
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--adm-text-sub)', marginLeft: 24 }}>
+                        Last successful synchronization: {lastSyncTime ? new Date(lastSyncTime).toLocaleString() : 'Never'}
+                    </div>
+                </div>
+            )}
+
             {/* ── KPI Cards — exact Skyward grid ── */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-                <KPICard title={t('admin_dash_total_today') || 'Flights Today'} value={loading ? '…' : kpi.total} icon={<Plane size={28} />} trend={6} />
-                <KPICard title={t('admin_dash_on_time_rate') || 'On-Time Rate'} value={loading ? '…' : kpi.onTimePct} suffix="%" icon={<Clock size={28} />} trend={2} />
-                <KPICard title={t('admin_dash_avg_delay') || 'Avg Delay'} value={loading ? '…' : formatDelay(kpi.avgDelay, false)} icon={<AlertTriangle size={28} />} trend={kpi.avgDelay > 15 ? -4 : 2} />
-                <KPICard title={t('admin_dash_active_departures') || 'Active Departures'} value={loading ? '…' : kpi.activeDeparting} icon={<TrendingUp size={28} />} trend={0} />
+                <KPICard title={t('admin_dash_total_today') || 'Flights Today'} value={loading ? '…' : kpi.total} icon={<Plane size={28} />} trend={kpi.total > 0 ? 6 : undefined} />
+                <KPICard title={t('admin_dash_on_time_rate') || 'On-Time Rate'} value={loading ? '…' : (kpi.onTimePct !== null ? kpi.onTimePct : 'N/A')} suffix={kpi.onTimePct !== null ? "%" : ""} icon={<Clock size={28} />} trend={kpi.total > 0 ? 2 : undefined} />
+                <KPICard title={t('admin_dash_avg_delay') || 'Avg Delay'} value={loading ? '…' : (kpi.avgDelay !== null ? formatDelay(kpi.avgDelay, false) : 'N/A')} icon={<AlertTriangle size={28} />} trend={kpi.avgDelay !== null && kpi.total > 0 ? (kpi.avgDelay > 15 ? -4 : 2) : undefined} />
+                <KPICard title={t('admin_dash_active_departures') || 'Active Departures'} value={loading ? '…' : kpi.activeDeparting} icon={<TrendingUp size={28} />} trend={kpi.total > 0 ? 0 : undefined} />
             </div>
 
             {/* ── Data-control toolbar — exact Skyward layout ── */}
@@ -603,23 +717,16 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
 
                     <div style={{ display: 'flex', gap: 6 }}>
                         <button
-                            className="admin-btn admin-btn--outline"
+                            className="dash-filter-reset"
                             onClick={resetFilters}
                             disabled={activeFilterCount === 0 && search === ''}
-                            style={{ padding: '0.45rem 0.85rem', fontSize: '0.75rem', opacity: activeFilterCount === 0 && search === '' ? 0.5 : 1 }}
                         >
-                            {t('admin_dash_reset') || 'Reset'}
+                            {t('admin_dash_reset') || 'Reset Filters'}
                         </button>
                         <button
-                            className="admin-btn admin-btn--primary"
+                            className="dash-filter-apply"
                             onClick={applyFilters}
                             disabled={!draftDirty}
-                            style={{ 
-                                padding: '0.45rem 1.25rem', fontSize: '0.75rem', 
-                                opacity: !draftDirty ? 0.5 : 1,
-                                fontWeight: 700,
-                                boxShadow: draftDirty ? 'var(--adm-shadow)' : 'none'
-                            }}
                         >
                             {t('admin_dash_apply_filters') || 'Apply Filters'}
                         </button>
@@ -639,7 +746,38 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                     return (
                         <button
                             key={tab}
-                            onClick={() => { setDirectionTab(tab); setPage(1); }}
+                            onClick={() => {
+                                setDirectionTab(tab);
+                                const nextFiltered = flights.filter(f => {
+                                    if (statusFilter !== 'all' && f.status !== statusFilter) return false;
+                                    if (riskFilter !== 'all') {
+                                        const r = (f.delay_minutes ?? 0) > 30 ? 'high' : (f.delay_minutes ?? 0) > 10 ? 'medium' : 'low';
+                                        if (r !== riskFilter) return false;
+                                    }
+                                    if (airportFilter !== 'all') {
+                                        const icao = IATA_TO_ICAO[airportFilter];
+                                        const matchesDep = f.dep_iata === airportFilter || (icao && f.dep_iata === icao);
+                                        const matchesArr = f.arr_iata === airportFilter || (icao && f.arr_iata === icao);
+                                        if (!matchesDep && !matchesArr) return false;
+                                    }
+                                    if (tab !== 'all' && f.direction !== tab) return false;
+                                    const time = formatTime(f.direction === 'arrival' ? f.arr_scheduled : f.dep_scheduled);
+                                    if (!inTimeRange(time, timeFilter)) return false;
+                                    if (search.trim()) {
+                                        const q = search.toLowerCase();
+                                        const cleanQuery = q.replace(/\s+/g, "").toLowerCase();
+                                        const numericPart = f.flight_number.replace(/^[A-Za-z]+/, "").toLowerCase();
+                                        const iataVariant = f.airline_iata ? `${f.airline_iata}${numericPart}`.toLowerCase() : "";
+                                        const icaoVariant = f.airline_icao ? `${f.airline_icao}${numericPart}`.toLowerCase() : "";
+                                        
+                                        const hay = `${f.flight_number} ${iataVariant} ${icaoVariant} ${f.airline_name} ${f.dep_iata} ${f.arr_iata}`.toLowerCase();
+                                        if (!hay.includes(cleanQuery) && !hay.includes(q)) return false;
+                                    }
+                                    return true;
+                                });
+                                const newTotal = Math.max(1, Math.ceil(nextFiltered.length / PAGE_SIZE));
+                                setPage(p => Math.min(p, newTotal));
+                            }}
                             style={{
                                 padding: '0.75rem 1.25rem',
                                 background: 'none', border: 'none',
@@ -698,10 +836,10 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                         </div>
                     )}
 
-                    <div style={{ overflowX: 'auto' }}>
-                        <table className="admin-table">
+                    <div style={{ width: '100%' }}>
+                        <table className="admin-table" style={{ width: '100%' }}>
                             <thead>
-                                <tr><th></th><th>{t('admin_dash_flight_col') || 'Flight'}</th><th>{t('admin_dash_airline_col') || 'Airline'}</th><th>{t('admin_dash_route_col') || 'Route'}</th><th>{t('admin_dash_scheduled_col') || 'Scheduled'}</th><th>{t('admin_dash_terminal_col') || 'Terminal'}</th><th>{t('admin_dash_gate_col') || 'Gate'}</th><th>{t('admin_dash_delay_col') || 'Delay'}</th><th>{t('admin_dash_status_col') || 'Status'}</th></tr>
+                                <tr><th></th><th>{t('admin_dash_flight_col') || 'Vol'}</th><th>{t('admin_dash_airline_col') || 'Compagnie'}</th><th>{t('admin_dash_route_col') || 'Itinéraire'}</th><th>{t('admin_dash_dep_col') || 'Départ'}</th><th>{t('admin_dash_arr_col') || 'Arrivée'}</th><th className="col-low-priority">{t('admin_dash_terminal_col') || 'Terminal'}</th><th className="col-low-priority">{t('admin_dash_gate_col') || 'Porte'}</th><th>{t('admin_dash_delay_col') || 'Retard'}</th><th>{t('admin_dash_status_col') || 'Statut'}</th></tr>
                             </thead>
                             <tbody>
                                 {pageRows.map(f => {
@@ -710,9 +848,22 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                                     const dirColor = isArr ? '#34D399' : '#60A5FA';
                                     const meta = STATUS_META[f.status] || STATUS_META.scheduled;
                                     const statusLabel = t(meta.labelKey) || meta.labelKey;
-                                    const time = isArr ? formatTime(f.arr_scheduled) : formatTime(f.dep_scheduled);
-                                    const terminal = (isArr ? f.arr_terminal : f.dep_terminal) || '—';
-                                    const gate = (isArr ? f.arr_gate : f.dep_gate) || '—';
+                                    const depTime = formatTime(f.dep_scheduled);
+                                    const arrTime = formatTime(f.arr_scheduled);
+                                    // Best-available terminal: AE first, FA fallback
+                                    const terminalRaw = (isArr
+                                        ? (f.arr_terminal || f.fa_arr_terminal)
+                                        : (f.dep_terminal || f.fa_dep_terminal));
+                                    const terminal = terminalRaw && terminalRaw.trim() ? terminalRaw : 'Non assignée';
+                                    // Best-available gate: AE first, FA fallback
+                                    const gateRaw = (isArr
+                                        ? (f.arr_gate || f.fa_arr_gate)
+                                        : (f.dep_gate || f.fa_dep_gate));
+                                    const gate = gateRaw && gateRaw.trim() ? gateRaw : 'Non assignée';
+                                    // Is the gate sourced from FlightAware (not AE)?
+                                    const gateFromFA = gate !== 'Non assignée' && isArr
+                                        ? (!f.arr_gate && !!f.fa_arr_gate)
+                                        : (!f.dep_gate && !!f.fa_dep_gate);
                                     
                                     // Smart Date Mismatch Badge logic
                                     const schedTimeStr = isArr ? f.arr_scheduled : f.dep_scheduled;
@@ -754,14 +905,36 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="admin-table__muted">{f.airline_name}</td>
+                                            <td className="admin-table__muted" style={{ maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.airline_name}</td>
                                             <td>
-                                                <div style={{ fontWeight: 600 }}>{f.dep_iata} → {f.arr_iata}</div>
-                                                <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted)' }}>{isArr ? f.dep_airport : f.arr_airport}</div>
+                                                <div style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{f.dep_iata} → {f.arr_iata}</div>
                                             </td>
-                                            <td>{time}</td>
-                                            <td>{terminal}</td>
-                                            <td>{gate}</td>
+                                            <td style={{ whiteSpace: 'nowrap' }}>{depTime}</td>
+                                            <td style={{ whiteSpace: 'nowrap' }}>{arrTime}</td>
+                                            <td className="col-low-priority" style={{ color: terminal === 'Non assignée' ? 'var(--adm-text-muted)' : 'inherit', fontSize: terminal === 'Non assignée' ? '0.72rem' : 'inherit' }}>{terminal}</td>
+                                            <td className="col-low-priority">
+                                                {gate === 'Non assignée' ? (
+                                                    <span style={{ color: 'var(--adm-text-muted)', fontSize: '0.72rem' }}>Non assignée</span>
+                                                ) : (
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                                        <span style={{ fontWeight: 600 }}>{gate}</span>
+                                                        {gateFromFA && (
+                                                            <span
+                                                                title="Gate sourced from FlightAware"
+                                                                style={{
+                                                                    fontSize: '0.58rem', fontWeight: 700,
+                                                                    padding: '1px 4px', borderRadius: 4,
+                                                                    background: 'rgba(59,130,246,0.12)',
+                                                                    color: '#3B82F6',
+                                                                    border: '1px solid rgba(59,130,246,0.25)',
+                                                                    letterSpacing: '0.02em',
+                                                                    lineHeight: 1.4,
+                                                                }}
+                                                            >FA</span>
+                                                        )}
+                                                    </span>
+                                                )}
+                                            </td>
                                             <td><span className={f.delay_minutes != null && f.delay_minutes > 0 ? 'admin-table__danger' : ''}>{formatDelay(f.delay_minutes)}</span></td>
                                             <td>
                                                 <span 
@@ -783,7 +956,7 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                                     );
                                 })}
                                 {pageRows.length === 0 && !loading && (
-                                    <tr><td colSpan={9}>
+                                    <tr><td colSpan={10}>
                                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '4rem 1rem', color: 'var(--adm-text-muted)' }}>
                                             <div style={{ background: 'var(--adm-bg)', padding: '1rem', borderRadius: '50%', marginBottom: '1rem', border: '1px solid var(--adm-border)' }}>
                                                 {error ? <AlertTriangle size={32} style={{ color: '#EF4444' }} /> : <Plane size={32} style={{ opacity: 0.5 }} />}
@@ -818,22 +991,13 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                             gap: '0.75rem',
                         }}>
                             <span style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted)', whiteSpace: 'nowrap' }}>
-                                {t('__showing__')?.replace('{x}', String((safePage - 1) * PAGE_SIZE + 1)).replace('{y}', String(Math.min(safePage * PAGE_SIZE, filtered.length))).replace('{z}', String(filtered.length)) ||
-                                    `${(safePage - 1) * PAGE_SIZE + 1}–${Math.min(safePage * PAGE_SIZE, filtered.length)} / ${filtered.length}`}
+                                {t('__showing__') !== '__showing__' ? t('__showing__')?.replace('{x}', String((safePage - 1) * PAGE_SIZE + 1)).replace('{y}', String(Math.min(safePage * PAGE_SIZE, filtered.length))).replace('{z}', String(filtered.length)) : 
+                                    `Showing ${(safePage - 1) * PAGE_SIZE + 1}–${Math.min(safePage * PAGE_SIZE, filtered.length)} of ${filtered.length}`}
                             </span>
-                            <div style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 4,
-                                overflowX: 'auto',
-                                maxWidth: '100%',
-                                paddingBottom: '2px',
-                                scrollbarWidth: 'none',
-                                msOverflowStyle: 'none',
-                            }} className="pagination-scroll">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflowX: 'auto', maxWidth: '100%' }}>
                                 <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
                                     style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid var(--adm-border)', background: 'transparent', color: 'var(--adm-text-sub)', cursor: safePage === 1 ? 'not-allowed' : 'pointer', opacity: safePage === 1 ? 0.4 : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                                    aria-label="Previous page">
+                                    aria-label="Page précédente">
                                     <ChevronLeft size={14} />
                                 </button>
                                 {getVisiblePages().map((n, idx) => {
@@ -848,14 +1012,14 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                                     const active = n === safePage;
                                     return (
                                         <button key={n} onClick={() => setPage(Number(n))}
-                                            style={{ minWidth: 32, height: 32, padding: '0 10px', borderRadius: 8, border: active ? '1px solid var(--adm-accent)' : '1px solid var(--adm-border)', background: active ? 'linear-gradient(135deg, #F59E0B, #FBBF24)' : 'transparent', color: active ? '#0A1628' : 'var(--adm-text-sub)', fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', flexShrink: 0 }}>
+                                            style={{ minWidth: 32, height: 32, padding: '0 10px', borderRadius: 8, border: active ? '2px solid #F59E0B' : '1px solid var(--adm-border)', background: active ? 'rgba(245,158,11,0.15)' : 'transparent', color: active ? '#F59E0B' : 'var(--adm-text-sub)', fontSize: '0.78rem', fontWeight: active ? 800 : 500, cursor: 'pointer', flexShrink: 0 }}>
                                             {n}
                                         </button>
                                     );
                                 })}
                                 <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
                                     style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid var(--adm-border)', background: 'transparent', color: 'var(--adm-text-sub)', cursor: safePage === totalPages ? 'not-allowed' : 'pointer', opacity: safePage === totalPages ? 0.4 : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                                    aria-label="Next page">
+                                    aria-label="Page suivante">
                                     <ChevronRight size={14} />
                                 </button>
                             </div>
@@ -865,7 +1029,7 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
 
                 {/* AI Decision-Support panel */}
                 <div className="admin-card" style={{ padding: 0, overflow: 'hidden', position: 'sticky', top: 16, display: 'flex', flexDirection: 'column', maxHeight: 'calc(100vh - 7rem)' }}>
-                    {isSuperAdmin ? <SuperAdminAIAlerts /> : <AirportAdminAIAlerts />}
+                    {isSuperAdmin ? <SuperAdminAIAlerts selectedDate={localDate} /> : <AirportAdminAIAlerts selectedDate={localDate} />}
                 </div>
             </div>
 

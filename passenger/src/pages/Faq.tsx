@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 import {
   Accordion,
   AccordionContent,
@@ -17,9 +18,7 @@ import {
   Plane,
   Luggage,
   ShieldCheck,
-  Wifi,
-  Coffee,
-  CreditCard,
+  Building2,
   Sparkles,
   ArrowRight,
   MessageSquare,
@@ -27,7 +26,7 @@ import {
 import { Link } from "react-router-dom";
 import faqHero from "@/assets/faq-hero.jpg";
 
-type FaqCategory = "all" | "flights" | "baggage" | "security" | "services" | "transport" | "assistance";
+type FaqCategory = "all" | "delays" | "baggage" | "airport" | "ai" | "general";
 
 interface FaqItem {
   q: string;
@@ -35,128 +34,53 @@ interface FaqItem {
   category: Exclude<FaqCategory, "all">;
 }
 
-const categories: { id: FaqCategory; label: string; icon: React.ElementType }[] = [
-  { id: "all", label: "All topics", icon: Sparkles },
-  { id: "flights", label: "Flights", icon: Plane },
-  { id: "baggage", label: "Baggage", icon: Luggage },
-  { id: "security", label: "Security", icon: ShieldCheck },
-  { id: "services", label: "Services & Wi-Fi", icon: Wifi },
-  { id: "transport", label: "Transport", icon: Coffee },
-  { id: "assistance", label: "Assistance & payment", icon: CreditCard },
-];
-
-const faqs: FaqItem[] = [
-  // Flights
-  {
-    category: "flights",
-    q: "How early should I arrive at the airport before my flight?",
-    a: "We recommend arriving 2 hours before domestic flights and at least 3 hours before international flights to allow time for check-in, baggage drop, and security screening.",
-  },
-  {
-    category: "flights",
-    q: "Where can I check my flight status in real time?",
-    a: "Visit our Live Flights page to see departures and arrivals across all four Tunisian airports, including gate, terminal and estimated times updated continuously.",
-  },
-  {
-    category: "flights",
-    q: "What should I do if my flight is delayed or cancelled?",
-    a: "Contact your airline first for rebooking. You may also be entitled to compensation under EU Regulation 261/2004 — see our Passenger Rights page for details and a free claim eligibility check.",
-  },
-  {
-    category: "flights",
-    q: "Can I change gate or terminal information?",
-    a: "Gate and terminal assignments are managed by airlines and may change. Always check the live information screens or our Live Flights page within 1 hour of departure.",
-  },
-
-  // Baggage
-  {
-    category: "baggage",
-    q: "What is the standard cabin baggage allowance?",
-    a: "Each airline sets its own rules, but most allow one cabin bag (max 55×40×20 cm, 8–10 kg) plus a small personal item. Check your airline's website before travelling.",
-  },
-  {
-    category: "baggage",
-    q: "What can I do if my baggage is lost or damaged?",
-    a: "Report it immediately at your airline's baggage service desk in the arrivals hall before leaving the airport. Keep your baggage tag and boarding pass — you'll need them for your claim.",
-  },
-  {
-    category: "baggage",
-    q: "Is there left-luggage storage at the airport?",
-    a: "Yes, Tunis–Carthage and Enfidha–Hammamet offer secure left-luggage facilities in the arrivals area. Pricing depends on size and duration.",
-  },
-
-  // Security
-  {
-    category: "security",
-    q: "What liquids can I bring through security?",
-    a: "Containers must not exceed 100 ml each, all placed in a single transparent resealable bag of max 1 litre. Larger quantities must go in checked baggage.",
-  },
-  {
-    category: "security",
-    q: "Are power banks allowed in cabin baggage?",
-    a: "Yes, but only in cabin baggage (never in checked luggage). Capacity must not exceed 100 Wh without prior airline approval.",
-  },
-  {
-    category: "security",
-    q: "Do I need to remove laptops and electronics at security?",
-    a: "Yes, laptops, tablets and large electronics must be placed in a separate tray for X-ray screening. Phones and small devices can stay in your bag.",
-  },
-
-  // Services
-  {
-    category: "services",
-    q: "Is Wi-Fi available across all terminals?",
-    a: "Yes, free Wi-Fi is available in all four Tunisian airports. Connect to the network 'AirportFreeWiFi' and follow the on-screen instructions.",
-  },
-  {
-    category: "services",
-    q: "What dining and shopping options are available?",
-    a: "Each airport offers cafés, restaurants, duty-free shops and local craft boutiques. Visit our Services page to browse options per airport with opening hours.",
-  },
-  {
-    category: "services",
-    q: "Are there VIP lounges I can access?",
-    a: "Yes, all four Tunisian airports offer VIP lounges. Access is included with eligible airline tickets, Priority Pass, or can be purchased on the spot.",
-  },
-
-  // Transport
-  {
-    category: "transport",
-    q: "How do I get from the airport to the city?",
-    a: "Taxis, public buses, car rentals and pre-booked transfers are available at all airports. See the 'Getting to' section on each airport page for detailed options and fares.",
-  },
-  {
-    category: "transport",
-    q: "Is there parking at the airport?",
-    a: "Yes, all Tunisian airports offer short-term and long-term parking with secure 24/7 surveillance. Online reservation is recommended during peak season.",
-  },
-
-  // Assistance & payment
-  {
-    category: "assistance",
-    q: "Is there assistance for passengers with reduced mobility?",
-    a: "Yes, free PRM assistance is available at all airports. Request the service via your airline at least 48 hours before departure for the best experience.",
-  },
-  {
-    category: "assistance",
-    q: "Where can I exchange currency or withdraw cash?",
-    a: "Currency exchange counters and ATMs are available in arrivals and departures at all airports. Major credit cards are widely accepted.",
-  },
-  {
-    category: "assistance",
-    q: "What languages are spoken at airport service desks?",
-    a: "Staff typically speak Arabic, French and English. Many also speak Italian, German or Russian, especially during the tourist season.",
-  },
-  {
-    category: "assistance",
-    q: "How do I contact a specific airport?",
-    a: "Visit our Contact page to find direct phone numbers, emails and addresses for each Tunisian airport, or use the contact form to send a message directly.",
-  },
-];
-
 export default function Faq() {
+  const { t } = useTranslation();
   const [active, setActive] = useState<FaqCategory>("all");
   const [query, setQuery] = useState("");
+
+  const categories = useMemo(() => [
+    { id: "all" as FaqCategory, label: t("all", "All"), icon: Sparkles },
+    { id: "delays" as FaqCategory, label: t("faq_cat_delays", "Delays & Compensation"), icon: ShieldCheck },
+    { id: "baggage" as FaqCategory, label: t("faq_cat_baggage", "Baggage"), icon: Luggage },
+    { id: "airport" as FaqCategory, label: t("faq_cat_airport", "Airport & Facilities"), icon: Building2 },
+    { id: "ai" as FaqCategory, label: t("faq_cat_ai", "AI Predictions"), icon: Sparkles },
+    { id: "general" as FaqCategory, label: t("faq_cat_general", "General"), icon: HelpCircle },
+  ], [t]);
+
+  const faqs: FaqItem[] = useMemo(() => [
+    // Delays
+    { category: "delays", q: t("faq_delays_q1"), a: t("faq_delays_a1") },
+    { category: "delays", q: t("faq_delays_q2"), a: t("faq_delays_a2") },
+    { category: "delays", q: t("faq_delays_q3"), a: t("faq_delays_a3") },
+    { category: "delays", q: t("faq_delays_q4"), a: t("faq_delays_a4") },
+    { category: "delays", q: t("faq_delays_q5"), a: t("faq_delays_a5") },
+    { category: "delays", q: t("faq_delays_q6"), a: t("faq_delays_a6") },
+
+    // Baggage
+    { category: "baggage", q: t("faq_baggage_q1"), a: t("faq_baggage_a1") },
+    { category: "baggage", q: t("faq_baggage_q2"), a: t("faq_baggage_a2") },
+    { category: "baggage", q: t("faq_baggage_q3"), a: t("faq_baggage_a3") },
+    { category: "baggage", q: t("faq_baggage_q4"), a: t("faq_baggage_a4") },
+
+    // Airport
+    { category: "airport", q: t("faq_airport_q1"), a: t("faq_airport_a1") },
+    { category: "airport", q: t("faq_airport_q2"), a: t("faq_airport_a2") },
+    { category: "airport", q: t("faq_airport_q3"), a: t("faq_airport_a3") },
+    { category: "airport", q: t("faq_airport_q4"), a: t("faq_airport_a4") },
+    { category: "airport", q: t("faq_airport_q5"), a: t("faq_airport_a5") },
+
+    // AI
+    { category: "ai", q: t("faq_ai_q1"), a: t("faq_ai_a1") },
+    { category: "ai", q: t("faq_ai_q2"), a: t("faq_ai_a2") },
+    { category: "ai", q: t("faq_ai_q3"), a: t("faq_ai_a3") },
+    { category: "ai", q: t("faq_ai_q4"), a: t("faq_ai_a4") },
+
+    // General
+    { category: "general", q: t("faq_general_q1"), a: t("faq_general_a1") },
+    { category: "general", q: t("faq_general_q2"), a: t("faq_general_a2") },
+    { category: "general", q: t("faq_general_q3"), a: t("faq_general_a3") },
+  ], [t]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -165,7 +89,7 @@ export default function Faq() {
       const matchesQuery = !q || f.q.toLowerCase().includes(q) || f.a.toLowerCase().includes(q);
       return matchesCat && matchesQuery;
     });
-  }, [active, query]);
+  }, [active, query, faqs]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -187,15 +111,13 @@ export default function Faq() {
           >
             <Badge className="bg-primary/15 text-primary border-primary/30 hover:bg-primary/20 mb-5">
               <HelpCircle className="h-3 w-3 me-1.5" />
-              Frequently asked questions
+              {t("faq", "Frequently Asked Questions")}
             </Badge>
             <h1 className="font-display text-4xl md:text-6xl font-semibold tracking-tight text-foreground leading-[1.05]">
-              Answers to your<br />
-              <span className="bg-gradient-amber bg-clip-text text-transparent">most common questions</span>
+              {t("faq_title", "Frequently Asked Questions")}
             </h1>
             <p className="mt-5 text-lg text-muted-foreground leading-relaxed max-w-2xl">
-              Everything you need to know about flying through Tunisian airports — from check-in
-              and baggage to security, services and transport.
+              {t("faq_subtitle")}
             </p>
 
             <div className="mt-8 max-w-md relative">
@@ -203,7 +125,7 @@ export default function Faq() {
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search questions…"
+                placeholder={t("faq_search_placeholder", "Search questions…")}
                 className="h-12 pl-11 rounded-full bg-card/70 backdrop-blur-md border-border/60 focus-visible:ring-primary/40"
               />
             </div>
@@ -240,7 +162,7 @@ export default function Faq() {
         {filtered.length === 0 ? (
           <Card className="p-10 text-center border-border/60">
             <HelpCircle className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">No questions match your search.</p>
+            <p className="text-muted-foreground">{t("services_no_results", "No results found matching your search.")}</p>
           </Card>
         ) : (
           <Accordion type="single" collapsible className="space-y-3">
@@ -271,23 +193,23 @@ export default function Faq() {
         <div className="mt-14 rounded-3xl border border-border/60 bg-gradient-to-br from-primary/10 via-card to-card p-8 md:p-10 flex flex-col md:flex-row items-start md:items-center gap-6">
           <div className="flex-1">
             <h3 className="font-display text-2xl font-semibold text-foreground">
-              Still have questions?
+              {t("faq_still_have_questions", "Still have questions?")}
             </h3>
             <p className="text-muted-foreground mt-2">
-              Get in touch with the airport directly or chat with our AI assistant for instant help.
+              {t("faq_still_have_questions_desc")}
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Button asChild size="lg" className="rounded-full bg-gradient-amber text-primary-foreground hover:opacity-90 shadow-amber">
               <Link to="/contact">
-                Contact airport
+                {t("contact", "Contact")}
                 <ArrowRight className="h-4 w-4 ms-1.5" />
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="rounded-full">
-              <Link to="/app/assistant">
+              <Link to="/assistant">
                 <MessageSquare className="h-4 w-4 me-1.5" />
-                Ask the AI
+                {t("landing.cta_assistant", "AI Assistant")}
               </Link>
             </Button>
           </div>
@@ -296,7 +218,7 @@ export default function Faq() {
 
       <footer className="border-t border-border/60 py-8 mt-8">
         <div className="max-w-[1400px] mx-auto px-4 md:px-8 text-center text-sm text-muted-foreground">
-          © {new Date().getFullYear()} Smart Airport · Public information platform for Tunisian airports
+          © {new Date().getFullYear()} {t("about_footer_info")}
         </div>
       </footer>
     </div>

@@ -43,22 +43,22 @@ export function PublicNav({ overlay = true }: { overlay?: boolean }) {
   const exploreItems = [
     {
       to: "/about",
-      label: "About Airport",
-      desc: "Infrastructure, airlines and destinations",
+      label: t("explore.about"),
+      desc: t("explore.about_desc"),
       icon: Building2,
       accent: "from-amber-500/20 to-orange-500/10",
     },
     {
       to: "/faq",
-      label: "FAQ",
-      desc: "Answers to traveller questions",
+      label: t("explore.faq"),
+      desc: t("explore.faq_desc"),
       icon: HelpCircle,
       accent: "from-sky-500/20 to-blue-500/10",
     },
     {
       to: "/contact",
-      label: "Contact",
-      desc: "Reach each airport directly",
+      label: t("explore.contact"),
+      desc: t("explore.contact_desc"),
       icon: Mail,
       accent: "from-emerald-500/20 to-teal-500/10",
     },
@@ -124,7 +124,7 @@ export function PublicNav({ overlay = true }: { overlay?: boolean }) {
                   "h-3.5 w-3.5 transition-all duration-500 group-data-[state=open]:text-primary group-data-[state=open]:rotate-[360deg]"
                 )}
               />
-              <span>Explore</span>
+              <span>{t("explore.title")}</span>
               <ChevronDown className="h-3.5 w-3.5 transition-transform duration-300 group-data-[state=open]:rotate-180" />
               {/* underline indicator */}
               <span
@@ -161,10 +161,10 @@ export function PublicNav({ overlay = true }: { overlay?: boolean }) {
                 <div className="p-3">
                   <div className="px-3 pt-2 pb-3 flex items-center justify-between">
                     <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-                      Explore the airport
+                      {t("explore.explore_airport")}
                     </div>
                     <div className="text-[10px] text-muted-foreground/70">
-                      {exploreItems.length} sections
+                      {t("explore.sections", { count: exploreItems.length })}
                     </div>
                   </div>
 
@@ -213,7 +213,7 @@ export function PublicNav({ overlay = true }: { overlay?: boolean }) {
 
                             <ArrowUpRight
                               className={cn(
-                                "h-4 w-4 text-muted-foreground/60 shrink-0",
+                                "h-4 w-4 text-muted-foreground/60 shrink-0 rtl-flip",
                                 "transition-all duration-300",
                                 "opacity-0 -translate-x-1 group-hover/item:opacity-100 group-hover/item:translate-x-0 group-hover/item:text-primary"
                               )}
@@ -226,18 +226,18 @@ export function PublicNav({ overlay = true }: { overlay?: boolean }) {
                 </div>
 
                 {/* Right — featured card */}
-                <div className="relative border-l border-border/60 bg-gradient-to-br from-primary/12 via-card/40 to-transparent p-5 flex flex-col">
+                <div className="relative border-l rtl:border-l-0 rtl:border-r border-border/60 bg-gradient-to-br from-primary/12 via-card/40 to-transparent p-5 flex flex-col">
                   <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-primary/80 mb-3">
-                    Featured
+                    {t("explore.featured")}
                   </div>
                   <div className="h-10 w-10 rounded-xl bg-gradient-amber grid place-items-center shadow-amber mb-3">
                     <Sparkles className="h-5 w-5 text-primary-foreground" />
                   </div>
                   <div className="font-display text-base font-semibold text-foreground leading-snug">
-                    Smart AI Assistant
+                    {t("explore.assistant_title")}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
-                    Ask anything about flights, services or your rights — instant answers in 3 languages.
+                    {t("explore.assistant_desc")}
                   </p>
 
                   <Link
@@ -246,8 +246,8 @@ export function PublicNav({ overlay = true }: { overlay?: boolean }) {
                     className="mt-auto inline-flex items-center justify-center gap-1.5 h-9 rounded-full px-4 bg-foreground text-background text-xs font-medium hover:bg-foreground/90 transition-colors group/cta"
                   >
                     <MessageSquare className="h-3.5 w-3.5" />
-                    Try the assistant
-                    <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover/cta:translate-x-0.5 group-hover/cta:-translate-y-0.5" />
+                    {t("explore.try_assistant")}
+                    <ArrowUpRight className="h-3.5 w-3.5 rtl-flip transition-transform group-hover/cta:translate-x-0.5 group-hover/cta:-translate-y-0.5" />
                   </Link>
                 </div>
               </div>
@@ -256,15 +256,15 @@ export function PublicNav({ overlay = true }: { overlay?: boolean }) {
               <div className="relative border-t border-border/60 px-4 py-2.5 flex items-center justify-between text-[11px] text-muted-foreground bg-background/40">
                 <span className="inline-flex items-center gap-1.5">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Live information across 4 Tunisian airports
+                  {t("explore.live_info")}
                 </span>
                 <Link
                   to="/about"
                   onClick={() => setExploreOpen(false)}
                   className="text-foreground/80 hover:text-primary inline-flex items-center gap-1 transition-colors"
                 >
-                  Browse all
-                  <ArrowUpRight className="h-3 w-3" />
+                  {t("explore.browse_all")}
+                  <ArrowUpRight className="h-3 w-3 rtl-flip" />
                 </Link>
               </div>
             </PopoverContent>
@@ -319,7 +319,7 @@ export function PublicNav({ overlay = true }: { overlay?: boolean }) {
             <div className="mt-2 pt-3 border-t border-border/60">
               <div className="px-3 pb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground inline-flex items-center gap-1.5">
                 <Compass className="h-3 w-3 text-primary" />
-                Explore
+                {t("explore.title")}
               </div>
               {exploreItems.map((item) => {
                 const Icon = item.icon;
@@ -344,7 +344,7 @@ export function PublicNav({ overlay = true }: { overlay?: boolean }) {
                         {item.desc}
                       </div>
                     </div>
-                    <ArrowUpRight className="h-4 w-4 text-muted-foreground/60 group-hover:text-primary transition-colors" />
+                    <ArrowUpRight className="h-4 w-4 text-muted-foreground/60 rtl-flip group-hover:text-primary transition-colors" />
                   </Link>
                 );
               })}

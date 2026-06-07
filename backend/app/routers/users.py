@@ -210,6 +210,7 @@ class AdminListItem(BaseModel):
     verification_status: str = "pending_review"
     profile_photo_url: Optional[str] = None
     cin_document_back_url: Optional[str] = None
+    profile_edit_unlocked: bool = False
 
     class Config:
         from_attributes = True
@@ -476,7 +477,14 @@ def complete_my_profile(
     current_user.id_document_rejection_reason = None
     current_user.rejected_fields = None
     current_user.updated_at = datetime.now(timezone.utc)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="CIN number already registered. Each admin must have a unique CIN.",
+        )
 
     iata = current_user.airport_iata or ""
     airport_label = AIRPORT_DISPLAY.get(iata, iata or "Unknown")
@@ -569,21 +577,29 @@ def patch_my_settings(
     if not current_user.is_active:
         raise HTTPException(status_code=403, detail="Your account is deactivated. Please contact support.")
 
+    IDENTITY_FIELDS = {"full_name", "cin_number", "date_of_birth", "nationality", "gender"}
+    PASSPORT_FIELDS = {"passport_number", "passport_document_url", "passport_expiry_date"}
+    CIN_DOC_FIELDS = {"cin_document_url", "cin_document_back_url"}
+    CONTACT_FIELDS = {"phone_number", "residential_address", "emergency_contact_name", "emergency_contact_phone", "emergency_contact_relationship"}
+
     if current_user.id_document_status == "rejected":
         # Targeted correction mode
         allowed_keys = set(current_user.rejected_fields or [])
+        allowed_keys.add("profile_photo_url")
         if not allowed_keys:
             raise HTTPException(status_code=403, detail="No editable fields during rejection.")
     else:
-        # Standard settings mode (approved or pending but mostly approved)
-        allowed_keys = {
-            "phone_number",
-            "profile_photo_url",
-            "residential_address",
-            "emergency_contact_name",
-            "emergency_contact_phone",
-            "emergency_contact_relationship",
-        }
+        # Standard settings mode: dynamically build allowed keys based on section unlock flags
+        allowed_keys = {"profile_photo_url"}
+        
+        if getattr(current_user, 'profile_unlock_identity', False) or getattr(current_user, 'profile_edit_unlocked', False):
+            allowed_keys.update(IDENTITY_FIELDS)
+        if getattr(current_user, 'profile_unlock_passport', False) or getattr(current_user, 'profile_edit_unlocked', False):
+            allowed_keys.update(PASSPORT_FIELDS)
+        if getattr(current_user, 'profile_unlock_cin_doc', False) or getattr(current_user, 'profile_edit_unlocked', False):
+            allowed_keys.update(CIN_DOC_FIELDS)
+        if getattr(current_user, 'profile_unlock_contact', False) or getattr(current_user, 'profile_edit_unlocked', False):
+            allowed_keys.update(CONTACT_FIELDS)
 
     for key in data.keys():
         if key not in allowed_keys:
@@ -707,8 +723,29 @@ def patch_my_settings(
                 pass
             logger.info(f"Admin profile fully resubmitted: {current_user.email}")
 
+    # Auto-relock: only the section that was saved resets its unlock state, others retain it.
+    if not is_resubmit:
+        if any(k in IDENTITY_FIELDS for k in data.keys()):
+            current_user.profile_unlock_identity = False
+        if any(k in PASSPORT_FIELDS for k in data.keys()):
+            current_user.profile_unlock_passport = False
+        if any(k in CIN_DOC_FIELDS for k in data.keys()):
+            current_user.profile_unlock_cin_doc = False
+        if any(k in CONTACT_FIELDS for k in data.keys()):
+            current_user.profile_unlock_contact = False
+        
+        # Always lock the legacy override flag on any save, letting the individual flags handle remaining sections
+        current_user.profile_edit_unlocked = False
+
     current_user.updated_at = datetime.now(timezone.utc)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="CIN number already registered. Each admin must have a unique CIN.",
+        )
 
     if is_resubmit:
         remaining = current_user.rejected_fields or []
@@ -793,9 +830,9 @@ def review_admin_profile(
         user.rejected_fields = rejected_fields
         user.correction_attempts = (user.correction_attempts or 0) + 1
         
-        if user.correction_attempts >= 3:
+        if user.correction_attempts >= 5:
             user.is_active = 0
-            reason_msg += ". Maximum correction attempts (3) reached. Account deactivated."
+            reason_msg += ". Maximum correction attempts (5) reached. Account deactivated."
             user.id_document_rejection_reason = reason_msg
             logger.warning(f"Admin {user.email} reached max correction attempts and was deactivated.")
 
@@ -822,10 +859,8 @@ def review_admin_profile(
 
 def _admin_verification_status(u: User) -> str:
     st = getattr(u, "id_document_status", None)
-    if st == "rejected":
-        return "rejected"
-    if st == "approved":
-        return "approved"
+    if st in ("expired_verification", "rejected", "approved", "archived", "permanently_rejected"):
+        return st
     return "pending_review"
 
 
@@ -889,6 +924,7 @@ def list_admins(
                 verification_status=vs,
                 profile_photo_url=u.profile_photo_url,
                 cin_document_back_url=u.cin_document_back_url,
+                profile_edit_unlocked=bool(getattr(u, "profile_edit_unlocked", False)),
             )
         )
     return rows
@@ -974,3 +1010,218 @@ def toggle_admin_status(
     db.refresh(user)
     logger.info(f"Admin toggled: {user.email} → is_active={user.is_active}")
     return user
+
+
+class ToggleEditRequest(BaseModel):
+    unlock: bool
+    section: Optional[str] = None
+
+
+@router.patch("/admins/{user_id}/toggle-edit", status_code=200)
+def toggle_profile_edit(
+    user_id: int,
+    payload: ToggleEditRequest,
+    db: Session = Depends(get_db),
+    _super: User = Depends(require_super_admin),
+):
+    """Super Admin: grant or revoke temporary permission to edit locked profile fields."""
+    user = db.query(User).filter(User.id == user_id, User.role == "admin").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Admin not found.")
+    
+    section = payload.section
+    if section:
+        section = section.lower()
+        if section == "identity":
+            user.profile_unlock_identity = payload.unlock
+        elif section == "passport":
+            user.profile_unlock_passport = payload.unlock
+        elif section == "cin_doc":
+            user.profile_unlock_cin_doc = payload.unlock
+        elif section == "contact":
+            user.profile_unlock_contact = payload.unlock
+        else:
+            raise HTTPException(status_code=422, detail=f"Invalid section '{section}'")
+    else:
+        user.profile_edit_unlocked = payload.unlock
+        user.profile_unlock_identity = payload.unlock
+        user.profile_unlock_passport = payload.unlock
+        user.profile_unlock_cin_doc = payload.unlock
+        user.profile_unlock_contact = payload.unlock
+
+    user.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    status_label = "granted" if payload.unlock else "revoked"
+    section_label = f"for section '{section}'" if section else "for all sections"
+    logger.info(f"Super admin {status_label} profile edit unlock {section_label} for admin {user.email}")
+    if payload.unlock:
+        try:
+            notify_airport_admin(
+                db,
+                admin_id=user.id,
+                kind="profile_edit_unlocked",
+                body=f"The Super Admin has authorized you to edit your {section or 'profile'} fields. This access will be revoked automatically after your next save.",
+                context={"action": "open_settings"},
+            )
+            db.commit()
+        except Exception:
+            pass
+    return {
+        "profile_edit_unlocked": user.profile_edit_unlocked,
+        "profile_unlock_identity": user.profile_unlock_identity,
+        "profile_unlock_passport": user.profile_unlock_passport,
+        "profile_unlock_cin_doc": user.profile_unlock_cin_doc,
+        "profile_unlock_contact": user.profile_unlock_contact,
+        "message": f"Profile edit unlock {status_label} {section_label}.",
+    }
+
+
+# ── Expired Verification Actions (super_admin only) ───────────────────────────
+
+@router.post("/admins/{user_id}/reopen-verification", status_code=200)
+def reopen_expired_verification(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _super: User = Depends(require_super_admin),
+):
+    """
+    Super Admin: Reopen an expired verification so the admin can correct and resubmit.
+    Sets id_document_status back to 'rejected', preserving audit history.
+    """
+    user = db.query(User).filter(User.id == user_id, User.role == "admin").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Admin not found.")
+    if getattr(user, "id_document_status", None) != "expired_verification":
+        raise HTTPException(
+            status_code=409,
+            detail="Admin verification is not in 'expired_verification' state.",
+        )
+
+    user.id_document_status = "rejected"
+    user.id_document_rejection_reason = (
+        "Your verification has been reopened by the Super Admin. "
+        "Please correct the required fields and resubmit."
+    )
+    user.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+    # Notify the admin
+    try:
+        notify_airport_admin(
+            db,
+            admin_id=user.id,
+            kind="verification_reopened",
+            body=(
+                "The Super Admin has reopened your verification request. "
+                "Please correct and resubmit your profile."
+            ),
+            context={"action": "open_settings"},
+        )
+        db.commit()
+    except Exception as exc:
+        logger.error(f"Failed to notify admin of reopened verification: {exc}")
+        db.rollback()
+
+    logger.info(
+        f"Super admin {_super.email} reopened expired verification for admin {user.email}"
+    )
+    return {"message": "Verification reopened. Admin can now correct and resubmit."}
+
+
+@router.post("/admins/{user_id}/archive", status_code=200)
+def archive_expired_admin(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _super: User = Depends(require_super_admin),
+):
+    """
+    Super Admin: Archive an admin whose verification expired.
+    Sets id_document_status = 'archived'. Account stays in DB for audit purposes.
+    is_active is set to 0 only here — under explicit Super Admin control.
+    """
+    user = db.query(User).filter(User.id == user_id, User.role == "admin").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Admin not found.")
+    if getattr(user, "id_document_status", None) != "expired_verification":
+        raise HTTPException(
+            status_code=409,
+            detail="Admin verification is not in 'expired_verification' state.",
+        )
+
+    user.id_document_status = "archived"
+    user.is_active = 0
+    user.id_document_rejection_reason = "Account archived by Super Admin after verification expired."
+    user.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+    # Notify the admin
+    try:
+        notify_airport_admin(
+            db,
+            admin_id=user.id,
+            kind="account_archived",
+            body=(
+                "Your account has been archived by the Super Admin. "
+                "Please contact the system administrator for further assistance."
+            ),
+        )
+        db.commit()
+    except Exception as exc:
+        logger.error(f"Failed to notify admin of archival: {exc}")
+        db.rollback()
+
+    logger.info(
+        f"Super admin {_super.email} archived admin {user.email} after verification expiry"
+    )
+    return {"message": "Admin account archived successfully."}
+
+
+@router.post("/admins/{user_id}/permanently-reject", status_code=200)
+def permanently_reject_admin(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _super: User = Depends(require_super_admin),
+):
+    """
+    Super Admin: Permanently reject an admin whose verification expired.
+    Sets id_document_status = 'permanently_rejected'. Account stays for audit.
+    is_active is set to 0 only here — under explicit Super Admin control.
+    """
+    user = db.query(User).filter(User.id == user_id, User.role == "admin").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Admin not found.")
+    if getattr(user, "id_document_status", None) != "expired_verification":
+        raise HTTPException(
+            status_code=409,
+            detail="Admin verification is not in 'expired_verification' state.",
+        )
+
+    user.id_document_status = "permanently_rejected"
+    user.is_active = 0
+    user.id_document_rejection_reason = (
+        "Your account has been permanently rejected by the Super Admin. "
+        "No further verification attempts are permitted."
+    )
+    user.updated_at = datetime.now(timezone.utc)
+    db.commit()
+
+    # Notify the admin
+    try:
+        notify_airport_admin(
+            db,
+            admin_id=user.id,
+            kind="account_permanently_rejected",
+            body=(
+                "Your account has been permanently rejected by the Super Admin. "
+                "No further verification attempts are permitted."
+            ),
+        )
+        db.commit()
+    except Exception as exc:
+        logger.error(f"Failed to notify admin of permanent rejection: {exc}")
+        db.rollback()
+
+    logger.info(
+        f"Super admin {_super.email} permanently rejected admin {user.email} after verification expiry"
+    )
+    return {"message": "Admin account permanently rejected."}

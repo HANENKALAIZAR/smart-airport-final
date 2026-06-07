@@ -191,6 +191,15 @@ def _snapshot_to_api_dict(r: AEFlightSnapshot) -> dict:
         "last_status_change": _fmt_utc(r.last_status_change),
         "last_position_update": _fmt_utc(r.last_position_update),
         "live":          live,
+        # FlightAware smart enrichment fields
+        "fa_dep_gate":   r.fa_dep_gate,
+        "fa_arr_gate":   r.fa_arr_gate,
+        "fa_dep_terminal": r.fa_dep_terminal,
+        "fa_arr_terminal": r.fa_arr_terminal,
+        "ae_dep_actual": _fmt_tz(r.ae_dep_actual, r.dep_iata),
+        "ae_arr_actual": _fmt_tz(r.ae_arr_actual, r.arr_iata),
+        "displayed_dep_source": r.displayed_dep_source,
+        "displayed_arr_source": r.displayed_arr_source,
         # FlightAware enrichment metadata (null if not yet enriched)
         "last_verified_by":  r.last_verified_by,
         "last_verified_at":  _fmt_utc(r.last_verified_at),

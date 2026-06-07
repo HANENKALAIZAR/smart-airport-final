@@ -26,6 +26,7 @@ const AdminSettings      = lazy(() => import('./AdminSettings'));
 const AdminMessages      = lazy(() => import('./AdminMessages'));
 const SuperAdminUsers    = lazy(() => import('./SuperAdminUsers'));
 const SuperAdminGlobalOps = lazy(() => import('./SuperAdminGlobalOps'));
+const AirportAdminGlobalOps = lazy(() => import('./AirportAdminGlobalOps'));
 const AdminProfilePage   = lazy(() => import('./AdminProfilePage'));
 const MonthlySummaryPage = lazy(() =>
     import('./AdminMonthlySummary').then(m => ({ default: m.MonthlySummaryPage }))
@@ -353,7 +354,10 @@ export default function AdminApp() {
                                         <Route path="messages" element={<AdminMessages />} />
                                         
                                         {role !== 'super_admin' && (
-                                            <Route path="profile" element={<AdminProfilePage />} />
+                                            <>
+                                                <Route path="profile" element={<AdminProfilePage />} />
+                                                <Route path="global" element={<AirportAdminGlobalOps />} />
+                                            </>
                                         )}
                                         
                                         {role === 'super_admin' && (

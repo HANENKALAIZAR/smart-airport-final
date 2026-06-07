@@ -186,6 +186,7 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         Index('ix_unique_super_admin', 'role', unique=True, postgresql_where=(Column('role') == 'super_admin'), sqlite_where=(Column('role') == 'super_admin')),
+        Index('ix_users_cin_unique', 'cin_number', unique=True, postgresql_where=(Column('cin_number') != None), sqlite_where=(Column('cin_number') != None)),
     )
 
     id                   = Column(Integer, primary_key=True, autoincrement=True)
@@ -224,12 +225,25 @@ class User(Base):
     profile_photo_url    = Column(Text, nullable=True)   # base64 data URL (large)
     personal_email       = Column(String(255), nullable=True)    # personal gmail/yahoo for welcome emails
     id_document_status = Column(
-        Enum("pending", "approved", "rejected", name="id_document_status_enum"),
+        Enum(
+            "pending",
+            "approved",
+            "rejected",
+            "expired_verification",
+            "archived",
+            "permanently_rejected",
+            name="id_document_status_enum",
+        ),
         nullable=True,
     )
     id_document_rejection_reason = Column(Text, nullable=True)
     rejected_fields = Column(JSON, nullable=True)  # List of explicitly rejected field keys
     correction_attempts = Column(Integer, default=0, nullable=False)
+    profile_edit_unlocked = Column(Boolean, nullable=False, default=False)
+    profile_unlock_identity = Column(Boolean, nullable=False, default=False)
+    profile_unlock_passport = Column(Boolean, nullable=False, default=False)
+    profile_unlock_cin_doc = Column(Boolean, nullable=False, default=False)
+    profile_unlock_contact = Column(Boolean, nullable=False, default=False)
 
 
 
@@ -261,6 +275,8 @@ class AIAlert(Base):
     risk_pct = Column(SmallInteger, nullable=False, default=0)
     cause = Column(Text, nullable=False, default="")
     recommendation = Column(Text, nullable=False, default="")
+    route = Column(String(100), nullable=True)
+    delay_formatted = Column(String(100), nullable=True)
 
     decision = Column(
         Enum("pending", "approved", "rejected", name="ai_alert_decision_enum"),

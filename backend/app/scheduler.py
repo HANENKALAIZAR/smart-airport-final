@@ -242,6 +242,22 @@ async def _job_auto_retrain():
         db.close()
 
 
+async def _job_rejection_reminders():
+    """
+    Run daily rejection reminder and account expiration sweeps (every 12 hours).
+    """
+    from app.tasks.reminder_task import run_rejection_reminder_sweep
+    from app.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        run_rejection_reminder_sweep(db)
+    except Exception as e:
+        logger.error(f"[Rejection Reminder Sweep Job] Failed: {e}")
+    finally:
+        db.close()
+
+
 async def _job_passenger_alerts():
     """
     Passenger alert notification job — runs every 5 minutes.
@@ -462,29 +478,26 @@ async def _job_passenger_alerts():
 
 async def _job_flightaware_enrich():
     """
-    FlightAware live-status enrichment job — runs every 15 minutes.
+    FlightAware targeted verification job — runs every 20 minutes.
 
-    Algorithm:
+    Algorithm (condition-gated, not indiscriminate):
       1. Skip entirely if FlightAware is disabled or circuit is OPEN.
-      2. Query AEFlightSnapshot for enrichable candidates:
-           - status IN ('scheduled', 'delayed', 'unknown')
-           - today's snapshot_date
-           - dep_scheduled or arr_scheduled in the active window
-           - LIMIT 50 (hard cap — never process more per cycle)
-      3. For each candidate:
-           a. Double-check should_enrich() filter.
-           b. Build ident candidates (ICAO preferred, IATA fallback).
-           c. For each ident: check TTL cache, then call FA.
-           d. On FA hit: reconcile and update DB.
-           e. On miss: try next ident. Log total miss at end.
-      4. Commit once after all updates.
-      5. Log summary counters.
+      2. Primary filter: snapshots with needs_fa_verification=True or time-based
+         conditions (dep_actual missing, in_air past arrival, etc.).
+      3. For each candidate, call should_call_flightaware() to apply cooldown
+         rules and get the exact trigger reason.
+      4. Hard cap: 20 flights per cycle (targeted calls, so 20 is plenty).
+      5. Log every FA call with reason:
+         "[FA TRIGGERED] TU123 reason=ae_dep_actual_missing"
+      6. On FA hit: reconcile and update DB (including gate/terminal).
+      7. Commit once after all updates.
     """
     from app.config import settings as _settings
     from app.api_clients.flightaware_client import (
         is_enabled, fetch_flight_by_ident, get_ident_candidates,
     )
-    from app.services.flight_reconciliation_service import should_enrich, reconcile_snapshot
+    from app.services.flight_reconciliation_service import reconcile_snapshot
+    from app.services.fa_verification_gate import should_call_flightaware
     from app.services.provider_health import health_registry
     from app.models.ae_models import AEFlightSnapshot
     from app.database import SessionLocal
@@ -508,45 +521,73 @@ async def _job_flightaware_enrich():
     past_limit   = now - timedelta(hours=_settings.FLIGHTAWARE_WINDOW_PAST_HOURS)
     future_limit = now + timedelta(hours=_settings.FLIGHTAWARE_WINDOW_FUTURE_HOURS)
     today = now.date()
+    max_per_cycle = _settings.FLIGHTAWARE_ENRICH_MAX_PER_CYCLE
 
     db = SessionLocal()
-    checked = enriched = misses = errors = 0
+    checked = enriched = skipped_cooldown = misses = errors = 0
 
     try:
-        # ── 1. Query enrichable candidates (smart filter + hard LIMIT) ───────
+        # ── 1. Primary filter: flagged rows OR active flights in time window ──
+        # We widen the net a bit then let should_call_flightaware() decide precisely.
         candidates = (
             db.query(AEFlightSnapshot)
             .filter(
                 AEFlightSnapshot.snapshot_date == today,
-                AEFlightSnapshot.status.in_(["scheduled", "delayed", "unknown"]),
+                AEFlightSnapshot.status.notin_(["landed", "cancelled", "stale_unresolved"]),
                 or_(
+                    # Explicitly flagged by AE ingestion
+                    AEFlightSnapshot.needs_fa_verification == True,
+                    # Active / in-progress flights in the operational window
                     and_(
-                        AEFlightSnapshot.dep_scheduled >= past_limit,
-                        AEFlightSnapshot.dep_scheduled <= future_limit,
-                    ),
-                    and_(
-                        AEFlightSnapshot.arr_scheduled >= past_limit,
-                        AEFlightSnapshot.arr_scheduled <= future_limit,
+                        AEFlightSnapshot.status.in_(["scheduled", "delayed", "in_air", "boarding", "taxiing"]),
+                        or_(
+                            and_(
+                                AEFlightSnapshot.dep_scheduled >= past_limit,
+                                AEFlightSnapshot.dep_scheduled <= future_limit,
+                            ),
+                            and_(
+                                AEFlightSnapshot.arr_scheduled >= past_limit,
+                                AEFlightSnapshot.arr_scheduled <= future_limit,
+                            ),
+                        ),
                     ),
                 ),
             )
-            .order_by(AEFlightSnapshot.dep_scheduled.asc())
-            .limit(50)   # hard cap — never process more per cycle
+            .order_by(
+                # Prioritize explicitly flagged flights
+                AEFlightSnapshot.needs_fa_verification.desc(),
+                AEFlightSnapshot.dep_scheduled.asc(),
+            )
+            .limit(max_per_cycle * 3)   # over-fetch; gate will trim to max_per_cycle
             .all()
         )
 
         logger.info(
-            f"[FA Enrich Job] Starting — {len(candidates)} candidates in window "
-            f"[{past_limit.strftime('%H:%M')} – {future_limit.strftime('%H:%M')} UTC]"
+            f"[FA Enrich Job] Starting — {len(candidates)} pre-candidates in window "
+            f"[{past_limit.strftime('%H:%M')} \u2013 {future_limit.strftime('%H:%M')} UTC] "
+            f"(hard cap={max_per_cycle})"
         )
 
-        # ── 2. Process each candidate ─────────────────────────────────
+        # ── 2. Process each candidate through the verification gate ──────────
+        fa_calls_made = 0
         for snap in candidates:
+            if fa_calls_made >= max_per_cycle:
+                logger.info(f"[FA Enrich Job] Hard cap of {max_per_cycle} reached — stopping cycle.")
+                break
+
             checked += 1
 
-            # Double-check (service layer filter is authoritative)
-            if not should_enrich(snap, now_utc=now):
+            # Gate: applies cooldown + all trigger conditions
+            should_call, reason = should_call_flightaware(snap, _settings, now_utc=now)
+            if not should_call:
+                skipped_cooldown += 1
                 continue
+
+            # Log every FA call with the exact reason
+            logger.info(
+                f"[FA TRIGGERED] flight={snap.flight_number} airport={snap.airport_iata} "
+                f"reason={reason}"
+            )
 
             idents = get_ident_candidates(
                 snap.flight_number,
@@ -567,15 +608,15 @@ async def _job_flightaware_enrich():
                     break
 
                 if fa_data is None:
-                    # Miss or disabled — try next ident
                     continue
 
-                # FA hit — reconcile
+                # FA hit — reconcile (pass reason for audit trail)
                 try:
-                    result = reconcile_snapshot(snap, fa_data, db)
+                    result = reconcile_snapshot(snap, fa_data, db, fa_call_reason=reason)
                     if result["was_enriched"]:
                         enriched += 1
                     flight_enriched = True
+                    fa_calls_made += 1
                     break
                 except Exception as exc:
                     logger.error(
@@ -589,7 +630,7 @@ async def _job_flightaware_enrich():
                 logger.debug(f"[FA MISS] flight={snap.flight_number} — no FA match for idents={idents}")
 
         # ── 3. Commit all enriched rows ──────────────────────────────
-        if enriched > 0:
+        if enriched > 0 or fa_calls_made > 0:
             db.commit()
 
     except Exception as exc:
@@ -600,8 +641,8 @@ async def _job_flightaware_enrich():
 
     fa_stats = await health_registry.get_stats("flightaware")
     logger.info(
-        f"[FA Enrich Job] Done — checked={checked} enriched={enriched} "
-        f"misses={misses} errors={errors} | "
+        f"[FA Enrich Job] Done — checked={checked} fa_calls={fa_calls_made} enriched={enriched} "
+        f"skipped_cooldown={skipped_cooldown} misses={misses} errors={errors} | "
         f"circuit={fa_stats['circuit_state']} "
         f"total_enrichments={fa_stats['total_enrichments']} "
         f"total_failures={fa_stats['total_failures']}"
@@ -689,11 +730,21 @@ def start_scheduler():
         misfire_grace_time=120,
     )
 
+    _scheduler.add_job(
+        _job_rejection_reminders,
+        trigger=IntervalTrigger(hours=12),
+        id="rejection_reminders",
+        name="Daily rejected profile reminders and expirations (every 12 hours)",
+        replace_existing=True,
+        max_instances=1,
+        misfire_grace_time=3600,
+    )
+
     _scheduler.start()
     logger.info(
         f"APScheduler started — "
         f"weather=30min | predictions=30min | reconciliation=30min | ae_ingest=2min | "
-        f"passenger_alerts=5min | auto_retrain=6hours | "
+        f"passenger_alerts=5min | auto_retrain=6hours | rejection_reminders=12hours | "
         f"fa_enrich={settings.FLIGHTAWARE_ENRICH_INTERVAL_MINUTES}min"
     )
 

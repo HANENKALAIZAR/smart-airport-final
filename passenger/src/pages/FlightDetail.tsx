@@ -1,15 +1,20 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { getPassengerFlight, getPassengerPrediction, type Flight, type FlightPrediction } from "@/services/api";
-import { FlightArcMap } from "@/components/FlightArcMap";
+import {
+  getPassengerFlight,
+  getPassengerPrediction,
+  type Flight,
+  type FlightPrediction,
+} from "@/services/api";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useCountdown, formatTime, formatDate } from "@/lib/time";
 import { motion } from "framer-motion";
 import {
-  ArrowLeft, CheckCircle2, Cloud, Luggage, Plane, ShieldCheck,
-  TrendingUp, Wind, Brain, AlertTriangle, Radio, Scale, Coffee, Hotel, Euro, FileText, ArrowRight,
-  Sparkles, Bell, Mail, Clock, ShieldAlert,
+  ArrowLeft, ArrowRight, Bell, Brain, CheckCircle2, Clock,
+  Luggage, Plane, Scale, ShieldAlert, ShieldCheck, Sparkles,
+  TrendingUp, AlertTriangle, Wind, Cloud, Gauge, Radio, MapPin,
+  Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +24,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * FlightDetail
+ * Real backend, modern UI. No mock data — every field comes from `flight`,
+ * `normPred` (real ML prediction) or `dbRights` (backend passenger rights).
+ * ────────────────────────────────────────────────────────────────────────── */
 
 const FlightDetail = () => {
   const { id } = useParams();
@@ -44,11 +55,11 @@ const FlightDetail = () => {
   } | null>(null);
   const [checkingStatus, setCheckingStatus] = useState(false);
 
+  /* ───────── Effects (UNCHANGED backend logic) ───────── */
+
   useEffect(() => {
     const savedEmail = localStorage.getItem("passenger_alert_email");
-    if (savedEmail) {
-      setAlertEmail(savedEmail);
-    }
+    if (savedEmail) setAlertEmail(savedEmail);
   }, []);
 
   const fetchSubscriptionStatus = async (email: string) => {
@@ -58,10 +69,7 @@ const FlightDetail = () => {
       const res = await fetch(
         `${import.meta.env.VITE_API_URL}/passenger/alerts/status?email=${encodeURIComponent(email)}&flight_number=${encodeURIComponent(flight.flightNumber)}`
       );
-      if (res.ok) {
-        const data = await res.json();
-        setSubscriptionStatus(data);
-      }
+      if (res.ok) setSubscriptionStatus(await res.json());
     } catch (err) {
       console.error("Failed to check subscription status", err);
     } finally {
@@ -71,70 +79,51 @@ const FlightDetail = () => {
 
   useEffect(() => {
     if (alertEmail && alertEmail.includes("@") && alertsOpen) {
-      const delayDebounceFn = setTimeout(() => {
-        fetchSubscriptionStatus(alertEmail);
-      }, 500);
-
-      return () => clearTimeout(delayDebounceFn);
+      const t = setTimeout(() => fetchSubscriptionStatus(alertEmail), 500);
+      return () => clearTimeout(t);
     } else if (!alertEmail) {
       setSubscriptionStatus(null);
     }
   }, [alertEmail, alertsOpen, flight?.flightNumber]);
 
-
-  // ── Types ─────────────────────────────────────────────────────────────
-  // (Using FlightPrediction from api.ts)
-
   useEffect(() => {
     let cancelled = false;
     let interval: ReturnType<typeof setInterval>;
-
     const loadData = async () => {
       if (!id) return;
       try {
         const data = await getPassengerFlight(id);
-        if (data && !cancelled) {
-          setFlight(data);
-          setError(false);
-        } else if (!cancelled) {
-          setError(true);
-        }
-      } catch (err) {
+        if (data && !cancelled) { setFlight(data); setError(false); }
+        else if (!cancelled) setError(true);
+      } catch {
         if (!cancelled) setError(true);
       }
     };
-
     loadData();
-    interval = setInterval(loadData, 30000); // 30s instead of 15s to respect AE API limits
-
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    interval = setInterval(loadData, 30000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [id]);
 
-  // ── Fetch real ML prediction from backend ──────────────────────
   useEffect(() => {
     if (!flight) return;
     const fn = flight.flightNumber;
-    if (!fn || fn === 'UNKNOWN') return;
-    
+    if (!fn || fn === "UNKNOWN") return;
     setPredictionLoading(true);
     getPassengerPrediction(fn)
-      .then(pred => {
-        if (pred) setLivePrediction(pred);
-      })
+      .then(pred => { if (pred) setLivePrediction(pred); })
       .catch(() => null)
       .finally(() => setPredictionLoading(false));
   }, [flight?.flightNumber]);
 
   const locale = i18n.language === "fr" ? "fr-FR" : i18n.language === "ar" ? "ar" : "en-US";
-  const cd = useCountdown(flight?.departureTime ?? new Date().toISOString());
+  useCountdown(flight?.departureTime ?? new Date().toISOString());
+
+  /* ───────── Early states ───────── */
 
   if (error) return (
     <div className="py-24 text-center">
       <AlertTriangle className="h-12 w-12 text-warning mx-auto mb-4" />
-      <h2 className="text-2xl font-display mb-2">Flight Not Found</h2>
+      <h2 className="text-2xl font-semibold mb-2">Flight Not Found</h2>
       <p className="text-muted-foreground mb-6">We couldn't find details for flight ID: {id}</p>
       <Button onClick={() => nav("/flights")}>Back to Flights</Button>
     </div>
@@ -147,25 +136,18 @@ const FlightDetail = () => {
     </div>
   );
 
-  // ───────────────────── Real ML Prediction ─────────────────────
-  // Use prediction from flight.prediction (DB flights) or livePrediction (live flights)
+  /* ───────── Real ML prediction normalization (UNCHANGED) ───────── */
   const pred: FlightPrediction | null = flight.prediction ?? livePrediction ?? null;
 
-  // Let's extract normalized variables for ML prediction in render context:
   const getNormalizedMLPrediction = (p: FlightPrediction | null) => {
     if (!p) return null;
-    
-    // Normalize riskScore to 0-1
     const rawRisk = p.riskScore ?? 0;
     const riskFraction = rawRisk > 1 ? rawRisk / 100 : rawRisk;
     const riskPercent = Math.round(riskFraction * 100);
-
-    // Normalize confidence to 0-1
     const rawConf = p.confidence ?? 0;
     const confidenceFraction = rawConf > 1 ? rawConf / 100 : rawConf;
     const confidencePercent = Math.round(confidenceFraction * 100);
 
-    // Confidence interpretation & subtext
     let confidenceLabel = "Limited confidence";
     let confidenceSub = "Dynamic weather or system updates introduce uncertainty";
     if (confidenceFraction >= 0.75) {
@@ -176,7 +158,6 @@ const FlightDetail = () => {
       confidenceSub = "Reliable prediction based on route schedule patterns";
     }
 
-    // Risk Tone and Subtext
     let riskTone: "low" | "medium" | "high" = "low";
     let riskSub = "Low delay risk · Likely on-time";
     if (riskFraction >= 0.7) {
@@ -187,876 +168,720 @@ const FlightDetail = () => {
       riskSub = "Moderate delay risk · Minor schedule adjustments possible";
     }
 
-    return {
-      ...p,
-      riskFraction,
-      riskPercent,
-      confidenceFraction,
-      confidencePercent,
-      confidenceLabel,
-      confidenceSub,
-      riskTone,
-      riskSub
-    };
+    return { ...p, riskFraction, riskPercent, confidenceFraction, confidencePercent, confidenceLabel, confidenceSub, riskTone, riskSub };
   };
 
   const normPred = getNormalizedMLPrediction(pred);
-
-  // ───────────────────── Passenger Rights (from DB) ─────────────
-  // Use rights returned by the backend (/api/flights/{id}) — never compute on frontend
   const dbRights = flight.passengerRights ?? [];
 
-  // ── Journey Timeline Logic & Sync ──
+  /* ───────── Progress + timeline logic (UNCHANGED) ───────── */
+
   const getStepStates = (status: string) => {
     switch (status) {
-      case "scheduled":
-        return {
-          scheduled: { done: false, active: true },
-          boarding: { done: false, active: false },
-          departed: { done: false, active: false },
-          arrived: { done: false, active: false },
-        };
-      case "boarding":
-        return {
-          scheduled: { done: true, active: false },
-          boarding: { done: false, active: true },
-          departed: { done: false, active: false },
-          arrived: { done: false, active: false },
-        };
+      case "scheduled": return { scheduled: { done: false, active: true }, boarding: { done: false, active: false }, departed: { done: false, active: false }, arrived: { done: false, active: false } };
+      case "boarding":  return { scheduled: { done: true,  active: false }, boarding: { done: false, active: true  }, departed: { done: false, active: false }, arrived: { done: false, active: false } };
       case "departed":
-      case "in_air":
-        return {
-          scheduled: { done: true, active: false },
-          boarding: { done: true, active: false },
-          departed: { done: false, active: true },
-          arrived: { done: false, active: false },
-        };
-      case "landed":
-        return {
-          scheduled: { done: true, active: false },
-          boarding: { done: true, active: false },
-          departed: { done: true, active: false },
-          arrived: { done: true, active: true },
-        };
-      case "cancelled":
-      default:
-        return {
-          scheduled: { done: false, active: false },
-          boarding: { done: false, active: false },
-          departed: { done: false, active: false },
-          arrived: { done: false, active: false },
-        };
+      case "in_air":    return { scheduled: { done: true,  active: false }, boarding: { done: true,  active: false }, departed: { done: false, active: true  }, arrived: { done: false, active: false } };
+      case "landed":    return { scheduled: { done: true,  active: false }, boarding: { done: true,  active: false }, departed: { done: true,  active: false }, arrived: { done: true,  active: true  } };
+      default:          return { scheduled: { done: false, active: false }, boarding: { done: false, active: false }, departed: { done: false, active: false }, arrived: { done: false, active: false } };
     }
   };
 
   const getFlightProgressInfo = (f: Flight) => {
-    if (f.status === "cancelled") {
-      return { percent: 0, label: "Cancelled", isCancelled: true, remainingMs: 0 };
-    }
-    if (f.status === "landed") {
-      return { percent: 100, label: "Arrived", remainingMs: 0 };
-    }
-    if (f.status === "scheduled" || f.status === "boarding") {
-      return { percent: 0, label: f.status === "boarding" ? "Boarding" : "Scheduled", remainingMs: 0 };
-    }
-
+    if (f.status === "cancelled") return { percent: 0, label: "Cancelled", isCancelled: true, remainingMs: 0 };
+    if (f.status === "landed")    return { percent: 100, label: "Arrived", remainingMs: 0 };
+    if (f.status === "scheduled" || f.status === "boarding") return { percent: 0, label: f.status === "boarding" ? "Boarding" : "Scheduled", remainingMs: 0 };
     const depTime = new Date(f.departureTime || f.scheduledDeparture);
     const arrTime = new Date(f.arrivalTime || f.scheduledArrival);
     const now = new Date();
-
-    const totalDurationMs = arrTime.getTime() - depTime.getTime();
-    if (totalDurationMs <= 0) {
-      return { percent: 50, label: "En Route", remainingMs: 0 };
-    }
-
-    const elapsedMs = now.getTime() - depTime.getTime();
-    const progressPercent = Math.min(99, Math.max(1, Math.round((elapsedMs / totalDurationMs) * 100)));
+    const totalMs = arrTime.getTime() - depTime.getTime();
+    if (totalMs <= 0) return { percent: 50, label: "En Route", remainingMs: 0 };
+    const elapsed = now.getTime() - depTime.getTime();
+    const percent = Math.min(99, Math.max(1, Math.round((elapsed / totalMs) * 100)));
     const remainingMs = arrTime.getTime() - now.getTime();
-
-    return {
-      percent: progressPercent,
-      label: "En Route",
-      remainingMs: remainingMs > 0 ? remainingMs : 0,
-    };
+    return { percent, label: "En Route", remainingMs: remainingMs > 0 ? remainingMs : 0 };
   };
 
   const progressInfo = getFlightProgressInfo(flight);
 
   const getRemainingTimeDisplay = (info: any, f: Flight) => {
-    if (f.status === "cancelled") {
-      return "Cancelled";
-    }
-    if (f.status === "landed") {
-      return "Flight completed";
-    }
+    if (f.status === "cancelled") return "Cancelled";
+    if (f.status === "landed")    return "Flight completed";
     if (f.status === "scheduled" || f.status === "boarding") {
       const depTime = new Date(f.departureTime || f.scheduledDeparture);
-      const now = new Date();
-      const diffMs = depTime.getTime() - now.getTime();
+      const diffMs = depTime.getTime() - Date.now();
       if (diffMs > 0) {
-        const diffMins = Math.round(diffMs / 60000);
-        const h = Math.floor(diffMins / 60);
-        const m = diffMins % 60;
-        if (h > 0) {
-          return `Departs in ${h}h ${String(m).padStart(2, "0")}m`;
-        }
-        return `Departs in ${m}m`;
+        const mins = Math.round(diffMs / 60000);
+        const h = Math.floor(mins / 60), m = mins % 60;
+        return h > 0 ? `Departs in ${h}h ${String(m).padStart(2, "0")}m` : `Departs in ${m}m`;
       }
       return f.status === "boarding" ? "Boarding now" : "Scheduled departure passed";
     }
-
     const remainingMs = info.remainingMs ?? 0;
-    if (remainingMs <= 0) {
-      return "Arriving shortly";
-    }
-    const remainingMins = Math.round(remainingMs / 60000);
-    const h = Math.floor(remainingMins / 60);
-    const m = remainingMins % 60;
-    if (h > 0) {
-      return `${h}h ${String(m).padStart(2, "0")}m remaining`;
-    }
-    return `${m}m remaining`;
+    if (remainingMs <= 0) return "Arriving shortly";
+    const mins = Math.round(remainingMs / 60000);
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return h > 0 ? `${h}h ${String(m).padStart(2, "0")}m remaining` : `${m}m remaining`;
   };
 
   const stepStates = getStepStates(flight.status);
 
   const steps = [
-    { 
-      key: "scheduled", 
-      icon: Clock, 
-      done: stepStates.scheduled.done, 
-      active: stepStates.scheduled.active, 
-      scheduled: flight.scheduledDeparture, 
-      estimated: flight.departureTime || flight.scheduledDeparture 
-    },
-    { 
-      key: "boarding", 
-      icon: Plane, 
-      done: stepStates.boarding.done, 
-      active: stepStates.boarding.active, 
-      scheduled: addMin(flight.scheduledDeparture, -40), 
-      estimated: addMin(flight.departureTime || flight.scheduledDeparture, -40) 
-    },
-    { 
-      key: "departed", 
-      icon: TrendingUp, 
-      done: stepStates.departed.done, 
-      active: stepStates.departed.active, 
-      scheduled: flight.scheduledDeparture, 
-      estimated: flight.departureTime || flight.scheduledDeparture 
-    },
-    { 
-      key: "arrived", 
-      icon: Luggage, 
-      done: stepStates.arrived.done, 
-      active: stepStates.arrived.active, 
-      scheduled: flight.scheduledArrival, 
-      estimated: flight.arrivalTime || flight.scheduledArrival 
-    },
+    { key: "scheduled", icon: Clock,      ...stepStates.scheduled, scheduled: flight.scheduledDeparture, estimated: flight.departureTime || flight.scheduledDeparture },
+    { key: "boarding",  icon: Plane,      ...stepStates.boarding,  scheduled: addMin(flight.scheduledDeparture, -40), estimated: addMin(flight.departureTime || flight.scheduledDeparture, -40) },
+    { key: "departed",  icon: TrendingUp, ...stepStates.departed,  scheduled: flight.scheduledDeparture, estimated: flight.departureTime || flight.scheduledDeparture },
+    { key: "arrived",   icon: Luggage,    ...stepStates.arrived,   scheduled: flight.scheduledArrival,   estimated: flight.arrivalTime || flight.scheduledArrival },
   ];
 
-  // Helper for progress line in horizontal timeline
-  const getTimelineProgressWidth = () => {
+  const timelineProgressWidth = (() => {
     switch (flight.status) {
       case "scheduled": return 0;
-      case "boarding": return 33;
+      case "boarding":  return 33;
       case "departed":
-      case "in_air": return 66;
-      case "landed": return 100;
-      default: return 0;
+      case "in_air":    return 66;
+      case "landed":    return 100;
+      default:          return 0;
     }
-  };
-  const timelineProgressWidth = getTimelineProgressWidth();
+  })();
 
+  /* ───────── Display-derived values (no mock data) ───────── */
+
+  const depDrift = Math.round((new Date(flight.departureTime || flight.scheduledDeparture).getTime() - new Date(flight.scheduledDeparture).getTime()) / 60000);
+  const arrDrift = Math.round((new Date(flight.arrivalTime   || flight.scheduledArrival  ).getTime() - new Date(flight.scheduledArrival  ).getTime()) / 60000);
+  const isLive = flight.status === "in_air" || flight.status === "departed";
+
+  /* ───────── Render ───────── */
 
   return (
-    <div className="space-y-8 pb-12">
-      <Button variant="ghost" onClick={() => nav(-1)} className="gap-2 -ms-3 text-muted-foreground hover:text-foreground">
-        <ArrowLeft className="h-4 w-4 rtl-flip" /> Back
-      </Button>
+    <div className="min-h-screen">
+      <div className="max-w-6xl mx-auto px-4 md:px-6 space-y-6 pb-16 pt-4">
 
-      {/* Hero */}
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}
-        className="relative overflow-hidden rounded-2xl border border-border bg-gradient-card shadow-lg">
-        {/* Globe backdrop */}
-        <div className="absolute inset-0 opacity-40 mix-blend-overlay dark:opacity-20 pointer-events-none">
-          <FlightArcMap from={flight.from} to={flight.to} progress={progressInfo.percent / 100} className="h-full w-full" />
-        </div>
-        
-        {/* Premium Overlay gradient for perfect light/dark contrast */}
-        <div className="relative p-6 md:p-8 min-h-[320px] flex flex-col justify-between bg-background/40 backdrop-blur-[6px]">
-          {/* Header Info */}
-          <div className="flex items-center justify-between border-b border-border/60 pb-6 mb-6 flex-wrap gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground font-semibold">
-                {flight.status === "in_air" || flight.status === "departed" ? (
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-                  </span>
-                ) : (
-                  <span className="h-2 w-2 rounded-full bg-muted-foreground/60" />
-                )}
-                {t("flightDetail.track")} · <span className="font-mono font-bold">{flight.canonicalFlightNumber || flight.flightNumber}</span>
+        {/* Top bar */}
+        <div className="flex items-center justify-between pt-2">
+          <Button variant="ghost" onClick={() => nav(-1)} className="gap-2 -ms-3 text-muted-foreground hover:text-foreground">
+            <ArrowLeft className="h-4 w-4 rtl-flip" /> Back
+          </Button>
+
+          <Dialog open={alertsOpen} onOpenChange={setAlertsOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline" className="gap-2 rounded-full border-border bg-card hover:border-primary/60 hover:text-primary">
+                <Bell className="h-3.5 w-3.5" /> Activate alerts
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <div className="flex items-center gap-3 mb-1">
+                  <div className="grid place-items-center h-10 w-10 rounded-xl bg-primary/15 text-primary border border-primary/30">
+                    <Bell className="h-5 w-5" />
+                  </div>
+                  <DialogTitle className="text-xl">Stay updated on {flight.flightNumber}</DialogTitle>
+                </div>
+                <DialogDescription className="text-sm leading-relaxed">
+                  We'll send you real-time email updates for delays, gate changes, and boarding calls.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="mt-4 space-y-3">
+                <Label htmlFor="alert-email" className="flex items-center gap-2">
+                  <Mail className="h-3.5 w-3.5" /> Email address
+                </Label>
+                <Input
+                  id="alert-email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={alertEmail}
+                  onChange={(e) => setAlertEmail(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Used only for flight status alerts. You can unsubscribe at any time.
+                </p>
               </div>
-              <div className="text-sm text-muted-foreground mt-0.5 font-medium">{flight.airline} · {flight.aircraft !== "—" ? flight.aircraft : "Commercial Jet"}</div>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <Dialog open={alertsOpen} onOpenChange={setAlertsOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm" variant="outline" className="gap-2 backdrop-blur bg-background/60 border-primary/40 hover:bg-primary/10">
-                    <Bell className="h-4 w-4" /> Activate alerts
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <div className="flex items-center gap-3 mb-1">
-                      <div className="grid place-items-center h-10 w-10 rounded-xl bg-primary/15 text-primary border border-primary/30">
-                        <Bell className="h-5 w-5" />
-                      </div>
-                      <DialogTitle className="font-display text-xl">Stay updated on {flight.flightNumber}</DialogTitle>
-                    </div>
-                    <DialogDescription className="text-sm leading-relaxed">
-                      We'll send you real-time email updates for delays, gate changes, and boarding calls.
-                    </DialogDescription>
-                  </DialogHeader>
 
-                  <div className="mt-4 space-y-3">
-                    <Label htmlFor="alert-email" className="flex items-center gap-2">
-                      <Mail className="h-3.5 w-3.5" /> Email address
-                    </Label>
-                    <Input
-                      id="alert-email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={alertEmail}
-                      onChange={(e) => setAlertEmail(e.target.value)}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Used only for flight status alerts. You can unsubscribe at any time.
-                    </p>
+              {checkingStatus && (
+                <div className="text-xs text-muted-foreground flex items-center gap-1.5 mt-2 animate-pulse">
+                  <div className="h-3.5 w-3.5 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+                  Checking subscription status...
+                </div>
+              )}
+
+              {!checkingStatus && subscriptionStatus?.subscribed && (
+                <div className="mt-4 p-4 rounded-xl border border-border bg-secondary/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Subscription Status</span>
+                    {subscriptionStatus.status === "ACTIVE" && (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-success/15 text-success border border-success/30">
+                        <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" /> Active
+                      </span>
+                    )}
+                    {subscriptionStatus.status === "COMPLETED" && <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-info/15 text-info border border-info/30">Completed</span>}
+                    {subscriptionStatus.status === "CANCELLED" && <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border">Cancelled</span>}
+                    {subscriptionStatus.status === "EXPIRED"  && <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-warning/15 text-warning border border-warning/30">Expired</span>}
                   </div>
 
-                  {checkingStatus && (
-                    <div className="text-xs text-muted-foreground flex items-center gap-1.5 mt-2 animate-pulse">
-                      <div className="h-3.5 w-3.5 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-                      Checking subscription status...
-                    </div>
-                  )}
-
-                  {!checkingStatus && subscriptionStatus?.subscribed && (
-                    <div className="mt-4 p-4 rounded-xl border border-border bg-secondary/20 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                          Subscription Status
-                        </span>
-                        {subscriptionStatus.status === "ACTIVE" && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-success/15 text-success border border-success/30">
-                            <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-                            Active
-                          </span>
-                        )}
-                        {subscriptionStatus.status === "COMPLETED" && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-info/15 text-info border border-info/30">
-                            Completed
-                          </span>
-                        )}
-                        {subscriptionStatus.status === "CANCELLED" && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground border border-border">
-                            Cancelled
-                          </span>
-                        )}
-                        {subscriptionStatus.status === "EXPIRED" && (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-warning/15 text-warning border border-warning/30">
-                            Expired
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="text-sm leading-relaxed text-muted-foreground">
-                        {subscriptionStatus.status === "ACTIVE" && (
-                          <p>
-                            You are currently tracking <strong>{flight.flightNumber}</strong>. We'll email you about gate updates, delays, or boarding calls.
-                          </p>
-                        )}
-                        {subscriptionStatus.status === "COMPLETED" && (
-                          <div className="space-y-1">
-                            <p className="text-foreground font-medium">Alerts completed</p>
-                            <p className="text-xs">
-                              Reason: {subscriptionStatus.completion_reason === "flight_landed" ? "Flight has landed." :
-                                       subscriptionStatus.completion_reason === "flight_cancelled" ? "Flight was cancelled." :
-                                       subscriptionStatus.completion_reason === "flight_departed" ? "Flight has departed." :
-                                       subscriptionStatus.completion_reason || "Flight reached a final status."}
-                            </p>
-                            {subscriptionStatus.completed_at && (
-                              <p className="text-[10px] font-mono">
-                                Closed: {new Date(subscriptionStatus.completed_at).toLocaleString()}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        {subscriptionStatus.status === "CANCELLED" && (
-                          <div className="space-y-1">
-                            <p className="text-foreground font-medium">Alerts cancelled</p>
-                            <p className="text-xs">You manually unsubscribed from updates for this flight.</p>
-                            {subscriptionStatus.completed_at && (
-                              <p className="text-[10px] font-mono">
-                                Unsubscribed: {new Date(subscriptionStatus.completed_at).toLocaleString()}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                        {subscriptionStatus.status === "EXPIRED" && (
-                          <div className="space-y-1">
-                            <p className="text-foreground font-medium">Alerts expired</p>
-                            <p className="text-xs">Alerts stopped because the scheduled departure time passed without final status updates.</p>
-                            {subscriptionStatus.completed_at && (
-                              <p className="text-[10px] font-mono">
-                                Expired: {new Date(subscriptionStatus.completed_at).toLocaleString()}
-                              </p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {subscriptionStatus.status === "ACTIVE" ? (
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          className="w-full mt-1 gap-2"
-                          disabled={alertSaving}
-                          onClick={async () => {
-                            setAlertSaving(true);
-                            try {
-                              const res = await fetch(`${import.meta.env.VITE_API_URL}/passenger/alerts/unsubscribe`, {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  email: alertEmail,
-                                  flight_number: flight.flightNumber,
-                                }),
-                              });
-                              if (!res.ok) throw new Error("Failed to unsubscribe");
-                              toast({ title: "Alerts cancelled", description: "You have unsubscribed from flight alerts." });
-                              fetchSubscriptionStatus(alertEmail);
-                            } catch (err) {
-                              toast({ title: "Error", description: "Could not cancel alerts. Try again.", variant: "destructive" });
-                            } finally {
-                              setAlertSaving(false);
-                            }
-                          }}
-                        >
-                          {alertSaving ? <div className="h-4 w-4 rounded-full border-2 border-white/20 border-t-white animate-spin"/> : null}
-                          Cancel Alerts / Unsubscribe
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="w-full mt-1 gap-2 border-primary/40 text-primary hover:bg-primary/10"
-                          disabled={alertSaving}
-                          onClick={async () => {
-                            setAlertSaving(true);
-                            try {
-                              const res = await fetch(`${import.meta.env.VITE_API_URL}/passenger/alerts/subscribe`, {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  email: alertEmail,
-                                  flight_number: flight.flightNumber,
-                                  dep_iata: flight.from.code,
-                                  arr_iata: flight.to.code,
-                                  scheduled_departure: flight.scheduledDeparture,
-                                  airline: flight.airline,
-                                }),
-                              });
-                              if (!res.ok) throw new Error("Failed to subscribe");
-                              localStorage.setItem("passenger_alert_email", alertEmail.trim());
-                              toast({ title: "Alerts activated", description: `Re-subscribed at ${alertEmail}.` });
-                              fetchSubscriptionStatus(alertEmail);
-                            } catch (err) {
-                              toast({ title: "Error", description: "Could not activate alerts. Try again.", variant: "destructive" });
-                            } finally {
-                              setAlertSaving(false);
-                            }
-                          }}
-                        >
-                          {alertSaving ? <div className="h-4 w-4 rounded-full border-2 border-primary/20 border-t-primary animate-spin"/> : <Bell className="h-4 w-4" />}
-                          Re-activate Alerts
-                        </Button>
-                      )}
-                    </div>
-                  )}
-
-                  <DialogFooter className="mt-4">
-                    <Button variant="ghost" onClick={() => setAlertsOpen(false)} disabled={alertSaving}>
-                      Close
-                    </Button>
-                    {(!subscriptionStatus || !subscriptionStatus.subscribed) && (
-                      <Button
-                        disabled={alertSaving || checkingStatus}
-                        onClick={async () => {
-                          if (!alertEmail || !alertEmail.includes("@")) {
-                            toast({
-                              title: "Valid email required",
-                              description: "Please enter a valid email address.",
-                              variant: "destructive",
-                            });
-                            return;
-                          }
-                          setAlertSaving(true);
-                          try {
-                            const res = await fetch(`${import.meta.env.VITE_API_URL}/passenger/alerts/subscribe`, {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                email: alertEmail,
-                                flight_number: flight.flightNumber,
-                                dep_iata: flight.from.code,
-                                arr_iata: flight.to.code,
-                                scheduled_departure: flight.scheduledDeparture,
-                                airline: flight.airline,
-                              }),
-                            });
-                            if (!res.ok) throw new Error("Failed to subscribe");
-                            localStorage.setItem("passenger_alert_email", alertEmail.trim());
-                            toast({ title: "Alerts activated", description: `You'll receive live updates at ${alertEmail}.` });
-                            fetchSubscriptionStatus(alertEmail);
-                          } catch (err) {
-                            toast({ title: "Error", description: "Could not activate alerts. Try again.", variant: "destructive" });
-                          } finally {
-                            setAlertSaving(false);
-                          }
-                        }}
-                        className="gap-2"
-                      >
-                        {alertSaving ? (
-                          <div className="h-4 w-4 rounded-full border-2 border-white/20 border-t-white animate-spin" />
-                        ) : (
-                          <Bell className="h-4 w-4" />
-                        )}
-                        {alertSaving ? "Activating..." : "Activate"}
-                      </Button>
+                  <div className="text-sm leading-relaxed text-muted-foreground">
+                    {subscriptionStatus.status === "ACTIVE" && (
+                      <p>You are currently tracking <strong>{flight.flightNumber}</strong>. We'll email you about gate updates, delays, or boarding calls.</p>
                     )}
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
+                    {subscriptionStatus.status === "COMPLETED" && (
+                      <div className="space-y-1">
+                        <p className="text-foreground font-medium">Alerts completed</p>
+                        <p className="text-xs">
+                          Reason: {subscriptionStatus.completion_reason === "flight_landed" ? "Flight has landed."
+                                 : subscriptionStatus.completion_reason === "flight_cancelled" ? "Flight was cancelled."
+                                 : subscriptionStatus.completion_reason === "flight_departed" ? "Flight has departed."
+                                 : subscriptionStatus.completion_reason || "Flight reached a final status."}
+                        </p>
+                        {subscriptionStatus.completed_at && <p className="text-[10px] font-mono">Closed: {new Date(subscriptionStatus.completed_at).toLocaleString()}</p>}
+                      </div>
+                    )}
+                    {subscriptionStatus.status === "CANCELLED" && (
+                      <div className="space-y-1">
+                        <p className="text-foreground font-medium">Alerts cancelled</p>
+                        <p className="text-xs">You manually unsubscribed from updates for this flight.</p>
+                        {subscriptionStatus.completed_at && <p className="text-[10px] font-mono">Unsubscribed: {new Date(subscriptionStatus.completed_at).toLocaleString()}</p>}
+                      </div>
+                    )}
+                    {subscriptionStatus.status === "EXPIRED" && (
+                      <div className="space-y-1">
+                        <p className="text-foreground font-medium">Alerts expired</p>
+                        <p className="text-xs">Alerts stopped because the scheduled departure time passed without final status updates.</p>
+                        {subscriptionStatus.completed_at && <p className="text-[10px] font-mono">Expired: {new Date(subscriptionStatus.completed_at).toLocaleString()}</p>}
+                      </div>
+                    )}
+                  </div>
+
+                  {subscriptionStatus.status === "ACTIVE" ? (
+                    <Button
+                      variant="destructive" size="sm" className="w-full mt-1 gap-2" disabled={alertSaving}
+                      onClick={async () => {
+                        setAlertSaving(true);
+                        try {
+                          const res = await fetch(`${import.meta.env.VITE_API_URL}/passenger/alerts/unsubscribe`, {
+                            method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ email: alertEmail, flight_number: flight.flightNumber }),
+                          });
+                          if (!res.ok) throw new Error();
+                          toast({ title: "Alerts cancelled", description: "You have unsubscribed from flight alerts." });
+                          fetchSubscriptionStatus(alertEmail);
+                        } catch { toast({ title: "Error", description: "Could not cancel alerts. Try again.", variant: "destructive" }); }
+                        finally { setAlertSaving(false); }
+                      }}
+                    >
+                      {alertSaving && <div className="h-4 w-4 rounded-full border-2 border-white/20 border-t-white animate-spin"/>}
+                      Cancel Alerts / Unsubscribe
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline" size="sm" className="w-full mt-1 gap-2 border-primary/40 text-primary hover:bg-primary/10" disabled={alertSaving}
+                      onClick={async () => {
+                        setAlertSaving(true);
+                        try {
+                          const res = await fetch(`${import.meta.env.VITE_API_URL}/passenger/alerts/subscribe`, {
+                            method: "POST", headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              email: alertEmail, flight_number: flight.flightNumber,
+                              dep_iata: flight.from.code, arr_iata: flight.to.code,
+                              scheduled_departure: flight.scheduledDeparture, airline: flight.airline,
+                            }),
+                          });
+                          if (!res.ok) throw new Error();
+                          localStorage.setItem("passenger_alert_email", alertEmail.trim());
+                          toast({ title: "Alerts activated", description: `Re-subscribed at ${alertEmail}.` });
+                          fetchSubscriptionStatus(alertEmail);
+                        } catch { toast({ title: "Error", description: "Could not activate alerts. Try again.", variant: "destructive" }); }
+                        finally { setAlertSaving(false); }
+                      }}
+                    >
+                      {alertSaving ? <div className="h-4 w-4 rounded-full border-2 border-primary/20 border-t-primary animate-spin"/> : <Bell className="h-4 w-4" />}
+                      Re-activate Alerts
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              <DialogFooter className="mt-4">
+                <Button variant="ghost" onClick={() => setAlertsOpen(false)} disabled={alertSaving}>Close</Button>
+                {(!subscriptionStatus || !subscriptionStatus.subscribed) && (
+                  <Button
+                    disabled={alertSaving || checkingStatus}
+                    onClick={async () => {
+                      if (!alertEmail || !alertEmail.includes("@")) {
+                        toast({ title: "Valid email required", description: "Please enter a valid email address.", variant: "destructive" });
+                        return;
+                      }
+                      setAlertSaving(true);
+                      try {
+                        const res = await fetch(`${import.meta.env.VITE_API_URL}/passenger/alerts/subscribe`, {
+                          method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({
+                            email: alertEmail, flight_number: flight.flightNumber,
+                            dep_iata: flight.from.code, arr_iata: flight.to.code,
+                            scheduled_departure: flight.scheduledDeparture, airline: flight.airline,
+                          }),
+                        });
+                        if (!res.ok) throw new Error();
+                        localStorage.setItem("passenger_alert_email", alertEmail.trim());
+                        toast({ title: "Alerts activated", description: `You'll receive live updates at ${alertEmail}.` });
+                        fetchSubscriptionStatus(alertEmail);
+                      } catch { toast({ title: "Error", description: "Could not activate alerts. Try again.", variant: "destructive" }); }
+                      finally { setAlertSaving(false); }
+                    }}
+                    className="gap-2"
+                  >
+                    {alertSaving ? <div className="h-4 w-4 rounded-full border-2 border-white/20 border-t-white animate-spin" /> : <Bell className="h-4 w-4" />}
+                    {alertSaving ? "Activating..." : "Activate"}
+                  </Button>
+                )}
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {/* HERO */}
+        <motion.section
+          initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}
+          className="relative overflow-hidden rounded-3xl border border-border/70 bg-card shadow-[0_1px_0_rgba(0,0,0,0.02),0_20px_50px_-30px_rgba(180,120,40,0.25)]"
+        >
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute inset-0 opacity-[0.5]"
+              style={{ backgroundImage: "radial-gradient(ellipse 80% 60% at 50% 0%, color-mix(in oklab, var(--primary) 12%, transparent), transparent 70%)" }} />
+            <ArcSVG />
           </div>
 
-          {/* Redesigned Map/Trajectory Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center pt-4">
-            {/* Departure */}
-            <div className="lg:col-span-3 space-y-2">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground flex items-center gap-1.5 font-bold">
-                <span className="h-2 w-2 rounded-full bg-primary" /> Departure
+          <div className="relative p-6 md:p-10">
+            {/* Meta row */}
+            <div className="flex items-center justify-between gap-4 flex-wrap mb-10">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="inline-flex items-center gap-2 text-[11px] uppercase tracking-[0.18em] font-medium text-primary">
+                  {isLive ? (
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-60" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+                    </span>
+                  ) : (
+                    <span className="h-2 w-2 rounded-full bg-muted-foreground/60" />
+                  )}
+                  {t("flightDetail.track", { defaultValue: "Live tracking" })}
+                </span>
+                <span className="text-muted-foreground/40">·</span>
+                <span className="font-mono text-sm font-semibold tracking-tight">{flight.canonicalFlightNumber || flight.flightNumber}</span>
+                <span className="text-muted-foreground/40">·</span>
+                <span className="text-sm text-muted-foreground">{flight.airline}{flight.aircraft && flight.aircraft !== "—" ? ` · ${flight.aircraft}` : ""}</span>
               </div>
-              <div className="font-mono text-5xl font-black text-foreground tracking-tighter">{flight.from.code}</div>
-              <div className="text-base font-bold leading-tight">{flight.from.city}</div>
-              <div className="space-y-0.5 pt-1">
-                <div className="text-lg font-bold font-mono tracking-tight tabular-nums text-foreground/90">
-                  {formatTime(flight.departureTime, locale)}
-                </div>
-                <div className="text-xs text-muted-foreground font-mono">
-                  Scheduled: {formatTime(flight.scheduledDeparture, locale)}
-                </div>
-              </div>
+              <StatusBadge status={flight.status} />
             </div>
 
-            {/* Path visualization */}
-            <div className="lg:col-span-6 flex flex-col items-center justify-center space-y-4">
-              <div className="flex flex-col items-center gap-1">
-                <StatusBadge status={flight.status} />
-                <div className="text-xl font-extrabold text-foreground mt-1.5 font-mono tracking-tight text-center">
+            {/* Route */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_1fr] gap-8 lg:gap-12 items-center">
+              {/* Departure */}
+              <div className="space-y-2">
+                <div className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground font-medium">Departure</div>
+                <div className="font-mono text-6xl md:text-7xl font-semibold tracking-[-0.04em] leading-none">{flight.from.code}</div>
+                <div className="text-sm text-muted-foreground">{flight.from.city}{flight.from.name ? ` · ${flight.from.name}` : ""}</div>
+                <div className="pt-3 flex items-baseline gap-3 flex-wrap">
+                  <div className="font-mono text-2xl font-medium tabular-nums text-primary">{formatTime(flight.departureTime || flight.scheduledDeparture, locale)}</div>
+                  {depDrift !== 0 && (
+                    <>
+                      <div className="text-xs text-muted-foreground/70 line-through font-mono">{formatTime(flight.scheduledDeparture, locale)}</div>
+                      <DriftChip min={depDrift} />
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Center progress */}
+              <div className="flex flex-col items-center min-w-[220px] lg:min-w-[300px]">
+                <div className="text-xs uppercase tracking-[0.22em] text-muted-foreground font-medium mb-2">{progressInfo.label}</div>
+                <div className="text-2xl md:text-3xl font-semibold tabular-nums tracking-tight text-center mb-6">
                   {getRemainingTimeDisplay(progressInfo, flight)}
                 </div>
-              </div>
 
-              {/* Trajectory */}
-              <div className="w-full relative py-6 select-none">
-                {/* Back dashed trail */}
-                <div className="absolute top-1/2 left-0 right-0 h-0.5 border-t-2 border-dashed border-muted-foreground/30 -translate-y-1/2" />
-                {/* Active colored path */}
-                <div 
-                  className="absolute top-1/2 left-0 h-0.5 bg-gradient-to-r from-primary to-info -translate-y-1/2 transition-all duration-75" 
-                  style={{ width: `${progressInfo.percent}%` }}
-                />
-                
-                {/* Airplane marker */}
-                <div 
-                  className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-all duration-75"
-                  style={{ left: `${progressInfo.percent}%` }}
-                >
-                  <div className="relative group">
+                <div className="w-full relative h-8 flex items-center">
+                  <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-border" />
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 h-px bg-gradient-to-r from-primary to-primary/80 transition-all duration-700"
+                    style={{ width: `${progressInfo.percent}%` }} />
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full bg-primary" />
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full border-2 border-muted-foreground/40 bg-card" />
+                  <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2" style={{ left: `${progressInfo.percent}%` }}>
                     {progressInfo.percent > 0 && progressInfo.percent < 100 && (
-                      <span className="absolute inset-0 -m-3 rounded-full bg-primary/20 animate-ping" />
+                      <span className="absolute inset-0 -m-2 rounded-full bg-primary/30 animate-ping" />
                     )}
-                    <div className="grid place-items-center h-8 w-8 rounded-full bg-background border border-primary/40 shadow-md text-primary">
-                      <Plane className="h-4 w-4 rotate-90" />
-                    </div>
-                    {/* Tooltip */}
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-0.5 rounded bg-foreground text-background text-[10px] font-mono font-bold opacity-0 group-hover:opacity-100 transition-opacity">
-                      {progressInfo.percent}%
+                    <div className="relative grid place-items-center h-7 w-7 rounded-full bg-primary text-primary-foreground shadow-md ring-4 ring-card">
+                      <Plane className="h-3.5 w-3.5 rotate-90" />
                     </div>
                   </div>
                 </div>
-
-                {/* Origin / Destination nodes */}
-                <div className="absolute left-0 top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-background border-2 border-primary" />
-                <div className="absolute right-0 top-1/2 -translate-y-1/2 h-3.5 w-3.5 rounded-full bg-background border-2 border-info" />
-              </div>
-
-              <div className="w-full flex justify-between text-[11px] text-muted-foreground font-mono">
-                <span>0%</span>
-                <span className="font-semibold text-foreground/80">Flight Progress: {progressInfo.percent}%</span>
-                <span>100%</span>
-              </div>
-            </div>
-
-            {/* Arrival */}
-            <div className="lg:col-span-3 space-y-2 lg:text-end">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground flex items-center lg:justify-end gap-1.5 font-bold">
-                Arrival <span className="h-2 w-2 rounded-full bg-info" />
-              </div>
-              <div className="font-mono text-5xl font-black text-foreground tracking-tighter">{flight.to.code}</div>
-              <div className="text-base font-bold leading-tight">{flight.to.city}</div>
-              <div className="space-y-0.5 pt-1">
-                <div className="text-lg font-bold font-mono tracking-tight tabular-nums text-foreground/90">
-                  {formatTime(flight.arrivalTime, locale)}
-                </div>
-                <div className="text-xs text-muted-foreground font-mono">
-                  Scheduled: {formatTime(flight.scheduledArrival, locale)}
+                <div className="mt-4 flex items-center gap-4 text-[11px] font-mono tabular-nums text-muted-foreground">
+                  <span>0%</span>
+                  <span className="text-foreground font-semibold">Flight progress · {progressInfo.percent}%</span>
+                  <span>100%</span>
                 </div>
               </div>
-            </div>
-          </div>
 
-        </div>
-      </motion.div>
-
-      {/* Timeline */}
-      <section className="surface-card rounded-2xl p-6 md:p-8">
-        <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
-          <div>
-            <h3 className="font-display text-2xl font-semibold text-foreground">Journey Timeline</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Real-time milestones tracking flight progress</p>
-          </div>
-          <div className="flex items-center gap-3 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground/40 border border-border" /> Scheduled
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-primary" /> Estimated
-            </span>
-          </div>
-        </div>
-        
-        {/* Step Progress visualization */}
-        <div className="relative">
-          {/* Horizontal progress bar for medium+ screens */}
-          <div className="absolute top-6 start-6 end-6 h-1 bg-border/40 rounded-full hidden md:block" />
-          <div 
-            className="absolute top-6 start-6 h-1 bg-gradient-amber rounded-full hidden md:block transition-all duration-500" 
-            style={{ width: `${timelineProgressWidth}%` }}
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 relative">
-            {steps.map((s, i) => {
-              const state = s.done ? "done" : s.active ? "active" : "upcoming";
-              const sched = formatTime(s.scheduled, locale);
-              const est = formatTime(s.estimated, locale);
-              const drift = Math.round((new Date(s.estimated).getTime() - new Date(s.scheduled).getTime()) / 60000);
-              
-              return (
-                <motion.div 
-                  key={s.key} 
-                  initial={{ opacity: 0, y: 8 }} 
-                  animate={{ opacity: 1, y: 0 }} 
-                  transition={{ delay: i * 0.06, duration: 0.4 }}
-                  className="flex md:flex-col items-center md:text-center gap-4 md:gap-0 relative"
-                >
-                  {/* Step Connector line for vertical timeline on mobile */}
-                  {i < steps.length - 1 && (
-                    <div className="absolute left-[23px] top-12 bottom-[-32px] w-0.5 bg-border/60 md:hidden" />
+              {/* Arrival */}
+              <div className="space-y-2 lg:text-right">
+                <div className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground font-medium">
+                  <span className="inline-flex items-center gap-1.5 lg:flex-row-reverse">
+                    <span className="h-1.5 w-1.5 rounded-full bg-info" /> Arrival
+                  </span>
+                </div>
+                <div className="font-mono text-6xl md:text-7xl font-semibold tracking-[-0.04em] leading-none">{flight.to.code}</div>
+                <div className="text-sm text-muted-foreground">{flight.to.city}{flight.to.name ? ` · ${flight.to.name}` : ""}</div>
+                <div className="pt-3 flex items-baseline gap-3 lg:justify-end flex-wrap">
+                  <div className={`font-mono text-2xl font-medium tabular-nums ${arrDrift <= 0 ? "text-success" : "text-warning"}`}>
+                    {formatTime(flight.arrivalTime || flight.scheduledArrival, locale)}
+                  </div>
+                  {arrDrift !== 0 && (
+                    <>
+                      <div className="text-xs text-muted-foreground/70 line-through font-mono">{formatTime(flight.scheduledArrival, locale)}</div>
+                      <DriftChip min={arrDrift} />
+                    </>
                   )}
-
-                  {/* Step Icon Container */}
-                  <div className={`relative grid place-items-center h-12 w-12 rounded-full border-2 transition-all duration-300 z-10 shrink-0 ${
-                    state === "done" 
-                      ? "bg-primary border-primary text-primary-foreground shadow-md shadow-primary/20 scale-105"
-                      : state === "active" 
-                      ? "bg-background border-primary text-primary shadow-lg ring-4 ring-primary/10 scale-110"
-                      : "bg-background border-border text-muted-foreground/40"
-                  }`}>
-                    {state === "active" && (
-                      <span className="absolute inset-0 rounded-full bg-primary/20 animate-ping pointer-events-none" />
-                    )}
-                    <s.icon className={`h-5 w-5 ${state === "active" ? "animate-pulse" : ""}`} />
-                  </div>
-
-                  {/* Step Details */}
-                  <div className="md:mt-4 flex-1 md:w-full space-y-1">
-                    <div className={`text-sm font-semibold capitalize tracking-tight ${
-                      state === "active" ? "text-foreground font-bold" : "text-muted-foreground"
-                    }`}>
-                      {t(`timeline.${s.key}`, { defaultValue: defaultStepLabel(s.key) })}
-                    </div>
-                    
-                    <div className="flex flex-col md:items-center gap-0.5 text-xs text-muted-foreground">
-                      <div className="font-mono text-[11px] tabular-nums">
-                        Sched: <span className="text-foreground/80">{sched}</span>
-                      </div>
-                      <div className={`font-mono text-[11px] tabular-nums flex items-center gap-1 ${
-                        drift > 0 ? "text-warning font-semibold" : "text-primary/90"
-                      }`}>
-                        Est: <span>{est}</span>
-                        {drift > 0 && <span className="text-[10px] bg-warning/10 px-1 py-0.25 rounded border border-warning/20">+{drift}m</span>}
-                      </div>
-                    </div>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
-
-      {/* Info grid */}
-      <div className={`grid gap-4 ${flight.aircraft !== '—' ? 'md:grid-cols-3' : 'md:grid-cols-2'}`}>
-        <InfoCard title={t("common.gate")} value={flight.gate ?? "—"} sub={`${t("common.terminal")} ${flight.terminal ?? "—"}`} />
-        {flight.aircraft !== '—' && (
-          <InfoCard title="Aircraft" value={flight.aircraft} sub={`${flight.airline} · ${flight.airlineCode}`} />
-        )}
-        <InfoCard title={t("common.distance")} value={`${flight.distanceKm.toLocaleString()} km`} sub={`${Math.floor(flight.durationMin / 60)}h ${flight.durationMin % 60}m`} />
-      </div>
-
-
-      {/* AI Delay Prediction — real ML backend */}
-      <section className="surface-card rounded-2xl p-6 md:p-8 overflow-hidden relative">
-        <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
-        <div className="relative flex items-start justify-between flex-wrap gap-3 mb-6">
-          <div className="flex items-center gap-3">
-            <div className="grid place-items-center h-11 w-11 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/30">
-              <Brain className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-[0.22em] text-primary flex items-center gap-1.5 font-bold">
-                <Sparkles className="h-3 w-3" /> AI Delay Prediction
+                </div>
               </div>
-              <h3 className="font-display text-2xl mt-0.5 font-semibold text-foreground">Delay Forecast</h3>
-            </div>
-          </div>
-          {normPred && (
-            <div className="text-[10px] uppercase tracking-wider text-primary bg-primary/10 border border-primary/25 rounded-full px-3 py-1 font-semibold flex items-center gap-1.5">
-              <span className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />
-              ML Prediction Active
-            </div>
-          )}
-        </div>
-
-        {predictionLoading && (
-          <div className="py-8 flex items-center gap-3 text-muted-foreground">
-            <div className="h-4 w-4 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
-            <span className="text-sm">Loading AI prediction…</span>
-          </div>
-        )}
-
-        {!predictionLoading && !normPred && (
-          <div className="py-8 rounded-xl border border-dashed border-border text-center text-sm text-muted-foreground bg-background/20">
-            <Brain className="h-8 w-8 mx-auto mb-2 opacity-30 text-muted-foreground" />
-            Prediction unavailable — ML model has not processed this flight yet.
-          </div>
-        )}
-
-        {!predictionLoading && normPred && (
-          <>
-            <div className="relative grid lg:grid-cols-3 gap-4 mb-6">
-              <PredictionStat
-                tone={normPred.riskTone}
-                label="Risk score" 
-                value={`${normPred.riskPercent}%`}
-                sub={normPred.riskSub}
-                progress={normPred.riskPercent} 
-              />
-              <PredictionStat
-                tone={normPred.riskTone}
-                label="Predicted delay"
-                value={!normPred.predictedDelayMin || normPred.predictedDelayMin <= 5 ? "On time" : `+${Math.floor(normPred.predictedDelayMin / 60)}h ${normPred.predictedDelayMin % 60}m`}
-                sub={`Estimated arrival impact at ${flight.to.code}`} 
-              />
-              <PredictionStat 
-                tone={normPred.confidenceFraction >= 0.75 ? "info" : normPred.confidenceFraction >= 0.45 ? "medium" : "high"} 
-                label="Model confidence"
-                value={normPred.confidenceLabel}
-                sub={`${normPred.confidencePercent}% confidence · ${normPred.confidenceSub}`}
-                progress={normPred.confidencePercent} 
-              />
             </div>
 
-            {normPred.topFactors && normPred.topFactors.length > 0 && (
-              <div className="relative">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Top delay factors (SHAP)</h4>
-                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">From real ML model</span>
-                </div>
-                <div className="grid md:grid-cols-2 gap-3">
-                  {normPred.topFactors.map((f, i) => (
-                    <motion.div key={f.label} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
-                      className="rounded-xl border border-border bg-background/40 p-4 hover:border-primary/40 transition-colors">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <div className="font-semibold text-sm capitalize text-foreground">{f.label.replace(/_/g, ' ')}</div>
-                        <div className="font-mono text-xs text-primary font-bold tabular">{f.value >= 0 ? '+' : ''}{f.value.toFixed(2)}</div>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-border overflow-hidden">
-                        <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(100, Math.abs(f.value) * 100)}%` }}
-                          transition={{ delay: 0.2 + i * 0.05, duration: 0.7, ease: "easeOut" }}
-                          className={`h-full ${f.value >= 0 ? "bg-gradient-to-r from-destructive to-destructive/60" : "bg-gradient-to-r from-success to-success/60"}`} />
-                      </div>
-                    </motion.div>
-                  ))}
-                </div>
+            {/* Live telemetry strip (only when in air & data exists) */}
+            {isLive && (flight.altitudeFt || flight.speedKts || flight.headingDeg) && (
+              <div className="mt-10 pt-6 border-t border-border/60 grid grid-cols-2 md:grid-cols-4 gap-6">
+                {typeof flight.altitudeFt === "number" && (
+                  <Telemetry icon={Gauge} label="Altitude" value={flight.altitudeFt.toLocaleString()} unit="ft" />
+                )}
+                {typeof flight.speedKts === "number" && (
+                  <Telemetry icon={Wind}  label="Ground speed" value={String(flight.speedKts)} unit="kts" />
+                )}
+                {typeof flight.headingDeg === "number" && (
+                  <Telemetry icon={Radio} label="Heading" value={`${flight.headingDeg}°`} />
+                )}
+                <Telemetry icon={Cloud} label="Date" value={formatDate(flight.scheduledDeparture, locale)} />
               </div>
             )}
-          </>
-        )}
-      </section>
-
-      {/* Passenger Rights — from database */}
-      <section className="surface-card rounded-2xl p-6 md:p-8 overflow-hidden relative">
-        <div className="absolute -top-24 -left-24 h-72 w-72 rounded-full bg-info/10 blur-3xl pointer-events-none" />
-        <div className="relative flex items-start justify-between flex-wrap gap-3 mb-6">
-          <div className="flex items-center gap-3">
-            <div className="grid place-items-center h-11 w-11 rounded-xl bg-gradient-to-br from-info/20 to-info/5 border border-info/30">
-              <Scale className="h-5 w-5 text-info" />
-            </div>
-            <div>
-              <div className="text-[10px] uppercase tracking-[0.22em] text-info flex items-center gap-1.5">
-                <ShieldCheck className="h-3 w-3" /> Passenger Rights
-              </div>
-              <h3 className="font-display text-2xl mt-0.5">Your entitlements</h3>
-            </div>
           </div>
+        </motion.section>
+
+        {/* QUICK FACTS */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-border/70 rounded-2xl overflow-hidden border border-border/70 shadow-sm">
+          <Fact label="Gate"     value={flight.to.gate ?? flight.gate ?? "—"} sub={flight.to.terminal ? `Terminal ${flight.to.terminal}` : undefined} />
+          <Fact label="Aircraft" value={flight.aircraft && flight.aircraft !== "—" ? flight.aircraft : "—"} sub={`${flight.airline} · ${flight.airlineCode}`} />
+          <Fact label="Distance" value={`${flight.distanceKm.toLocaleString()} km`} sub={`${Math.floor(flight.durationMin / 60)}h ${flight.durationMin % 60}m flight`} />
+          <Fact label="Airline"  value={flight.airlineCode} sub={flight.airline} />
         </div>
 
-        {dbRights.length === 0 ? (
-          <div className="rounded-xl border border-border bg-background/30 p-6 md:p-8 text-center max-w-2xl mx-auto space-y-4">
-            <div className="mx-auto grid place-items-center h-16 w-16 rounded-full bg-info/10 text-info border border-info/20 shadow-inner">
-              <Scale className="h-8 w-8" />
+        {/* TIMELINE */}
+        <section className="rounded-3xl border border-border/70 bg-card p-6 md:p-8 shadow-sm">
+          <div className="flex items-end justify-between mb-10 flex-wrap gap-3">
+            <div>
+              <h3 className="text-xl font-semibold tracking-tight">Journey timeline</h3>
+              <p className="text-xs text-muted-foreground mt-1">Real-time milestones tracking flight progress</p>
             </div>
-            
-            <div className="space-y-1.5">
-              <h4 className="font-semibold text-lg text-foreground">No active passenger rights triggers detected</h4>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                Passenger rights and compensation entitlements (such as EU261 or local regulations) dynamically trigger based on real-time flight delays, cancellations, or boarding denials.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-4 text-start">
-              <div className="rounded-lg border border-border/60 bg-background/50 p-4 space-y-1">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  <Clock className="h-3.5 w-3.5 text-info" /> Delay Triggers
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Delays exceeding 3 hours at arrival may qualify for compensation up to €600, depending on route distance.
-                </p>
-              </div>
-              <div className="rounded-lg border border-border/60 bg-background/50 p-4 space-y-1">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                  <ShieldAlert className="h-3.5 w-3.5 text-info" /> Cancellation & Duty of Care
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  If cancelled, passengers are entitled to re-routing, meals, free communication, and accommodation if delayed overnight.
-                </p>
-              </div>
-            </div>
-
-            <div className="pt-2">
-              <Button asChild variant="outline" size="sm" className="gap-2 border-info/40 text-info hover:bg-info/10">
-                <Link to="/passenger-rights">
-                  Explore Passenger Rights Guide <ArrowRight className="h-4 w-4 rtl-flip" />
-                </Link>
-              </Button>
+            <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" /> Scheduled</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-primary" /> Estimated</span>
             </div>
           </div>
-        ) : (
-          <>
-            <div className="relative grid md:grid-cols-2 gap-3 mb-5">
-              {dbRights.map((r: { title: string; description: string; active: boolean; compensation?: string }, i: number) => (
-                <motion.div key={r.title} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                  className={`rounded-xl border p-4 transition-all ${r.active ? "border-info/40 bg-info/5 shadow-sm" : "border-border bg-background/30 opacity-70"}`}>
-                  <div className="flex items-start gap-3">
-                    <div className={`grid place-items-center h-9 w-9 shrink-0 rounded-lg ${r.active ? "bg-info/15 text-info" : "bg-muted text-muted-foreground"}`}>
-                      <ShieldCheck className="h-4 w-4" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div className="font-medium text-sm">{r.title}</div>
-                        {r.active
-                          ? <span className="text-[10px] uppercase tracking-wider text-info bg-info/10 border border-info/30 rounded-full px-2 py-0.5">Active</span>
-                          : <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Not yet triggered</span>}
-                      </div>
-                      <div className="mt-1.5 text-xs text-muted-foreground leading-relaxed">{r.description}</div>
-                      {r.compensation && <div className="mt-2 text-sm font-mono text-success">{r.compensation}</div>}
-                    </div>
-                  </div>
-                </motion.div>
-              ))}
-            </div>
-            <div className="relative flex items-center justify-between flex-wrap gap-3 pt-4 border-t border-border">
-              <div className="flex items-start gap-2 text-xs text-muted-foreground max-w-xl">
-                <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0 mt-0.5" />
-                <span>Compensation does not apply if the delay is caused by extraordinary circumstances (severe weather, ATC strikes) outside the airline's control.</span>
-              </div>
-              <Button asChild variant="outline" className="gap-2">
-                <Link to="/passenger-rights">Full rights guide <ArrowRight className="h-4 w-4 rtl-flip" /></Link>
-              </Button>
-            </div>
-          </>
-        )}
-      </section>
 
+          <div className="relative">
+            <div className="absolute top-5 left-5 right-5 h-px bg-border hidden md:block" />
+            <div className="absolute top-5 left-5 h-px bg-primary hidden md:block transition-all duration-700"
+              style={{ width: `${timelineProgressWidth}%` }} />
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 md:gap-4 relative">
+              {steps.map((s, i) => {
+                const Icon = s.icon;
+                const state = s.done ? "done" : s.active ? "active" : "upcoming";
+                const sched = formatTime(s.scheduled, locale);
+                const est = formatTime(s.estimated, locale);
+                const drift = Math.round((new Date(s.estimated).getTime() - new Date(s.scheduled).getTime()) / 60000);
+                return (
+                  <motion.div key={s.key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06, duration: 0.4 }}
+                    className="flex md:flex-col items-start md:items-center gap-4 md:gap-0 relative">
+                    <div className={`relative grid place-items-center h-10 w-10 rounded-full z-10 shrink-0 transition-colors shadow-sm ${
+                      state === "done" ? "bg-primary text-primary-foreground"
+                      : state === "active" ? "bg-card border-2 border-primary text-primary"
+                      : "bg-card border border-border text-muted-foreground/60"
+                    }`}>
+                      {state === "active" && <span className="absolute inset-0 rounded-full border-2 border-primary/40 animate-ping" />}
+                      {state === "done" ? <CheckCircle2 className="h-4 w-4" /> : <Icon className="h-4 w-4" />}
+                    </div>
+                    <div className="md:mt-4 md:text-center flex-1 md:w-full">
+                      <div className={`text-sm ${state === "active" ? "font-semibold text-foreground" : state === "done" ? "text-foreground" : "text-muted-foreground"}`}>
+                        {t(`timeline.${s.key}`, { defaultValue: defaultStepLabel(s.key) })}
+                      </div>
+                      <div className="mt-1 flex flex-col md:items-center text-[11px] font-mono tabular-nums">
+                        <span className="text-muted-foreground/70">Sched. {sched}</span>
+                        <span className="text-foreground flex items-center gap-1.5">
+                          Est. {est}
+                          {drift !== 0 && (
+                            <span className={`text-[10px] font-semibold px-1 py-px rounded ${drift > 0 ? "text-warning bg-warning/10" : "text-success bg-success/10"}`}>
+                              {drift > 0 ? "+" : ""}{drift}m
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* OPERATIONAL DETAILS */}
+        <div className="grid gap-3 md:grid-cols-3">
+          <DetailCard label="Departure gate" value={flight.from.gate ?? "—"} sub={`${flight.from.name ?? flight.from.city}${flight.from.terminal ? ` · Terminal ${flight.from.terminal}` : ""}`} icon={MapPin} />
+          <DetailCard label="Aircraft" value={flight.aircraft && flight.aircraft !== "—" ? flight.aircraft : "Unknown"} sub={`${flight.airline} · ${flight.airlineCode}`} icon={Plane} />
+          <DetailCard label="Distance" value={`${flight.distanceKm.toLocaleString()} km`} sub={`Block time ${Math.floor(flight.durationMin / 60)}h ${flight.durationMin % 60}m`} icon={TrendingUp} />
+        </div>
+
+        {/* AI PREDICTION (real ML) */}
+        <section className="rounded-3xl border border-border/70 bg-gradient-to-br from-card via-card to-primary/5 p-6 md:p-8 shadow-sm">
+          <div className="flex items-start justify-between flex-wrap gap-3 mb-8">
+            <div className="flex items-center gap-3">
+              <div className="grid place-items-center h-11 w-11 rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/20">
+                <Brain className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.22em] text-primary font-semibold flex items-center gap-1.5">
+                  <Sparkles className="h-3 w-3" /> AI delay prediction
+                </div>
+                <h3 className="text-xl font-semibold tracking-tight mt-0.5">Delay forecast</h3>
+              </div>
+            </div>
+            {normPred && (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-success bg-success/10 px-3 py-1.5 rounded-full">
+                <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" /> ML prediction active
+              </span>
+            )}
+          </div>
+
+          {predictionLoading && (
+            <div className="py-8 flex items-center gap-3 text-muted-foreground">
+              <div className="h-4 w-4 rounded-full border-2 border-primary/30 border-t-primary animate-spin" />
+              <span className="text-sm">Loading AI prediction…</span>
+            </div>
+          )}
+
+          {!predictionLoading && !normPred && (
+            <div className="py-8 rounded-xl border border-dashed border-border text-center text-sm text-muted-foreground bg-background/20">
+              <Brain className="h-8 w-8 mx-auto mb-2 opacity-30" />
+              Prediction unavailable — ML model has not processed this flight yet.
+            </div>
+          )}
+
+          {!predictionLoading && normPred && (
+            <>
+              <div className="grid lg:grid-cols-3 gap-3 mb-8">
+                <PredictionStat tone={normPred.riskTone} label="Risk score"
+                  value={`${normPred.riskPercent}%`} sub={normPred.riskSub} progress={normPred.riskPercent} />
+                <PredictionStat tone={normPred.riskTone} label="Predicted delay"
+                  value={!normPred.predictedDelayMin || normPred.predictedDelayMin <= 5 ? "On time" : `+${Math.floor(normPred.predictedDelayMin / 60)}h ${normPred.predictedDelayMin % 60}m`}
+                  sub={`Estimated arrival impact at ${flight.to.code}`} />
+                <PredictionStat tone="info" label="Model confidence"
+                  value={normPred.confidenceLabel}
+                  sub={`${normPred.confidencePercent}% · ${normPred.confidenceSub}`}
+                  progress={normPred.confidencePercent} />
+              </div>
+
+              {normPred.topFactors && normPred.topFactors.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Top delay factors</h4>
+                    <span className="text-[10px] text-muted-foreground/70 font-mono">SHAP · ML model</span>
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-2">
+                    {normPred.topFactors.map((f, i) => (
+                      <motion.div key={f.label} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
+                        className="rounded-xl border border-border/70 bg-card p-4">
+                        <div className="flex items-center justify-between gap-2 mb-2.5">
+                          <div className="text-sm capitalize">{f.label.replace(/_/g, " ")}</div>
+                          <div className={`font-mono text-xs font-semibold ${f.value >= 0 ? "text-destructive" : "text-success"}`}>
+                            {f.value >= 0 ? "+" : ""}{f.value.toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                          <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(100, Math.abs(f.value) * 100)}%` }}
+                            transition={{ delay: 0.2 + i * 0.05, duration: 0.7, ease: "easeOut" }}
+                            className={`h-full ${f.value >= 0 ? "bg-destructive" : "bg-success"}`} />
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </section>
+
+        {/* PASSENGER RIGHTS (from DB) */}
+        <section className="rounded-3xl border border-border/70 bg-card p-6 md:p-8 shadow-sm">
+          <div className="flex items-start justify-between flex-wrap gap-3 mb-8">
+            <div className="flex items-center gap-3">
+              <div className="grid place-items-center h-11 w-11 rounded-2xl bg-info/10 text-info">
+                <Scale className="h-5 w-5" />
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.22em] text-info font-semibold flex items-center gap-1.5">
+                  <ShieldCheck className="h-3 w-3" /> Passenger rights
+                </div>
+                <h3 className="text-xl font-semibold tracking-tight mt-0.5">Your entitlements</h3>
+              </div>
+            </div>
+            <span className="text-[11px] text-muted-foreground">Based on EU261 · auto-evaluated</span>
+          </div>
+
+          {dbRights.length === 0 ? (
+            <div className="rounded-xl border border-border bg-background/30 p-6 md:p-8 text-center max-w-2xl mx-auto space-y-4">
+              <div className="mx-auto grid place-items-center h-16 w-16 rounded-full bg-info/10 text-info border border-info/20">
+                <Scale className="h-8 w-8" />
+              </div>
+              <div className="space-y-1.5">
+                <h4 className="font-semibold text-lg">No active passenger rights triggers detected</h4>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Passenger rights and compensation entitlements dynamically trigger based on real-time flight delays, cancellations, or boarding denials.
+                </p>
+              </div>
+              <div className="pt-2">
+                <Button asChild variant="outline" size="sm" className="gap-2 border-info/40 text-info hover:bg-info/10">
+                  <Link to="/passenger-rights">Explore Passenger Rights Guide <ArrowRight className="h-4 w-4 rtl-flip" /></Link>
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="grid md:grid-cols-2 gap-2 mb-6">
+                {dbRights.map((r: { title: string; description: string; active: boolean; compensation?: string }, i: number) => (
+                  <motion.div key={r.title} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+                    className={`rounded-xl border p-4 transition-colors ${r.active ? "border-primary/40 bg-primary/[0.04]" : "border-border/70 opacity-70"}`}>
+                    <div className="flex items-start gap-3">
+                      <div className={`grid place-items-center h-8 w-8 shrink-0 rounded-lg ${r.active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="font-medium text-sm">{r.title}</div>
+                          {r.active
+                            ? <span className="text-[10px] uppercase tracking-wider text-success font-semibold">Active</span>
+                            : <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Standby</span>}
+                        </div>
+                        <div className="mt-1.5 text-xs text-muted-foreground leading-relaxed">{r.description}</div>
+                        {r.compensation && <div className="mt-2 text-sm font-mono font-semibold text-primary">{r.compensation}</div>}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between flex-wrap gap-3 pt-5 border-t border-border/60">
+                <div className="flex items-start gap-2 text-xs text-muted-foreground max-w-xl">
+                  <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0 mt-0.5" />
+                  <span>Compensation does not apply for extraordinary circumstances (severe weather, ATC strikes, security threats).</span>
+                </div>
+                <Button asChild variant="outline" className="gap-2">
+                  <Link to="/passenger-rights">Full rights guide <ArrowRight className="h-4 w-4 rtl-flip" /></Link>
+                </Button>
+              </div>
+            </>
+          )}
+        </section>
+      </div>
     </div>
   );
 };
 
-// ── Helpers ────────────────────────────────────────────────────────────────
+export default FlightDetail;
 
-function Stat({ label, value, sub, align = "start" }: { label: string; value: string; sub?: string; align?: "start" | "end" }) {
+/* ─────────────────────────  HELPERS  ───────────────────────── */
+
+function Fact({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className={align === "end" ? "md:text-end" : ""}>
-      <div className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
-      <div className="font-display text-3xl tabular mt-1">{value}</div>
-      {sub && <div className="text-xs text-muted-foreground mt-1 font-mono">{sub}</div>}
+    <div className="bg-card p-5">
+      <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-medium">{label}</div>
+      <div className="text-xl font-semibold tracking-tight mt-1.5 truncate">{value}</div>
+      {sub && <div className="text-xs text-muted-foreground mt-0.5 truncate">{sub}</div>}
     </div>
   );
 }
 
-function InfoCard({ title, value, sub }: { title: string; value: string; sub?: string }) {
+function DetailCard({ label, value, sub, icon: Icon }: { label: string; value: string; sub?: string; icon: React.ComponentType<{ className?: string }> }) {
   return (
-    <div className="surface-card rounded-xl p-5">
-      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{title}</div>
-      <div className="font-display text-2xl mt-1 tabular">{value}</div>
-      {sub && <div className="text-xs text-muted-foreground mt-1">{sub}</div>}
+    <div className="rounded-2xl border border-border/70 bg-card p-5 flex items-start gap-4 shadow-sm">
+      <div className="grid place-items-center h-10 w-10 rounded-xl bg-primary/10 text-primary shrink-0">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0">
+        <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-medium">{label}</div>
+        <div className="text-base font-semibold tracking-tight mt-0.5 truncate">{value}</div>
+        {sub && <div className="text-xs text-muted-foreground mt-0.5 truncate">{sub}</div>}
+      </div>
     </div>
   );
 }
 
-function GoodCard({ icon: Icon, label, title, sub, extra }: { icon: React.ComponentType<{ className?: string }>; label: string; title: string; sub?: string; extra?: string }) {
+function Telemetry({ icon: Icon, label, value, unit }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string; unit?: string }) {
   return (
-    <div className="rounded-xl border border-border bg-background/40 p-5 hover:border-info/40 transition-colors">
-      <div className="flex items-start gap-3">
-        <div className="grid place-items-center h-10 w-10 shrink-0 rounded-lg bg-info/10 text-info border border-info/20">
-          <Icon className="h-4 w-4" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</div>
-          <div className="font-display text-xl mt-1 tabular">{title}</div>
-          {sub && <div className="text-xs text-muted-foreground mt-1">{sub}</div>}
-          {extra && <div className="text-xs text-foreground/70 mt-2 leading-relaxed">{extra}</div>}
+    <div className="flex items-center gap-3">
+      <div className="grid place-items-center h-9 w-9 rounded-xl bg-primary/10 text-primary shrink-0">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0">
+        <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-medium">{label}</div>
+        <div className="text-sm font-semibold tabular-nums">
+          {value} {unit && <span className="text-xs font-normal text-muted-foreground">{unit}</span>}
         </div>
       </div>
     </div>
+  );
+}
+
+function PredictionStat({ tone, label, value, sub, progress }: {
+  tone: "low" | "medium" | "high" | "info";
+  label: string; value: string; sub?: string; progress?: number;
+}) {
+  const toneMap = {
+    low:    { text: "text-success",     bar: "bg-success" },
+    medium: { text: "text-primary",     bar: "bg-primary" },
+    high:   { text: "text-destructive", bar: "bg-destructive" },
+    info:   { text: "text-info",        bar: "bg-info" },
+  } as const;
+  const c = toneMap[tone];
+  return (
+    <div className="rounded-2xl border border-border/70 bg-card p-5">
+      <div className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground font-medium">{label}</div>
+      <div className={`text-3xl font-semibold tracking-tight tabular-nums mt-2 ${c.text}`}>{value}</div>
+      {sub && <div className="text-xs text-muted-foreground mt-1.5 leading-relaxed">{sub}</div>}
+      {typeof progress === "number" && (
+        <div className="mt-4 h-1 rounded-full bg-muted overflow-hidden">
+          <div className={`h-full transition-all duration-700 ${c.bar}`} style={{ width: `${Math.min(100, progress)}%` }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DriftChip({ min }: { min: number }) {
+  if (min === 0) return null;
+  const positive = min > 0;
+  return (
+    <span className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded ${positive ? "text-warning bg-warning/10" : "text-success bg-success/10"}`}>
+      {positive ? "+" : ""}{min}m
+    </span>
+  );
+}
+
+function ArcSVG() {
+  return (
+    <svg className="absolute inset-0 w-full h-full opacity-[0.35]" viewBox="0 0 800 400" preserveAspectRatio="none" aria-hidden>
+      <defs>
+        <linearGradient id="arc" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%"   stopColor="var(--primary)" stopOpacity="0.0" />
+          <stop offset="50%"  stopColor="var(--primary)" stopOpacity="0.7" />
+          <stop offset="100%" stopColor="var(--primary)" stopOpacity="0.0" />
+        </linearGradient>
+      </defs>
+      <path d="M 80 320 Q 400 40 720 320" stroke="url(#arc)" strokeWidth="1.5" fill="none" strokeDasharray="3 6" />
+      <circle cx="80"  cy="320" r="4" fill="var(--primary)" />
+      <circle cx="720" cy="320" r="4" fill="var(--primary)" opacity="0.5" />
+    </svg>
   );
 }
 
@@ -1065,72 +890,9 @@ function addMin(iso: string, m: number) {
 }
 
 function defaultStepLabel(key: string) {
-  const map: Record<string, string> = { checkIn: "Check-in", boarding: "Boarding", departure: "Departure", takeoff: "Take-off", landing: "Landing", arrival: "Arrival" };
+  const map: Record<string, string> = {
+    scheduled: "Scheduled", boarding: "Boarding", departed: "Departed", arrived: "Arrived",
+    checkIn: "Check-in", departure: "Departure", takeoff: "Take-off", landing: "Landing", arrival: "Arrival",
+  };
   return map[key] ?? key;
 }
-
-function computeGoodToKnow(flight: { from: { code: string; city: string }; to: { code: string; city: string }; arrivalTime: string }) {
-  const tzMap: Record<string, { offset: number; label: string }> = {
-    CDG: { offset: 1, label: "(UTC+1)" }, LHR: { offset: 0, label: "(UTC+0)" }, JFK: { offset: -5, label: "(UTC-5)" },
-    DXB: { offset: 4, label: "(UTC+4)" }, IST: { offset: 3, label: "(UTC+3)" }, CMN: { offset: 1, label: "(UTC+1)" },
-    TUN: { offset: 1, label: "(UTC+1)" }, MIR: { offset: 1, label: "(UTC+1)" }, NBE: { offset: 1, label: "(UTC+1)" },
-    DJE: { offset: 1, label: "(UTC+1)" }, FRA: { offset: 1, label: "(UTC+1)" }, FCO: { offset: 1, label: "(UTC+1)" },
-    MAD: { offset: 1, label: "(UTC+1)" }, BRU: { offset: 1, label: "(UTC+1)" }, GVA: { offset: 1, label: "(UTC+1)" },
-    ORY: { offset: 1, label: "(UTC+1)" }, LYS: { offset: 1, label: "(UTC+1)" }, DOH: { offset: 3, label: "(UTC+3)" },
-  };
-
-  const weatherFor = (code: string) => {
-    const seed = [...code].reduce((s, c) => s + c.charCodeAt(0), 0);
-    const conditions = [
-      { c: "Clear sky", advice: "Smooth conditions expected.", base: 24 },
-      { c: "Partly cloudy", advice: "Comfortable weather on the ground.", base: 19 },
-      { c: "Light rain", advice: "Bring a light jacket — minor taxi delays possible.", base: 14 },
-      { c: "Overcast", advice: "Cool and grey — visibility good.", base: 12 },
-      { c: "Sunny", advice: "Warm — stay hydrated.", base: 28 },
-    ];
-    const pick = conditions[seed % conditions.length];
-    return { condition: pick.c, advice: pick.advice, temp: pick.base + (seed % 5), wind: 6 + (seed % 18), humidity: 40 + (seed % 45) };
-  };
-
-  const dep = tzMap[flight.from.code] ?? { offset: 0, label: "(UTC)" };
-  const arr = tzMap[flight.to.code] ?? { offset: 0, label: "(UTC)" };
-  const tzDiff = arr.offset - dep.offset;
-  const localArrival = new Date(flight.arrivalTime).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "UTC" });
-
-  return { depWeather: weatherFor(flight.from.code), arrWeather: weatherFor(flight.to.code), depTz: dep.label, arrTz: arr.label, tzDiff, localArrival };
-}
-
-function Insight({ tone, title, body }: { tone: "success" | "info" | "primary"; title: string; body: string }) {
-  const toneCls = { success: "border-success/30 bg-success/5 text-success", info: "border-info/30 bg-info/5 text-info", primary: "border-primary/30 bg-primary/5 text-primary" }[tone];
-  return (
-    <div className={`rounded-xl border ${toneCls} p-5`}>
-      <div className="text-xs uppercase tracking-wider font-semibold">{title}</div>
-      <div className="mt-2 text-sm text-foreground/80 leading-relaxed">{body}</div>
-    </div>
-  );
-}
-
-function PredictionStat({ tone, label, value, sub, progress }: { tone: "low" | "medium" | "high" | "info"; label: string; value: string; sub?: string; progress?: number }) {
-  const toneMap = {
-    low:    { ring: "border-success/30",     text: "text-success",     bar: "from-success to-success/60",         chip: "bg-success/10" },
-    medium: { ring: "border-warning/30",     text: "text-warning",     bar: "from-warning to-warning/60",         chip: "bg-warning/10" },
-    high:   { ring: "border-destructive/30", text: "text-destructive", bar: "from-destructive to-destructive/60", chip: "bg-destructive/10" },
-    info:   { ring: "border-info/30",        text: "text-info",        bar: "from-info to-info/60",               chip: "bg-info/10" },
-  } as const;
-  const c = toneMap[tone];
-  return (
-    <div className={`rounded-xl border ${c.ring} ${c.chip} p-5 relative overflow-hidden`}>
-      <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">{label}</div>
-      <div className={`font-display text-3xl mt-1 tabular ${c.text}`}>{value}</div>
-      {sub && <div className="text-xs text-muted-foreground mt-1.5">{sub}</div>}
-      {typeof progress === "number" && (
-        <div className="mt-3 h-1.5 rounded-full bg-background/60 overflow-hidden">
-          <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(100, progress)}%` }} transition={{ duration: 0.8, ease: "easeOut" }}
-            className={`h-full bg-gradient-to-r ${c.bar}`} />
-        </div>
-      )}
-    </div>
-  );
-}
-
-export default FlightDetail;

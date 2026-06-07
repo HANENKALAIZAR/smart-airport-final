@@ -28,45 +28,133 @@ from app.schemas.schemas import (
 router = APIRouter(prefix="/api/flights", tags=["Flights"])
 
 
-@router.get("", response_model=list[FlightListOut])
+def _enrich_flights_with_snapshots(flights: list, db: Session):
+    if not flights:
+        return
+        
+    from datetime import date, timedelta
+    from app.models.ae_models import AEFlightSnapshot
+    
+    flight_nums = {f.flight_number for f in flights}
+    today = date.today()
+    
+    # Query snapshots for these flight numbers for yesterday and today
+    snapshots = (
+        db.query(AEFlightSnapshot)
+        .filter(
+            AEFlightSnapshot.flight_number.in_(list(flight_nums)),
+            AEFlightSnapshot.snapshot_date >= today - timedelta(days=1)
+        )
+        .order_by(AEFlightSnapshot.collected_at.desc())
+        .all()
+    )
+    
+    # Group snapshots by (flight_number, direction)
+    snap_map = {}
+    for s in snapshots:
+        key = (s.flight_number, s.direction)
+        if key not in snap_map:
+            snap_map[key] = s
+            
+    # Tunisian airports list to resolve direction
+    TUNISIAN_AIRPORTS = {"TUN", "MIR", "NBE", "DJE", "TOE"}
+    
+    for f in flights:
+        origin_iata = f.origin_airport.iata_code if f.origin_airport else None
+        direction = "departure" if origin_iata in TUNISIAN_AIRPORTS else "arrival"
+        
+        # Try specific direction first, then fallback to any snapshot matching flight number
+        snap = snap_map.get((f.flight_number, direction))
+        if not snap:
+            for k, s in snap_map.items():
+                if k[0] == f.flight_number:
+                    snap = s
+                    break
+                    
+        if snap:
+            # Get best available gate/terminal (Aviation Edge first, FlightAware fallback)
+            gate = (snap.arr_gate if direction == "arrival" else snap.dep_gate)
+            fa_gate = (snap.fa_arr_gate if direction == "arrival" else snap.fa_dep_gate)
+            
+            terminal = (snap.arr_terminal if direction == "arrival" else snap.dep_terminal)
+            fa_terminal = (snap.fa_arr_terminal if direction == "arrival" else snap.fa_dep_terminal)
+            
+            f.gate = gate or fa_gate
+            f.terminal = terminal or fa_terminal
+            
+            if gate:
+                f.gate_source = "aviation_edge"
+            elif fa_gate:
+                f.gate_source = "flightaware"
+            else:
+                f.gate_source = None
+                
+            f.displayed_dep_source = snap.displayed_dep_source
+            f.displayed_arr_source = snap.displayed_arr_source
+        else:
+            f.gate = None
+            f.terminal = None
+            f.gate_source = None
+            f.displayed_dep_source = None
+            f.displayed_arr_source = None
+
+
+@router.get("", response_model=list[dict])
 def list_flights(
     status: Optional[str] = Query(None, description="Filter by status: on_time, delayed, scheduled, cancelled"),
     airport: Optional[str] = Query(None, description="Filter by origin/destination IATA code"),
     airline: Optional[str] = Query(None, description="Filter by airline IATA code"),
-    date_from: Optional[str] = Query(None, description="Start date YYYY-MM-DD"),
-    date_to: Optional[str] = Query(None, description="End date YYYY-MM-DD"),
+    direction: Optional[str] = Query(None, description="departure or arrival"),
+    date: Optional[str] = Query(None, description="YYYY-MM-DD"),
     search: Optional[str] = Query(None, description="Search by flight number"),
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(500, ge=1, le=1000),
     db: Session = Depends(get_db),
 ):
-    """List flights with optional filters."""
-    parsed_from: Optional[datetime] = None
-    parsed_to: Optional[datetime] = None
-
-    if date_from:
+    """List flights for admin dashboard directly from AEFlightSnapshot (Phase 3)."""
+    from app.models.ae_models import AEFlightSnapshot
+    from app.services.flight_cache_service import _snapshot_to_api_dict
+    from datetime import datetime, timezone
+    
+    query_date = datetime.now(timezone.utc).date()
+    if date:
         try:
-            parsed_from = datetime.strptime(date_from, "%Y-%m-%d")
+            query_date = datetime.strptime(date, "%Y-%m-%d").date()
         except ValueError:
             pass
 
-    if date_to:
-        try:
-            parsed_to = datetime.strptime(date_to, "%Y-%m-%d")
-        except ValueError:
-            pass
+    query = db.query(AEFlightSnapshot).filter(AEFlightSnapshot.snapshot_date == query_date)
 
-    return repo_list_flights(
-        db,
-        status=status,
-        airport_iata=airport,
-        airline_iata=airline,
-        date_from=parsed_from,
-        date_to=parsed_to,
-        search=search,
-        skip=skip,
-        limit=limit,
-    )
+    if airport:
+        # Match either origin or destination depending on the context, or just airport_iata
+        query = query.filter(AEFlightSnapshot.airport_iata == airport.upper())
+    
+    if direction:
+        query = query.filter(AEFlightSnapshot.direction == direction.lower())
+        
+    if airline:
+        query = query.filter(
+            (AEFlightSnapshot.airline_iata == airline.upper()) | 
+            (AEFlightSnapshot.airline_icao == airline.upper())
+        )
+        
+    if search:
+        query = query.filter(AEFlightSnapshot.flight_number.ilike(f"%{search}%"))
+
+    # Mapping frontend status to AE statuses
+    if status:
+        status_map = {
+            "on_time": ["active", "scheduled"],
+            "delayed": ["delayed"],
+            "cancelled": ["cancelled", "canceled"],
+            "scheduled": ["scheduled"]
+        }
+        mapped = status_map.get(status.lower(), [status.lower()])
+        query = query.filter(AEFlightSnapshot.status.in_(mapped))
+
+    rows = query.order_by(AEFlightSnapshot.dep_scheduled.desc(), AEFlightSnapshot.arr_scheduled.desc()).offset(skip).limit(limit).all()
+    
+    return [_snapshot_to_api_dict(r) for r in rows]
 
 
 @router.post("", response_model=FlightListOut, status_code=201)
@@ -163,6 +251,8 @@ def get_flight(flight_id: str, db: Session = Depends(get_db)):
     flight = get_flight_detail(db, fid)
     if not flight:
         raise HTTPException(status_code=404, detail="Flight not found")
+
+    _enrich_flights_with_snapshots([flight], db)
 
     prediction = None
     if flight.predictions:

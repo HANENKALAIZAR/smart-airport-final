@@ -172,7 +172,7 @@ export default function AdminAnalytics() {
 
     const stats = [
         { l: 'Total Flights', v: data?.summary?.totalFlights || 0, c: COLOR_NEUTRAL, icon: Plane },
-        { l: 'Avg On-Time', v: `${(data?.summary?.onTimeRate || 0).toFixed(1)}%`, c: COLOR_SUCCESS, icon: CheckCircle },
+        { l: 'Avg On-Time', v: data?.summary?.onTimeRate != null ? `${data.summary.onTimeRate.toFixed(1)}%` : 'N/A', c: COLOR_SUCCESS, icon: CheckCircle },
         { l: 'Active Flights', v: data?.summary?.activeFlights || 0, c: COLOR_ACTIVE, icon: Activity },
         { l: 'Landed Flights', v: data?.summary?.landedFlights || 0, c: '#4ADE80', icon: Plane },
         { l: 'Scheduled Flights', v: data?.summary?.scheduledFlights || 0, c: 'var(--adm-text-sub)', icon: Calendar },

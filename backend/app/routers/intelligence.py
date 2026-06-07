@@ -286,6 +286,7 @@ def get_stats_for_flight(
 
 @router.get("/airport-kpis")
 def get_airport_kpis(
+    airport_iata: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     _user: User = Depends(require_admin),
 ):
@@ -297,6 +298,11 @@ def get_airport_kpis(
     """
     from app.models.ae_models import AEAviationStats, AEFutureSchedule
     from sqlalchemy import func
+
+    if airport_iata:
+        airport_iata = airport_iata.upper()
+        if _user.role != "super_admin" and _user.airport_iata and airport_iata != _user.airport_iata.upper():
+            raise HTTPException(status_code=403, detail="Not authorized to access other airports.")
 
     TUNISIAN_AIRPORTS = {
         "TUN": "Tunis-Carthage",
@@ -334,6 +340,10 @@ def get_airport_kpis(
 
     result = []
     for iata, name in TUNISIAN_AIRPORTS.items():
+        if _user.role != "super_admin" and _user.airport_iata and iata != _user.airport_iata:
+            continue
+        if airport_iata and iata != airport_iata:
+            continue
         s = airport_stats.get(iata)
         on_time_rate   = float(s.on_time_rate)   if s and s.on_time_rate   is not None else None
         avg_delay      = float(s.avg_delay_min)   if s and s.avg_delay_min  is not None else None

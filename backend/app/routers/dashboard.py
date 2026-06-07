@@ -88,7 +88,9 @@ def get_at_risk_flights(
     )
 
     from app.repositories.flight_repository import get_flights_by_ids
+    from app.routers.flights import _enrich_flights_with_snapshots
     flights = get_flights_by_ids(db, high_risk_flight_ids.select())
+    _enrich_flights_with_snapshots(flights, db)
     return flights
 
 

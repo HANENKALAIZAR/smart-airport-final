@@ -306,13 +306,20 @@ def reconcile_predictions(db, *, batch_size: int = 500) -> dict:
     Cross-reference ae_prediction_logs against ae_flight_dataset to
     backfill actual_delay_min and compute prediction_error.
 
+    Matching strategy:
+      - flight_number  (always)
+      - flight_date    (± 1 day window around prediction_timestamp)
+        Prevents cross-day contamination where the same flight number
+        on a different date overwrites an unrelated prediction log.
+
     Only updates logs where:
       - actual_delay_min is still NULL
-      - a matching ae_flight_dataset row exists (same flight_number)
-        with usable_for_ml=True and a real delay_minutes value
+      - a matching ae_flight_dataset row exists with usable_for_ml=True
+        and a real delay_minutes value
 
     Returns dict: {reconciled, skipped, errors}
     """
+    from datetime import date as _date, timedelta as _td
     from app.models.ae_models import AEPredictionLog, AEFlightDataset
 
     unreconciled = (
@@ -328,10 +335,24 @@ def reconcile_predictions(db, *, batch_size: int = 500) -> dict:
 
     for log in unreconciled:
         try:
+            # Derive expected flight date from prediction_timestamp.
+            # Predictions are made 0-72h before departure, so flight date
+            # is typically prediction_date or prediction_date+1 (or +2 for long-haul).
+            # We use a ±1 day window to cover timezone edge cases.
+            if log.prediction_timestamp:
+                pts = log.prediction_timestamp
+                pred_date = pts.date() if hasattr(pts, "date") else _date.fromisoformat(str(pts)[:10])
+                date_lo = pred_date - _td(days=1)
+                date_hi = pred_date + _td(days=2)  # inclusive on both ends
+            else:
+                date_lo = _date(2000, 1, 1)
+                date_hi = _date(2099, 12, 31)
+
             actual_row = (
                 db.query(AEFlightDataset)
                 .filter(
                     AEFlightDataset.flight_number == log.flight_number,
+                    AEFlightDataset.flight_date.between(date_lo, date_hi),
                     AEFlightDataset.usable_for_ml == True,
                     AEFlightDataset.delay_minutes.isnot(None),
                 )
@@ -343,9 +364,9 @@ def reconcile_predictions(db, *, batch_size: int = 500) -> dict:
                 continue
 
             actual = int(actual_row.delay_minutes)
-            log.actual_delay_min = actual
-            log.prediction_error = float(actual - log.predicted_delay_min)
-            log.reconciled_at    = now
+            log.actual_delay_min  = actual
+            log.prediction_error  = float(actual - log.predicted_delay_min)
+            log.reconciled_at     = now
             reconciled_count += 1
         except Exception as e:
             logger.debug(f"[MLOps] Reconcile error for {log.flight_number}: {e}")
@@ -423,6 +444,16 @@ def check_retraining_policy(db) -> dict:
             cooldown_passed = False
             blocks.append(f"cooldown: only {time_since_last_retrain_hours:.1f}h passed since last training (min 24h cooldown)")
 
+    # 1b. Model age trigger (was defined but never enforced — now fixed)
+    # If the model is older than _POLICY_MAX_AGE_DAYS, it must be retrained
+    # regardless of growth or drift, as long as the cooldown has passed.
+    if last_training_date and active:
+        model_age_days = (datetime.now(timezone.utc).replace(tzinfo=None) - last_training_date).days
+        if model_age_days >= _POLICY_MAX_AGE_DAYS:
+            triggers.append(
+                f"model_age: {model_age_days} days >= {_POLICY_MAX_AGE_DAYS} day limit"
+            )
+
     # 2. Data quality checks
     data_quality_ok = True
     dq_reasons = []
@@ -480,10 +511,28 @@ def check_retraining_policy(db) -> dict:
     # 5. Sustained drift check
     drift = compute_drift_report(db, window_days=7)
     drift_triggered = False
-    if drift["overall_severity"] in {"medium", "high", "critical"}:
+    drift_sev = drift.get("overall_severity", "none")
+    if drift_sev in {"medium", "high", "critical"}:
         drift_triggered = True
-        triggers.append(f"drift: sustained {drift['overall_severity']} drift")
+        triggers.append(f"drift: sustained {drift_sev} drift")
 
+    # Emit structured severity alerts for high/critical drift.
+    # Tagged [DRIFT ALERT] for log aggregators (ELK, Loki, CloudWatch, Grafana).
+    if drift_sev == "critical":
+        logger.critical(
+            "[DRIFT ALERT] severity=CRITICAL "
+            f"model={active.model_version if active else 'none'} "
+            f"live_mae={round(live_mae, 2) if live_mae else 'N/A'} "
+            f"train_mae={round(training_mae, 2) if training_mae else 'N/A'} "
+            "\u2014 emergency retraining recommended"
+        )
+    elif drift_sev == "high":
+        logger.warning(
+            "[DRIFT ALERT] severity=HIGH "
+            f"model={active.model_version if active else 'none'} "
+            f"live_mae={round(live_mae, 2) if live_mae else 'N/A'} "
+            "\u2014 retraining will be triggered on next policy cycle"
+        )
     # 6. Reconciled prediction volume check since last training
     new_reconciled_count = 0
     reconciled_count_triggered = False
@@ -531,7 +580,8 @@ def check_retraining_policy(db) -> dict:
 
 def run_auto_retrain(db) -> dict:
     """
-    Check policy → if retrain needed, run train_ae_model() → register → promote.
+    Check policy → if retrain needed, run train_v2() (multi-model, 15 features)
+    → register → promote.
     The existing active model is only replaced if the challenger wins all gates.
 
     Returns
@@ -547,8 +597,11 @@ def run_auto_retrain(db) -> dict:
     logger.info(f"[MLOps] Auto-retrain triggered by: {policy['triggers']}")
 
     try:
-        from app.ai.train_ae_dataset import train_ae_model
-        training_result = train_ae_model(db, notes=f"auto-retrain: {policy['triggers']}")
+        from app.ai.train_v2 import train_v2
+        # persist_to_db=False: the controller writes AEModelVersion via
+        # register_model_version() below — avoids a duplicate key conflict.
+        training_result = train_v2(db, notes=f"auto-retrain: {policy['triggers']}",
+                                   persist_to_db=False)
     except Exception as e:
         logger.error(f"[MLOps] Auto-retrain training failed: {e}")
         return {

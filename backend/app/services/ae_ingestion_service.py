@@ -519,6 +519,67 @@ async def ingest_airport(airport_iata: str, direction: str, db: Session) -> Sync
                 db.execute(stmt)
                 stats.snapshots_upserted += 1
 
+                # ── FA Verification Flag: detect gaps in AE data ──────────────
+                # After upsert, flag this snapshot if AE data has a known gap
+                # that FlightAware can fill. We use a targeted UPDATE to avoid
+                # disturbing FA-enriched fields already on the row.
+                now_dt_check = datetime.now(timezone.utc)
+                dep_sched_parsed = _parse_dt(flight.get("dep_scheduled"))
+                arr_sched_parsed = _parse_dt(flight.get("arr_scheduled"))
+
+                needs_verify = False
+                verify_reason_parts = []
+
+                # Gap 1: gate and terminal both missing
+                if not snap.get("dep_gate") and not snap.get("arr_gate"):
+                    if dep_sched_parsed:
+                        gate_horizon_secs = 4 * 3600  # 4 hours
+                        secs_until_dep = (dep_sched_parsed - now_dt_check).total_seconds()
+                        if abs(secs_until_dep) < gate_horizon_secs:
+                            needs_verify = True
+                            verify_reason_parts.append("no_gate")
+
+                # Gap 2: dep_actual missing and flight was >20 min ago
+                if not snap.get("dep_actual") and dep_sched_parsed:
+                    if dep_sched_parsed.tzinfo is None:
+                        dep_sched_check = dep_sched_parsed.replace(tzinfo=timezone.utc)
+                    else:
+                        dep_sched_check = dep_sched_parsed
+                    if (now_dt_check - dep_sched_check).total_seconds() > 20 * 60:
+                        needs_verify = True
+                        verify_reason_parts.append("no_dep_actual")
+
+                # Gap 3: arr_actual missing and arr was >30 min ago (non-scheduled)
+                if resolved_status not in ("scheduled", "delayed"):
+                    if not snap.get("arr_actual") and arr_sched_parsed:
+                        if arr_sched_parsed.tzinfo is None:
+                            arr_sched_check = arr_sched_parsed.replace(tzinfo=timezone.utc)
+                        else:
+                            arr_sched_check = arr_sched_parsed
+                        if (now_dt_check - arr_sched_check).total_seconds() > 30 * 60:
+                            needs_verify = True
+                            verify_reason_parts.append("no_arr_actual")
+
+                if needs_verify:
+                    verify_reason = ",".join(verify_reason_parts)
+                    try:
+                        from sqlalchemy import update as sa_update
+                        db.execute(
+                            sa_update(AEFlightSnapshot)
+                            .where(
+                                AEFlightSnapshot.flight_number == fnum,
+                                AEFlightSnapshot.snapshot_date == today,
+                                AEFlightSnapshot.airport_iata == airport_iata,
+                                AEFlightSnapshot.direction == direction,
+                            )
+                            .values(needs_fa_verification=True, fa_call_reason=verify_reason)
+                        )
+                        logger.debug(
+                            f"[AE Ingest] {fnum} flagged for FA verification: {verify_reason}"
+                        )
+                    except Exception as flag_err:
+                        logger.debug(f"[AE Ingest] Could not set FA flag for {fnum}: {flag_err}")
+
                 # Build ML dataset row
                 ds_row = _build_dataset_row(snap)
                 ds_stmt = (

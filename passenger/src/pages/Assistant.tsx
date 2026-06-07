@@ -36,6 +36,17 @@ export default function Assistant() {
     { icon: PlaneTakeoff, label: tSugg("assistant.sugg_alt") },
   ];
 
+  const clearChat = async () => {
+    setMessages([]);
+    try {
+      await fetch(`${AI_URL}/api/chat/passenger-session`, {
+        method: "DELETE",
+      });
+    } catch (err) {
+      console.error("Failed to clear backend session:", err);
+    }
+  };
+
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.target as HTMLDivElement;
     const isNearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 50;
@@ -61,6 +72,9 @@ export default function Assistant() {
       scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
     }, 50);
 
+    const currentLang = detectMsgLanguage(trimmed, i18n.language);
+    const tSugg = i18n.getFixedT(currentLang);
+
     try {
       const res = await fetch(`${AI_URL}/api/chat`, {
         method: "POST",
@@ -83,10 +97,13 @@ export default function Assistant() {
         const f = parsed.flight;
         const flightNum = f.flightNumber || f.number || '';
         const rawStatus = f.status || '';
-        const translatedStatus = rawStatus ? (t(`status_${rawStatus.toLowerCase()}`) || rawStatus.toUpperCase()) : "";
+        const statusKey = rawStatus.toLowerCase() === 'active' ? 'in_air' : rawStatus.toLowerCase();
+        const translatedStatus = rawStatus ? (tSugg(`common.${statusKey}`) || rawStatus.toUpperCase()) : "";
         const statusStr = translatedStatus ? ` — **${translatedStatus.toUpperCase()}**` : "";
-        const delayStr = f.delay && f.delay !== "0min" ? ` (${f.delay} ${t("common.delayed") || "delay"})` : "";
-        reply += `${t("common.flightNumber") || 'Flight'} **${flightNum}** (${f.airline})${statusStr}${delayStr}\n`;
+        const delayStr = f.delay && f.delay !== "0min" ? ` (${f.delay} ${tSugg("common.delayed") || "delay"})` : "";
+        
+        if (reply) reply += "\n\n";
+        reply += `${tSugg("common.flightNumber") || 'Flight'} **${flightNum}** (${f.airline})${statusStr}${delayStr}\n`;
         if (f.route) {
           if (typeof f.route === 'object' && f.route.from) {
             reply += `Route: ${f.route.from} → ${f.route.to || ''}\n`;
@@ -94,13 +111,13 @@ export default function Assistant() {
             reply += `Route: ${f.route}\n`;
           }
         }
-        if (f.scheduledDeparture) reply += `${t("common.departure")}: ${f.scheduledDeparture}\n`;
-        if (f.scheduledArrival) reply += `${t("common.arrival")}: ${f.scheduledArrival}\n`;
-        if (f.gate) reply += `${t("common.gate")}: ${f.gate}\n`;
+        if (f.scheduledDeparture) reply += `${tSugg("common.departure")}: ${f.scheduledDeparture}\n`;
+        if (f.scheduledArrival) reply += `${tSugg("common.arrival")}: ${f.scheduledArrival}\n`;
+        if (f.gate) reply += `${tSugg("common.gate")}: ${f.gate}\n`;
       }
 
       if (!reply && !parsed.rights && !parsed.flights && !parsed.hotels && !parsed.services && !parsed.suggestion) {
-        reply = t("assistant.title");
+        reply = tSugg("assistant.title");
       }
 
       if (parsed.rights?.length) {
@@ -108,7 +125,7 @@ export default function Assistant() {
       }
       if (parsed.flights?.length) {
         reply += "\n\n" + parsed.flights.map((f: { flightNumber: string; airline: string; departure: string; status: string }) =>
-          `• **${f.flightNumber}** (${f.airline}) — ${t("common.departure") || "departs"} ${f.departure} — ${f.status}`
+          `• **${f.flightNumber}** (${f.airline}) — ${tSugg("common.departure") || "departs"} ${f.departure} — ${f.status}`
         ).join("\n");
       }
       if (parsed.hotels?.length) {
@@ -150,7 +167,7 @@ export default function Assistant() {
       setIsTyping(false);
       setMessages((prev) => [...prev, {
         role: "assistant",
-        content: t("assistant.error_connect"),
+        content: tSugg("assistant.error_connect"),
       }]);
     }
   };
@@ -187,7 +204,7 @@ export default function Assistant() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setMessages([])}
+                onClick={clearChat}
                 className="gap-1.5 text-muted-foreground hover:text-foreground"
               >
                 <Plus className="h-4 w-4" />
@@ -196,7 +213,7 @@ export default function Assistant() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => setMessages([])}
+                onClick={clearChat}
                 disabled={messages.length === 0}
                 className="gap-1.5 text-muted-foreground hover:text-destructive"
               >

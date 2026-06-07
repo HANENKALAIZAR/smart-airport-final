@@ -87,31 +87,52 @@ def _make_suggestion(
     }
 
 
-def generate_suggestions_for_airport(airport_iata: str, db: Session) -> List[Dict[str, Any]]:
+def generate_suggestions_for_airport(airport_iata: str, db: Session, date_str: Optional[str] = None) -> List[Dict[str, Any]]:
     """
     Generate all AI Operational Suggestions for a specific airport.
     All logic is driven exclusively from real DB data.
     Returns a sorted list (high → medium → low).
     """
     suggestions: List[Dict[str, Any]] = []
-    today = _now_utc().date()
+    
+    if date_str:
+        try:
+            today = datetime.strptime(date_str, "%Y-%m-%d").date()
+        except ValueError:
+            today = _now_utc().date()
+    else:
+        today = _now_utc().date()
+
     now = _now_utc()
+    if today != now.date():
+        # Set to the start of the selected date in UTC
+        now = datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc)
     current_hour = now.hour
 
     iata = airport_iata.upper()
     airport_label = AIRPORT_NAMES.get(iata, iata)
 
-    # ── 1. LIVE DELAYED FLIGHTS (from ae_flight_snapshots) ──────────────────
-    delayed_today = (
+    # Filter all snapshot-based suggestions strictly to flights having one of the operational statuses
+    OPERATIONAL_STATUSES = ["scheduled", "delayed", "in_air"]
+
+    # Retrieve all live flights for the selected date having operational statuses
+    live_flights = (
         db.query(AEFlightSnapshot)
         .filter(
             AEFlightSnapshot.airport_iata == iata,
             AEFlightSnapshot.snapshot_date == today,
-            AEFlightSnapshot.status == "delayed",
+            AEFlightSnapshot.status.in_(OPERATIONAL_STATUSES),
         )
-        .order_by(AEFlightSnapshot.delay_minutes.desc().nullslast())
         .all()
     )
+
+    if not live_flights:
+        return []
+
+    # ── 1. LIVE DELAYED FLIGHTS (from ae_flight_snapshots) ──────────────────
+    delayed_today = [f for f in live_flights if f.status == "delayed"]
+    # Sort by delay_minutes descending
+    delayed_today.sort(key=lambda f: f.delay_minutes or f.dep_delay_min or f.arr_delay_min or 0, reverse=True)
 
     # ── 1a. Severely delayed individual flights (delay >= 60 min) ───────────
     for snap in delayed_today:
@@ -187,19 +208,14 @@ def generate_suggestions_for_airport(airport_iata: str, db: Session) -> List[Dic
     # ── 2. PEAK HOUR CONGESTION ──────────────────────────────────────────────
     is_peak = current_hour in PEAK_HOURS
     if is_peak:
-        # Count scheduled/boarding flights in the next 2 hours
+        # Count scheduled/delayed/in_air flights in the next 2 hours
         window_start = now.replace(tzinfo=None)
         window_end = (now + timedelta(hours=2)).replace(tzinfo=None)
-        active_in_window = (
-            db.query(func.count(AEFlightSnapshot.id))
-            .filter(
-                AEFlightSnapshot.airport_iata == iata,
-                AEFlightSnapshot.snapshot_date == today,
-                AEFlightSnapshot.status.in_(["scheduled", "boarding"]),
-                AEFlightSnapshot.dep_scheduled >= window_start,
-                AEFlightSnapshot.dep_scheduled <= window_end,
-            )
-            .scalar() or 0
+        
+        active_in_window = sum(
+            1 for f in live_flights
+            if f.dep_scheduled is not None
+            and window_start <= f.dep_scheduled <= window_end
         )
 
         if active_in_window >= 5:
@@ -251,7 +267,11 @@ def generate_suggestions_for_airport(airport_iata: str, db: Session) -> List[Dic
         .all()
     )
 
+    live_flight_numbers = {f.flight_number for f in live_flights}
+
     for sched in predicted_high:
+        if sched.flight_number not in live_flight_numbers:
+            continue
         delay = sched.predicted_delay_min or 0
         conf = round((sched.confidence or 0.5) * 100)
         route = f"{sched.dep_iata or iata} → {sched.arr_iata or '?'}"
@@ -296,6 +316,13 @@ def generate_suggestions_for_airport(airport_iata: str, db: Session) -> List[Dic
     )
 
     for stat in route_stats:
+        parts = stat.entity_key.split("→")
+        if len(parts) == 2:
+            dep_iata, arr_iata = parts[0], parts[1]
+            matching_live = [f for f in live_flights if f.dep_iata == dep_iata and f.arr_iata == arr_iata]
+            if not matching_live:
+                continue
+
         delay_rate_pct = round((stat.delay_rate or 0) * 100)
         avg_delay = round(stat.avg_delay_min or 0)
         h = avg_delay // 60
@@ -335,15 +362,8 @@ def generate_suggestions_for_airport(airport_iata: str, db: Session) -> List[Dic
     for stat in airline_stats:
         delay_rate_pct = round((stat.delay_rate or 0) * 100)
         # Check if this airline has a flight today at this airport
-        has_today = (
-            db.query(func.count(AEFlightSnapshot.id))
-            .filter(
-                AEFlightSnapshot.airport_iata == iata,
-                AEFlightSnapshot.snapshot_date == today,
-                AEFlightSnapshot.airline_iata == stat.entity_key,
-            )
-            .scalar() or 0
-        )
+        has_today = sum(1 for f in live_flights if f.airline_iata == stat.entity_key)
+        
         if has_today > 0:
             suggestions.append(_make_suggestion(
                 priority="low",
@@ -361,24 +381,15 @@ def generate_suggestions_for_airport(airport_iata: str, db: Session) -> List[Dic
                 airport_iata=iata,
             ))
 
-    # ── 6. UNRECONCILED FLIGHTS (boarding/taxiing but no departure recorded) ─
-    stalled_flights = (
-        db.query(AEFlightSnapshot)
-        .filter(
-            AEFlightSnapshot.airport_iata == iata,
-            AEFlightSnapshot.snapshot_date == today,
-            AEFlightSnapshot.status.in_(["boarding", "taxiing"]),
-            AEFlightSnapshot.direction == "departure",
-        )
-        .all()
-    )
+    # ── 6. UNRECONCILED FLIGHTS (scheduled/delayed departure but no actual departure recorded) ─
+    stalled_flights = [f for f in live_flights if f.direction == "departure" and not f.departed_at]
 
     for snap in stalled_flights:
         # Only flag if scheduled more than 90 minutes ago with no departure recorded
         if snap.dep_scheduled:
             dep_sched = snap.dep_scheduled
             age_min = (now.replace(tzinfo=None) - dep_sched).total_seconds() / 60
-            if age_min > 90 and not snap.departed_at:
+            if age_min > 90:
                 suggestions.append(_make_suggestion(
                     priority="medium",
                     category="operational",
@@ -407,6 +418,7 @@ def generate_suggestions_for_airport(airport_iata: str, db: Session) -> List[Dic
 
 @router.get("/ai-suggestions")
 def get_ai_suggestions(
+    date: Optional[str] = Query(None, description="Selected date (YYYY-MM-DD)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
@@ -424,7 +436,7 @@ def get_ai_suggestions(
         # super_admin hitting this endpoint gets TUN by default
         iata = "TUN"
 
-    suggestions = generate_suggestions_for_airport(iata, db)
+    suggestions = generate_suggestions_for_airport(iata, db, date)
 
     high = sum(1 for s in suggestions if s["priority"] == "high")
     medium = sum(1 for s in suggestions if s["priority"] == "medium")
@@ -448,6 +460,7 @@ def get_ai_suggestions(
 def get_all_airport_suggestions(
     airport_iata: Optional[str] = Query(None, description="Filter by airport IATA (TUN/MIR/DJE/NBE)"),
     priority: Optional[str] = Query(None, description="Filter by priority: high|medium|low"),
+    date: Optional[str] = Query(None, description="Selected date (YYYY-MM-DD)"),
     db: Session = Depends(get_db),
     _user: User = Depends(require_super_admin),
 ):
@@ -464,7 +477,7 @@ def get_all_airport_suggestions(
 
     all_suggestions: List[Dict[str, Any]] = []
     for iata in target_airports:
-        airport_suggestions = generate_suggestions_for_airport(iata, db)
+        airport_suggestions = generate_suggestions_for_airport(iata, db, date)
         all_suggestions.extend(airport_suggestions)
 
     if priority and priority in ("high", "medium", "low"):

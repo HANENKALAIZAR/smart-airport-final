@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
     UserCircle, Mail, Phone, MapPin, IdCard, FileText, Plane, Calendar,
     Globe, ShieldCheck, Lock, Eye, EyeOff, Pencil, Save, X, Check,
@@ -34,6 +34,11 @@ interface ProfileData {
     cinDocumentBackUrl: string | null;
     passportDocumentUrl: string | null;
     role: string;
+    profileEditUnlocked: boolean;
+    profileUnlockIdentity: boolean;
+    profileUnlockPassport: boolean;
+    profileUnlockCinDoc: boolean;
+    profileUnlockContact: boolean;
 }
 
 const EMPTY: ProfileData = {
@@ -44,12 +49,18 @@ const EMPTY: ProfileData = {
     airport: '', employeeId: '', verificationStatus: 'pending_review',
     profilePhotoUrl: null, cinDocumentUrl: null, cinDocumentBackUrl: null, passportDocumentUrl: null,
     role: 'admin',
+    profileEditUnlocked: false,
+    profileUnlockIdentity: false,
+    profileUnlockPassport: false,
+    profileUnlockCinDoc: false,
+    profileUnlockContact: false,
 };
 
 // Fields that can be edited by the admin themselves (per backend rules)
 const EDITABLE = new Set<keyof ProfileData>([
     'phoneNumber', 'residentialAddress', 'emergencyContactName',
     'emergencyContactPhone', 'emergencyContactRelationship',
+    'profilePhotoUrl',
 ]);
 
 /* ─────────────────────────────────────────────────────────────────
@@ -137,32 +148,48 @@ function ReadField({ label, value, icon: Icon, verified, status, fullWidth }: {
     );
 }
 
-function EditField({ label, value, editable, editing, error, onChange, icon: Icon, fullWidth }: {
+function EditField({ label, value, editable, editing, error, onChange, icon: Icon, fullWidth, type = 'text', options }: {
     label: string; value?: string | null; editable: boolean; editing: boolean;
-    error?: string; onChange: (v: string) => void; icon: any; fullWidth?: boolean;
+    error?: string; onChange: (v: string) => void; icon: any; fullWidth?: boolean; type?: string; options?: string[];
 }) {
     const active = editable && editing;
     return (
         <FieldShell label={label} fullWidth={fullWidth}>
             <div style={{
                 display: 'flex', alignItems: 'center', gap: 10,
-                padding: '0.5rem 0.85rem', borderRadius: 10,
+                padding: active && options ? '0.35rem 0.85rem' : '0.5rem 0.85rem', borderRadius: 10,
                 background: active ? 'var(--adm-card)' : 'var(--adm-input-bg)',
                 border: `1px solid ${error ? 'rgba(239,68,68,0.6)' : active ? 'var(--adm-accent)' : 'var(--adm-border)'}`,
                 boxShadow: active ? '0 0 0 3px var(--adm-accent-light)' : 'none',
                 transition: 'all 180ms ease',
             }}>
                 <Icon size={15} style={{ color: active ? 'var(--adm-accent)' : 'var(--adm-text-muted)', flexShrink: 0 }} />
-                <input
-                    value={value || ''}
-                    readOnly={!active}
-                    onChange={e => onChange(e.target.value)}
-                    style={{
-                        flex: 1, background: 'transparent', border: 'none', outline: 'none',
-                        color: 'var(--adm-text)', fontSize: '0.88rem', fontWeight: 500,
-                        cursor: active ? 'text' : 'default',
-                    }}
-                />
+                {active && options ? (
+                    <select
+                        value={value || ''}
+                        onChange={e => onChange(e.target.value)}
+                        style={{
+                            flex: 1, background: 'transparent', border: 'none', outline: 'none',
+                            color: 'var(--adm-text)', fontSize: '0.88rem', fontWeight: 500,
+                            cursor: 'pointer',
+                        }}
+                    >
+                        <option value="" disabled>Select {label.toLowerCase()}</option>
+                        {options.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                ) : (
+                    <input
+                        type={type}
+                        value={value || ''}
+                        readOnly={!active}
+                        onChange={e => onChange(e.target.value)}
+                        style={{
+                            flex: 1, background: 'transparent', border: 'none', outline: 'none',
+                            color: 'var(--adm-text)', fontSize: '0.88rem', fontWeight: 500,
+                            cursor: active ? 'text' : 'default',
+                        }}
+                    />
+                )}
                 {editable && !editing && (
                     <span title="Editable in edit mode" style={{ color: 'var(--adm-text-muted)' }}><Pencil size={12} /></span>
                 )}
@@ -209,6 +236,65 @@ function DocumentPreview({ label, url, accent }: { label: string; url?: string |
                 ? <iframe title={label} src={url} style={{ width: '100%', height: 200, border: 'none', background: '#fff' }} />
                 : <img src={url} alt={label} style={{ maxWidth: '100%', maxHeight: 200, display: 'block', objectFit: 'contain' }} />
             }
+        </div>
+    );
+}
+
+function DocumentUploadField({ label, url, accent, editing, onChange }: {
+    label: string; url?: string | null; accent: string; editing: boolean; onChange: (v: string) => void;
+}) {
+    const fileRef = useRef<HTMLInputElement>(null);
+    const handlePick = () => { if (editing) fileRef.current?.click(); };
+    const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const allowed = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf'];
+        if (!allowed.includes(file.type)) { alert('Only JPG, PNG or PDF files are accepted.'); return; }
+        if (file.size > 5 * 1024 * 1024) { alert('File must be under 5MB.'); return; }
+        const reader = new FileReader();
+        reader.onload = () => onChange(reader.result as string);
+        reader.readAsDataURL(file);
+        // reset input so same file can be re-selected
+        e.target.value = '';
+    };
+    const isPdf = url ? url.startsWith('data:application/pdf') : false;
+    return (
+        <div style={{ borderRadius: 12, overflow: 'hidden', border: `1px solid ${editing ? accent + '55' : 'var(--adm-border)'}`, boxShadow: editing ? `0 0 0 3px ${accent}18` : 'none', transition: 'all 180ms ease' }}>
+            <div style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '0.6rem 0.85rem', background: editing ? `${accent}12` : 'var(--adm-input-bg)',
+                borderBottom: url ? '1px solid var(--adm-border)' : 'none',
+                cursor: editing ? 'pointer' : 'default',
+            }} onClick={handlePick}>
+                <div style={{ width: 28, height: 28, borderRadius: 8, display: 'grid', placeItems: 'center', background: `${accent}22`, color: accent }}>
+                    <FileText size={14} />
+                </div>
+                <span style={{ flex: 1, fontSize: '0.82rem', fontWeight: 600, color: 'var(--adm-text)' }}>{label}</span>
+                {editing && (
+                    <span style={{ fontSize: '0.72rem', color: accent, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <Camera size={12} /> {url ? 'Replace' : 'Upload'}
+                    </span>
+                )}
+                {!editing && url && (
+                    <a href={url} download={`${label.replace(/\s/g, '_')}.${isPdf ? 'pdf' : 'jpg'}`}
+                        style={{ color: 'var(--adm-text-muted)', display: 'grid', placeItems: 'center' }}
+                        onClick={e => e.stopPropagation()}>
+                        <Download size={14} />
+                    </a>
+                )}
+            </div>
+            {url ? (
+                isPdf
+                    ? <iframe title={label} src={url} style={{ width: '100%', height: 200, border: 'none', background: '#fff' }} />
+                    : <img src={url} alt={label} style={{ maxWidth: '100%', maxHeight: 200, display: 'block', objectFit: 'contain' }} />
+            ) : (
+                editing ? (
+                    <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--adm-text-muted)', fontSize: '0.8rem' }}>
+                        Click to upload a document (JPG, PNG, PDF · max 5MB)
+                    </div>
+                ) : null
+            )}
+            <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/jpg,application/pdf" style={{ display: 'none' }} onChange={handleFile} />
         </div>
     );
 }
@@ -265,6 +351,7 @@ const VERIF_CFG: Record<string, { label: string; color: string; bg: string; bord
     pending: { label: 'Pending Review', color: '#F59E0B', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.3)' },
     under_review: { label: 'Under Review', color: '#38bdf8', bg: 'rgba(56,189,248,0.12)', border: 'rgba(56,189,248,0.3)' },
     rejected: { label: 'ID Rejected', color: '#F87171', bg: 'rgba(248,113,113,0.12)', border: 'rgba(248,113,113,0.3)' },
+    expired_verification: { label: 'Verification Expired', color: '#EF4444', bg: 'rgba(239,68,68,0.10)', border: 'rgba(239,68,68,0.30)' },
 };
 
 /* ═══════════════════════════════════════════
@@ -272,6 +359,48 @@ const VERIF_CFG: Record<string, { label: string; color: string; bg: string; bord
    ═══════════════════════════════════════════ */
 export default function AdminProfilePage() {
     const { t } = useLanguage();
+
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const triggerFileSelect = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Validate format
+        if (!["image/png", "image/jpeg", "image/jpg"].includes(file.type)) {
+            showToast('error', 'Only JPG, PNG or JPEG files are accepted.');
+            return;
+        }
+
+        // Validate size (2MB)
+        if (file.size > 2 * 1024 * 1024) {
+            showToast('error', 'File size must be under 2MB.');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            const result = reader.result as string;
+            if (!editing) {
+                setDraft({
+                    ...data,
+                    profilePhotoUrl: result
+                });
+                setErrors({});
+                setEditing(true);
+            } else {
+                setDraft(d => ({ ...d, profilePhotoUrl: result }));
+            }
+        };
+        reader.onerror = () => {
+            showToast('error', 'Failed to read file.');
+        };
+        reader.readAsDataURL(file);
+    };
 
     /* Data state */
     const [data, setData] = useState<ProfileData>(EMPTY);
@@ -331,6 +460,11 @@ export default function AdminProfilePage() {
             cinDocumentBackUrl: me.cin_document_back_url || null,
             passportDocumentUrl: me.passport_document_url || null,
             role: me.role || 'admin',
+            profileEditUnlocked: me.profile_edit_unlocked || false,
+            profileUnlockIdentity: me.profile_unlock_identity || false,
+            profileUnlockPassport: me.profile_unlock_passport || false,
+            profileUnlockCinDoc: me.profile_unlock_cin_doc || false,
+            profileUnlockContact: me.profile_unlock_contact || false,
         };
         setData(mapped);
         setDraft(mapped);
@@ -338,21 +472,87 @@ export default function AdminProfilePage() {
 
     useEffect(() => { loadProfile(); }, [loadProfile]);
 
+    const isEditable = useCallback((key: keyof ProfileData) => {
+        if (data.verificationStatus === "expired_verification") return false;
+        if (EDITABLE.has(key)) return true;
+        const IDENTITY_FIELDS: (keyof ProfileData)[] = ['fullName', 'dateOfBirth', 'gender', 'nationality'];
+        const PASSPORT_FIELDS: (keyof ProfileData)[] = ['passportNumber', 'passportExpiry', 'passportDocumentUrl'];
+        const CIN_DOC_FIELDS: (keyof ProfileData)[] = ['cinNumber', 'cinDocumentUrl', 'cinDocumentBackUrl'];
+        const CONTACT_FIELDS: (keyof ProfileData)[] = ['phoneNumber', 'residentialAddress', 'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelationship'];
+        if ((data.profileUnlockIdentity || data.profileEditUnlocked) && IDENTITY_FIELDS.includes(key)) return true;
+        if ((data.profileUnlockPassport || data.profileEditUnlocked) && PASSPORT_FIELDS.includes(key)) return true;
+        if ((data.profileUnlockCinDoc || data.profileEditUnlocked) && CIN_DOC_FIELDS.includes(key)) return true;
+        if ((data.profileUnlockContact || data.profileEditUnlocked) && CONTACT_FIELDS.includes(key)) return true;
+        return false;
+    }, [data.profileUnlockIdentity, data.profileUnlockPassport, data.profileUnlockCinDoc, data.profileUnlockContact, data.profileEditUnlocked, data.verificationStatus]);
+
     /* Edit handlers */
     const startEdit = () => { setDraft(data); setErrors({}); setEditing(true); };
     const cancelEdit = () => { setDraft(data); setErrors({}); setEditing(false); };
 
+    const passportNumberError = (s: string): string => {
+        const t = String(s || '').trim();
+        if (t.length < 6) return 'Passport number must be at least 6 characters';
+        if (!/^[A-Za-z]+[0-9][A-Za-z0-9]*$/.test(t))
+            return 'Use letter(s) followed by digits (e.g. AB123456)';
+        return '';
+    };
+
     const validate = (d: ProfileData) => {
         const e: Partial<Record<keyof ProfileData, string>> = {};
-        if (EDITABLE.has('phoneNumber') && !isValidTunisiaPhone(d.phoneNumber))
+        if (isEditable('phoneNumber') && !isValidTunisiaPhone(d.phoneNumber))
             e.phoneNumber = 'Please enter a valid Tunisian phone number (e.g. +216 9X XXX XXX)';
-        if (EDITABLE.has('residentialAddress') && d.residentialAddress.trim().length < 6)
+        if (isEditable('residentialAddress') && d.residentialAddress.trim().length < 6)
             e.residentialAddress = 'Address is too short';
-        if (EDITABLE.has('emergencyContactName') && d.emergencyContactName.trim().length < 2)
+        if (isEditable('emergencyContactName') && d.emergencyContactName.trim().length < 2)
             e.emergencyContactName = 'Contact name required';
-        if (EDITABLE.has('emergencyContactPhone') && !isValidTunisiaPhone(d.emergencyContactPhone))
+        if (isEditable('emergencyContactPhone') && !isValidTunisiaPhone(d.emergencyContactPhone))
             e.emergencyContactPhone = 'Please enter a valid Tunisian phone number (e.g. +216 9X XXX XXX)';
+
+        if (isEditable('fullName') && d.fullName.trim().length < 2)
+            e.fullName = 'Full name must be at least 2 characters';
+        if (isEditable('dateOfBirth')) {
+            if (!d.dateOfBirth) e.dateOfBirth = 'Date of birth is required';
+            else {
+                const age = (Date.now() - new Date(d.dateOfBirth).getTime()) / (1000 * 60 * 60 * 24 * 365);
+                if (age < 18) e.dateOfBirth = 'Must be at least 18 years old';
+            }
+        }
+        if (isEditable('nationality') && d.nationality.trim().length < 2)
+            e.nationality = 'Nationality is required';
+        if (isEditable('gender') && !d.gender)
+            e.gender = 'Gender is required';
+        if (isEditable('cinNumber') && !/^\d{8}$/.test(d.cinNumber.trim()))
+            e.cinNumber = 'CIN must be exactly 8 digits';
+        if (isEditable('passportNumber')) {
+            const pe = passportNumberError(d.passportNumber);
+            if (pe) e.passportNumber = pe;
+        }
+        if (isEditable('passportExpiry')) {
+            if (!d.passportExpiry) e.passportExpiry = 'Passport expiry is required';
+            else if (new Date(d.passportExpiry) <= new Date())
+                e.passportExpiry = 'Passport must not be expired';
+        }
         return e;
+    };
+
+    const FRONTEND_TO_BACKEND: Partial<Record<keyof ProfileData, string>> = {
+        phoneNumber: 'phone_number',
+        residentialAddress: 'residential_address',
+        emergencyContactName: 'emergency_contact_name',
+        emergencyContactPhone: 'emergency_contact_phone',
+        emergencyContactRelationship: 'emergency_contact_relationship',
+        profilePhotoUrl: 'profile_photo_url',
+        fullName: 'full_name',
+        dateOfBirth: 'date_of_birth',
+        gender: 'gender',
+        nationality: 'nationality',
+        cinNumber: 'cin_number',
+        cinDocumentUrl: 'cin_document_url',
+        cinDocumentBackUrl: 'cin_document_back_url',
+        passportNumber: 'passport_number',
+        passportExpiry: 'passport_expiry_date',
+        passportDocumentUrl: 'passport_document_url',
     };
 
     const save = async () => {
@@ -360,20 +560,38 @@ export default function AdminProfilePage() {
         setErrors(e);
         if (Object.keys(e).length > 0) { showToast('error', 'Please correct the highlighted fields.'); return; }
         setSaving(true);
-        const payload: Record<string, string> = {};
-        EDITABLE.forEach(k => {
-            const v = draft[k as keyof ProfileData] as string;
-            if (v !== data[k as keyof ProfileData]) {
-                const cleanVal = (k === 'phoneNumber' || k === 'emergencyContactPhone') ? v.replace(/\s/g, '') : v;
-                payload[
-                    k === 'phoneNumber' ? 'phone_number'
-                    : k === 'residentialAddress' ? 'residential_address'
-                    : k === 'emergencyContactName' ? 'emergency_contact_name'
-                    : k === 'emergencyContactPhone' ? 'emergency_contact_phone'
-                    : 'emergency_contact_relationship'
-                ] = cleanVal;
+        const payload: Record<string, string | null> = {};
+
+        // Always include editable contact/photo fields
+        const keysToSave = new Set<keyof ProfileData>(EDITABLE);
+
+        // Add per-section fields based on which sections are unlocked
+        if (data.profileUnlockIdentity || data.profileEditUnlocked) {
+            (['fullName', 'dateOfBirth', 'gender', 'nationality'] as (keyof ProfileData)[]).forEach(k => keysToSave.add(k));
+        }
+        if (data.profileUnlockPassport || data.profileEditUnlocked) {
+            (['passportNumber', 'passportExpiry', 'passportDocumentUrl'] as (keyof ProfileData)[]).forEach(k => keysToSave.add(k));
+        }
+        if (data.profileUnlockCinDoc || data.profileEditUnlocked) {
+            (['cinNumber', 'cinDocumentUrl', 'cinDocumentBackUrl'] as (keyof ProfileData)[]).forEach(k => keysToSave.add(k));
+        }
+        if (data.profileUnlockContact || data.profileEditUnlocked) {
+            (['phoneNumber', 'residentialAddress', 'emergencyContactName', 'emergencyContactPhone', 'emergencyContactRelationship'] as (keyof ProfileData)[]).forEach(k => keysToSave.add(k));
+        }
+
+        keysToSave.forEach(k => {
+            const v = draft[k] as string | null;
+            if (v !== data[k]) {
+                const backendKey = FRONTEND_TO_BACKEND[k];
+                if (backendKey) {
+                    const cleanVal = (k === 'phoneNumber' || k === 'emergencyContactPhone')
+                        ? (v ? v.replace(/\s/g, '') : '')
+                        : v;
+                    payload[backendKey] = cleanVal;
+                }
             }
         });
+
         if (Object.keys(payload).length === 0) { setEditing(false); setSaving(false); return; }
         const { error } = await apiPatchSettings(payload);
         setSaving(false);
@@ -381,6 +599,8 @@ export default function AdminProfilePage() {
         setData(draft);
         setEditing(false);
         showToast('success', 'Profile updated successfully.');
+        window.dispatchEvent(new CustomEvent('admin-header-refresh-me'));
+        await loadProfile();
     };
 
     const onChange = (k: keyof ProfileData, v: string) => {
@@ -441,22 +661,74 @@ export default function AdminProfilePage() {
                     <button onClick={loadProfile} className="admin-btn admin-btn--outline admin-btn--compact" style={{ minWidth: 40, padding: 0 }} title="Refresh">
                         <RefreshCw size={15} className={loading ? 'su-spin' : ''} />
                     </button>
-                    {!editing ? (
-                        <button className="admin-btn admin-btn--primary" onClick={startEdit} disabled={loading}>
-                            <Pencil size={14} /> <span>Edit Profile</span>
-                        </button>
-                    ) : (
-                        <>
-                            <button className="admin-btn admin-btn--outline" onClick={cancelEdit}>
-                                <X size={14} /> <span>Cancel</span>
+                    {data.verificationStatus !== "expired_verification" && (
+                        !editing ? (
+                            <button className="admin-btn admin-btn--primary" onClick={startEdit} disabled={loading}>
+                                <Pencil size={14} /> <span>Edit Profile</span>
                             </button>
-                            <button className="admin-btn admin-btn--primary" onClick={save} disabled={saving}>
-                                {saving ? <><Loader size={14} className="su-spin" /> Saving…</> : <><Save size={14} /> <span>Save Changes</span></>}
-                            </button>
-                        </>
+                        ) : (
+                            <>
+                                <button className="admin-btn admin-btn--outline" onClick={cancelEdit}>
+                                    <X size={14} /> <span>Cancel</span>
+                                </button>
+                                <button className="admin-btn admin-btn--primary" onClick={save} disabled={saving}>
+                                    {saving ? <><Loader size={14} className="su-spin" /> Saving…</> : <><Save size={14} /> <span>Save Changes</span></>}
+                                </button>
+                            </>
+                        )
                     )}
                 </div>
             </div>
+
+            {/* Per-Section Unlock Banners */}
+            {!loading && (data.profileUnlockIdentity || data.profileUnlockPassport || data.profileUnlockCinDoc || data.profileUnlockContact || data.profileEditUnlocked) && (
+                <div style={{
+                    marginBottom: '1rem', padding: '0.75rem 1rem', borderRadius: 10,
+                    display: 'flex', alignItems: 'start', gap: 10,
+                    background: 'rgba(245,158,11,0.10)',
+                    border: '1px solid rgba(245,158,11,0.35)',
+                    color: '#F59E0B',
+                    fontSize: '0.85rem',
+                }}>
+                    <ShieldCheck size={18} style={{ flexShrink: 0, marginTop: 2, color: '#F59E0B' }} />
+                    <div>
+                        <strong style={{ display: 'block', marginBottom: 4 }}>Temporary Edit Access Granted</strong>
+                        <div style={{ fontSize: '0.8rem', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {(data.profileUnlockIdentity || data.profileEditUnlocked) && (
+                                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(245,158,11,0.20)', border: '1px solid rgba(245,158,11,0.40)', fontWeight: 600 }}>Identity (Name, DOB, Gender, Nationality)</span>
+                            )}
+                            {(data.profileUnlockPassport || data.profileEditUnlocked) && (
+                                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(245,158,11,0.20)', border: '1px solid rgba(245,158,11,0.40)', fontWeight: 600 }}>Passport (Number, Expiry, Document)</span>
+                            )}
+                            {(data.profileUnlockCinDoc || data.profileEditUnlocked) && (
+                                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(245,158,11,0.20)', border: '1px solid rgba(245,158,11,0.40)', fontWeight: 600 }}>CIN (Number, Front &amp; Back Documents)</span>
+                            )}
+                            {(data.profileUnlockContact || data.profileEditUnlocked) && (
+                                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(245,158,11,0.20)', border: '1px solid rgba(245,158,11,0.40)', fontWeight: 600 }}>Contact &amp; Emergency Info</span>
+                            )}
+                        </div>
+                        <div style={{ marginTop: 4, fontSize: '0.75rem', opacity: 0.85 }}>These sections will automatically relock once you save.</div>
+                    </div>
+                </div>
+            )}
+
+            {/* Expired Verification Banner */}
+            {!loading && data.verificationStatus === "expired_verification" && (
+                <div style={{
+                    marginBottom: '1rem', padding: '0.75rem 1rem', borderRadius: 10,
+                    display: 'flex', alignItems: 'start', gap: 10,
+                    background: 'rgba(239,68,68,0.10)',
+                    border: '1px solid rgba(239,68,68,0.35)',
+                    color: '#EF4444',
+                    fontSize: '0.85rem',
+                }}>
+                    <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2, color: '#EF4444' }} />
+                    <div>
+                        <strong style={{ display: 'block', marginBottom: 2 }}>Verification Expired</strong>
+                        Your verification request has expired due to inactivity. Please contact the Super Admin.
+                    </div>
+                </div>
+            )}
 
             {/* Loading skeleton */}
             {loading && (
@@ -474,9 +746,9 @@ export default function AdminProfilePage() {
                         {/* Avatar card */}
                         <div className="admin-card" style={{ padding: '1.5rem', textAlign: 'center' }}>
                             <div style={{ position: 'relative', width: 100, height: 100, margin: '0 auto 1rem' }}>
-                                {data.profilePhotoUrl ? (
+                                {(editing ? draft.profilePhotoUrl : data.profilePhotoUrl) ? (
                                     <img
-                                        src={data.profilePhotoUrl}
+                                        src={editing ? draft.profilePhotoUrl! : data.profilePhotoUrl!}
                                         alt="Profile"
                                         style={{ width: 100, height: 100, borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--adm-card)', boxShadow: '0 8px 24px rgba(245,158,11,0.22)' }}
                                     />
@@ -492,14 +764,27 @@ export default function AdminProfilePage() {
                                         {getInitials(data.fullName)}
                                     </div>
                                 )}
-                                <button aria-label="Change photo" style={{
-                                    position: 'absolute', bottom: 0, right: 2, width: 30, height: 30,
-                                    borderRadius: '50%', border: '2px solid var(--adm-card)',
-                                    background: 'var(--adm-accent)', color: '#0A1628', cursor: 'pointer',
-                                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                }}>
-                                    <Camera size={13} />
-                                </button>
+                                {data.verificationStatus !== "expired_verification" && (
+                                    <button 
+                                        onClick={triggerFileSelect}
+                                        aria-label="Change photo" 
+                                        style={{
+                                            position: 'absolute', bottom: 0, right: 2, width: 30, height: 30,
+                                            borderRadius: '50%', border: '2px solid var(--adm-card)',
+                                            background: 'var(--adm-accent)', color: '#0A1628', cursor: 'pointer',
+                                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                        }}
+                                    >
+                                        <Camera size={13} />
+                                    </button>
+                                )}
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    onChange={handlePhotoChange}
+                                    accept="image/png, image/jpeg, image/jpg"
+                                    style={{ display: 'none' }}
+                                />
                             </div>
 
                             <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--adm-text)', marginBottom: 4 }}>
@@ -562,14 +847,68 @@ export default function AdminProfilePage() {
                         {/* Personal Information */}
                         <Section title="Personal Information" subtitle="Identity and demographics on file.">
                             <Grid cols={2}>
-                                <ReadField label="Full Name" value={data.fullName} icon={UserCircle} />
-                                <ReadField label="Date of Birth" value={fmtDate(data.dateOfBirth)} icon={Calendar} />
-                                <ReadField label="Gender" value={data.gender} icon={UserCircle} />
-                                <ReadField label="Nationality" value={data.nationality} icon={Globe} />
+                                {isEditable('fullName') ? (
+                                    <EditField
+                                        label="Full Name"
+                                        value={editing ? draft.fullName : data.fullName}
+                                        editable={true}
+                                        editing={editing}
+                                        error={errors.fullName}
+                                        onChange={v => onChange('fullName', v)}
+                                        icon={UserCircle}
+                                    />
+                                ) : (
+                                    <ReadField label="Full Name" value={data.fullName} icon={UserCircle} />
+                                )}
+                                
+                                {isEditable('dateOfBirth') ? (
+                                    <EditField
+                                        label="Date of Birth"
+                                        value={editing ? draft.dateOfBirth : data.dateOfBirth}
+                                        editable={true}
+                                        editing={editing}
+                                        error={errors.dateOfBirth}
+                                        onChange={v => onChange('dateOfBirth', v)}
+                                        icon={Calendar}
+                                        type="date"
+                                    />
+                                ) : (
+                                    <ReadField label="Date of Birth" value={fmtDate(data.dateOfBirth)} icon={Calendar} />
+                                )}
+
+                                {isEditable('gender') ? (
+                                    <EditField
+                                        label="Gender"
+                                        value={editing ? draft.gender : data.gender}
+                                        editable={true}
+                                        editing={editing}
+                                        error={errors.gender}
+                                        onChange={v => onChange('gender', v)}
+                                        icon={UserCircle}
+                                        options={['Male', 'Female', 'Other', 'na']}
+                                    />
+                                ) : (
+                                    <ReadField label="Gender" value={data.gender} icon={UserCircle} />
+                                )}
+
+                                {isEditable('nationality') ? (
+                                    <EditField
+                                        label="Nationality"
+                                        value={editing ? draft.nationality : data.nationality}
+                                        editable={true}
+                                        editing={editing}
+                                        error={errors.nationality}
+                                        onChange={v => onChange('nationality', v)}
+                                        icon={Globe}
+                                    />
+                                ) : (
+                                    <ReadField label="Nationality" value={data.nationality} icon={Globe} />
+                                )}
+
                                 <EditField
                                     label="Residential Address"
                                     value={editing ? draft.residentialAddress : data.residentialAddress}
-                                    editable={EDITABLE.has('residentialAddress')}
+                                    editable={isEditable('residentialAddress')}
                                     editing={editing}
                                     error={errors.residentialAddress}
                                     onChange={v => onChange('residentialAddress', v)}
@@ -582,13 +921,100 @@ export default function AdminProfilePage() {
                         {/* Legal Identification */}
                         <Section title="Legal Identification" subtitle="Sensitive document data for authority verification.">
                             <Grid cols={2}>
-                                <ReadField label="CIN (National ID Card)" value={data.cinNumber} icon={IdCard}
-                                    verified={data.verificationStatus === 'approved' || data.verificationStatus === 'verified'} />
-                                <ReadField label="Passport Number" value={data.passportNumber} icon={Plane}
-                                    status={data.verificationStatus === 'pending_review' ? 'processing' : data.verificationStatus === 'rejected' ? 'rejected' : undefined} />
-                                <ReadField label="Passport Expiry" value={fmtDate(data.passportExpiry)} icon={Calendar} />
+                                {isEditable('cinNumber') ? (
+                                    <EditField
+                                        label="CIN (National ID Card)"
+                                        value={editing ? draft.cinNumber : data.cinNumber}
+                                        editable={true}
+                                        editing={editing}
+                                        error={errors.cinNumber}
+                                        onChange={v => onChange('cinNumber', v)}
+                                        icon={IdCard}
+                                    />
+                                ) : (
+                                    <ReadField label="CIN (National ID Card)" value={data.cinNumber} icon={IdCard}
+                                        verified={data.verificationStatus === 'approved' || data.verificationStatus === 'verified'} />
+                                )}
+
+                                {isEditable('passportNumber') ? (
+                                    <EditField
+                                        label="Passport Number"
+                                        value={editing ? draft.passportNumber : data.passportNumber}
+                                        editable={true}
+                                        editing={editing}
+                                        error={errors.passportNumber}
+                                        onChange={v => onChange('passportNumber', v)}
+                                        icon={Plane}
+                                    />
+                                ) : (
+                                    <ReadField label="Passport Number" value={data.passportNumber} icon={Plane}
+                                        status={data.verificationStatus === 'pending_review' ? 'processing' : data.verificationStatus === 'rejected' ? 'rejected' : undefined} />
+                                )}
+
+                                {isEditable('passportExpiry') ? (
+                                    <EditField
+                                        label="Passport Expiry"
+                                        value={editing ? draft.passportExpiry : data.passportExpiry}
+                                        editable={true}
+                                        editing={editing}
+                                        error={errors.passportExpiry}
+                                        onChange={v => onChange('passportExpiry', v)}
+                                        icon={Calendar}
+                                        type="date"
+                                    />
+                                ) : (
+                                    <ReadField label="Passport Expiry" value={fmtDate(data.passportExpiry)} icon={Calendar} />
+                                )}
                             </Grid>
-                            {(data.cinDocumentUrl || data.cinDocumentBackUrl || data.passportDocumentUrl) && (
+                            {/* CIN Document Upload (shown when cin_doc section unlocked) */}
+                            {(data.profileUnlockCinDoc || data.profileEditUnlocked) && (
+                                <div style={{ marginTop: '1rem' }}>
+                                    <div style={{ marginBottom: 8, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.10em', color: 'var(--adm-accent)', textTransform: 'uppercase' }}>
+                                        CIN Document Upload (Unlocked)
+                                    </div>
+                                    <Grid cols={2}>
+                                        <div>
+                                            <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--adm-text-muted)', marginBottom: 6 }}>CIN Front</div>
+                                            <DocumentUploadField
+                                                label="CIN Front Document"
+                                                url={editing ? (draft.cinDocumentUrl || null) : data.cinDocumentUrl}
+                                                accent="#34D399"
+                                                editing={editing}
+                                                onChange={v => setDraft(d => ({ ...d, cinDocumentUrl: v }))}
+                                            />
+                                        </div>
+                                        <div>
+                                            <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--adm-text-muted)', marginBottom: 6 }}>CIN Back</div>
+                                            <DocumentUploadField
+                                                label="CIN Back Document"
+                                                url={editing ? (draft.cinDocumentBackUrl || null) : data.cinDocumentBackUrl}
+                                                accent="#10B981"
+                                                editing={editing}
+                                                onChange={v => setDraft(d => ({ ...d, cinDocumentBackUrl: v }))}
+                                            />
+                                        </div>
+                                    </Grid>
+                                </div>
+                            )}
+                            {/* Passport Document Upload (shown when passport section unlocked) */}
+                            {(data.profileUnlockPassport || data.profileEditUnlocked) && (
+                                <div style={{ marginTop: '1rem' }}>
+                                    <div style={{ marginBottom: 8, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.10em', color: 'var(--adm-accent)', textTransform: 'uppercase' }}>
+                                        Passport Document Upload (Unlocked)
+                                    </div>
+                                    <div style={{ maxWidth: 'calc(50% - 0.45rem)' }}>
+                                        <DocumentUploadField
+                                            label="Passport Document"
+                                            url={editing ? (draft.passportDocumentUrl || null) : data.passportDocumentUrl}
+                                            accent="#FBBF24"
+                                            editing={editing}
+                                            onChange={v => setDraft(d => ({ ...d, passportDocumentUrl: v }))}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                            {/* Read-only document previews when sections are locked */}
+                            {!(data.profileUnlockCinDoc || data.profileUnlockPassport || data.profileEditUnlocked) && (data.cinDocumentUrl || data.cinDocumentBackUrl || data.passportDocumentUrl) && (
                                 <div style={{ marginTop: '1rem' }}>
                                     <div style={{ marginBottom: 8, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.10em', color: 'var(--adm-text-muted)', textTransform: 'uppercase' }}>
                                         Uploaded Documents

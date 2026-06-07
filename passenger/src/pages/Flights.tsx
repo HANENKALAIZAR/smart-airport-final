@@ -57,6 +57,18 @@ import { useTranslation } from "react-i18next";
 
 const Flights = () => {
   const { t } = useTranslation();
+
+  const statusOptions = useMemo(() => [
+    { value: "all" as const, label: t("status_all", "All statuses") },
+    { value: "scheduled" as const, label: t("status_on_time", "On time") },
+    { value: "boarding" as const, label: t("status_boarding", "Boarding") },
+    { value: "taxiing" as const, label: t("status_taxiing", "Taxiing") },
+    { value: "in_air" as const, label: t("status_departed", "Departed") },
+    { value: "landed" as const, label: t("status_landed", "Landed") },
+    { value: "delayed" as const, label: t("status_delayed", "Delayed") },
+    { value: "cancelled" as const, label: t("status_cancelled", "Cancelled") },
+  ], [t]);
+
   const [allFlights, setAllFlights] = useState<Flight[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -271,7 +283,7 @@ const Flights = () => {
               className="max-w-3xl mx-auto text-center">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[11px] uppercase tracking-[0.22em] text-white/90 mb-6">
                 <Radio className="h-3 w-3 text-primary animate-pulse" />
-                Real-time flight updates
+                {t("flights_realtime_updates", "Real-time flight updates")}
               </div>
               <h1 className="font-display text-5xl sm:text-6xl md:text-7xl text-white leading-[0.98] drop-shadow-lg">
                 {t("explore_flights")}
@@ -287,7 +299,7 @@ const Flights = () => {
                     name="query"
                     value={query}
                     onChange={e => setQuery(e.target.value)}
-                    placeholder={t("explore_flights_placeholder", "Search flight number, city or airline…")}
+                    placeholder={t("flights_search_hero_placeholder", "Search flight number, city or airline…")}
                     className="ps-12 h-14 rounded-full bg-white/95 dark:bg-background/95 backdrop-blur-md border-white/30 text-base shadow-2xl focus-visible:ring-primary" />
                 </div>
               </div>
@@ -302,7 +314,7 @@ const Flights = () => {
 
           {/* Airport selector */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground me-2">Airport</span>
+            <span className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground me-2">{t("flights_airport_label", "Airport")}</span>
             {TUNISIAN_AIRPORTS.map(a => {
               const active = a.code === airportCode;
               return (
@@ -312,7 +324,7 @@ const Flights = () => {
                       : "border-border bg-card/60 text-foreground hover:border-primary/50 hover:bg-primary/5")}>
                   <Building2 className="h-3.5 w-3.5" />
                   <span className="font-mono font-semibold">{a.code}</span>
-                  <span className={cn("text-xs", active ? "text-primary-foreground/80" : "text-muted-foreground")}>{a.city}</span>
+                  <span className={cn("text-xs", active ? "text-primary-foreground/80" : "text-muted-foreground")}>{t(`airport_${a.code}_city`, a.city)}</span>
                 </button>
               );
             })}
@@ -323,8 +335,14 @@ const Flights = () => {
             <div>
               <div className="text-xs uppercase tracking-[0.22em] text-primary font-medium">{selectedAirport?.name ?? airportCode}</div>
               <h2 className="font-display text-3xl md:text-4xl mt-2">
-                {direction === "departures" ? "Departures" : "Arrivals"} ·{" "}
-                <span className="text-muted-foreground">{loading ? "…" : `${filtered.length} flight${filtered.length === 1 ? "" : "s"}`}</span>
+                {direction === "departures" ? t("flights_departures", "Departures") : t("flights_arrivals", "Arrivals")} ·{" "}
+                <span className="text-muted-foreground">
+                  {loading ? "…" : (
+                    filtered.length === 1
+                      ? t("flights_count_one", "1 flight")
+                      : t("flights_count_other", { count: filtered.length })
+                  )}
+                </span>
               </h2>
             </div>
           <div className="flex items-center gap-3">
@@ -342,7 +360,7 @@ const Flights = () => {
                     <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" />
                   </span>
                 )}
-                {refreshing ? "Refreshing…" : liveCount > 0 ? `${liveCount} active flights` : "Board active"}
+                {refreshing ? t("flights_refreshing", "Refreshing…") : liveCount > 0 ? t("flights_active_count", { count: liveCount }) : t("flights_board_active", "Board active")}
               </div>
               {lastUpdated && (
                 <span className="text-xs text-muted-foreground hidden sm:inline">
@@ -359,7 +377,7 @@ const Flights = () => {
                 title="Refresh flight board with the latest updates"
               >
                 <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
-                {refreshing ? "Refreshing…" : "Refresh Flights"}
+                {refreshing ? t("flights_refreshing", "Refreshing…") : t("flights_refresh_btn", "Refresh Flights")}
               </Button>
             </div>
           </div>
@@ -392,7 +410,7 @@ const Flights = () => {
                   <button type="button" className="inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-semibold tabular-nums tracking-tight text-foreground hover:bg-secondary transition-colors">
                     {format(date ?? new Date(), "d/M/yyyy")}
                     {date && isSameDay(date, new Date()) && (
-                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">Today</span>
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">{t("flights_today", "Today")}</span>
                     )}
                   </button>
                 </PopoverTrigger>
@@ -423,9 +441,9 @@ const Flights = () => {
               </div>
               <div className="md:col-span-4">
                 <Select name="status" value={status} onValueChange={v => setStatus(v as FlightStatus | "all")}>
-                  <SelectTrigger id="filter-flight-status"><SelectValue placeholder="Status" /></SelectTrigger>
+                  <SelectTrigger id="filter-flight-status"><SelectValue placeholder={t("common.status", "Status")} /></SelectTrigger>
                   <SelectContent>
-                    {STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                    {statusOptions.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -439,7 +457,7 @@ const Flights = () => {
                   title="Clear search and status filters"
                 >
                   <RotateCw className="h-3.5 w-3.5" />
-                  <span className="hidden md:inline text-xs">Reset</span>
+                  <span className="hidden md:inline text-xs">{t("flights_reset", "Reset")}</span>
                 </Button>
               </div>
             </div>
@@ -525,6 +543,7 @@ const Flights = () => {
 };
 
 function FlightRow({ flight: f }: { flight: Flight }) {
+  const { t } = useTranslation();
   const isDelayed = (f.delayMin !== null && f.delayMin > 0) || f.status === "delayed";
   const isHighlight = f.status === "boarding" || isDelayed;
 
@@ -539,11 +558,11 @@ function FlightRow({ flight: f }: { flight: Flight }) {
       </TableCell>
       <TableCell>
         <div className="font-medium">{f.from.code}</div>
-        <div className="text-xs text-muted-foreground">{f.from.city}</div>
+        <div className="text-xs text-muted-foreground">{t(`airport_${f.from.code.substring(0, 3)}_city`, f.from.city)}</div>
       </TableCell>
       <TableCell>
         <div className="font-medium">{f.to.code}</div>
-        <div className="text-xs text-muted-foreground">{f.to.city}</div>
+        <div className="text-xs text-muted-foreground">{t(`airport_${f.to.code.substring(0, 3)}_city`, f.to.city)}</div>
       </TableCell>
       <TableCell className="font-mono text-sm">{formatTime(f.scheduledDeparture)}</TableCell>
       <TableCell>
@@ -557,7 +576,7 @@ function FlightRow({ flight: f }: { flight: Flight }) {
       <TableCell><StatusBadge status={f.status} /></TableCell>
       <TableCell className="text-right">
         <Button asChild variant="ghost" size="sm" className="opacity-70 group-hover:opacity-100">
-          <Link to={`/flights/${f.id}`} state={{ flight: f }}>Details</Link>
+          <Link to={`/flights/${f.id}`} state={{ flight: f }}>{t("common.viewDetails", "Details")}</Link>
         </Button>
       </TableCell>
     </TableRow>

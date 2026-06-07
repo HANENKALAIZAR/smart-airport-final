@@ -157,13 +157,17 @@ def delete_message(
         elif current_user.role == "airport_admin" and msg.airport_code == current_user.airport_iata:
             is_recipient = True
             
-    if not is_sender and not is_recipient:
+    if not is_sender and not is_recipient and current_user.role != "super_admin":
         raise HTTPException(status_code=403, detail="You cannot delete this message")
 
-    if is_sender:
+    if current_user.role == "super_admin":
         msg.deleted_by_sender = True
-    if is_recipient:
         msg.deleted_by_recipient = True
+    else:
+        if is_sender:
+            msg.deleted_by_sender = True
+        if is_recipient:
+            msg.deleted_by_recipient = True
 
     # If both sides deleted (or for passenger messages if recipient deletes), we could permanently delete,
     # but for simplicity, we just softly delete from both views.

@@ -48,6 +48,9 @@ interface AdaptedFlight {
     aircraftType: string;
     trafficLevel: string;
     direction: 'departure' | 'arrival';
+    gate?: string | null;
+    terminal?: string | null;
+    gate_source?: string | null;
     _raw: RawFlight;
 }
 
@@ -81,6 +84,9 @@ function adaptFlight(f: RawFlight): AdaptedFlight {
         aircraftType: f.aircraft_type || '—',
         trafficLevel: 'Medium',
         direction: direction as 'departure' | 'arrival',
+        gate: f.gate || null,
+        terminal: f.terminal || null,
+        gate_source: f.gate_source || null,
         _raw: f,
     };
 }
@@ -267,7 +273,22 @@ export default function AdminFlights() {
                                         : `${f.origin} → ${f.destination}`}
                                 </td>
                                 <td>{f.scheduledTime}</td>
-                                <td className="admin-table__muted">{f._raw.dep_gate || f._raw.arr_gate || '—'}</td>
+                                <td>
+                                    {f.gate ? (
+                                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                                            <span style={{ fontWeight: 600, color: '#E2E8F0' }}>{f.gate}</span>
+                                            {f.gate_source === 'flightaware' && (
+                                                <span title="Sourced from FlightAware" style={{
+                                                    fontSize: '0.62rem', fontWeight: 700,
+                                                    padding: '1.5px 5px', borderRadius: 4,
+                                                    background: 'rgba(59,130,246,0.15)',
+                                                    color: '#60A5FA',
+                                                    border: '1px solid rgba(59,130,246,0.2)',
+                                                }}>FA</span>
+                                            )}
+                                        </div>
+                                    ) : '—'}
+                                </td>
                                 <td>
                                     <span className={`aviation-badge aviation-badge--${f.riskLevel.toLowerCase()}`}>
                                         {f.riskLevel.toUpperCase()}

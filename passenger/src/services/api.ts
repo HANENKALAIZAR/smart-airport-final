@@ -119,6 +119,11 @@ export interface Flight {
     summary: string;
     passengerTip: string;
   } | null;
+  altitudeFt?: number | null;
+  speedKts?: number | null;
+  headingDeg?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 export interface FlightPrediction {
@@ -420,6 +425,11 @@ interface AEFlight {
   arr_actual: string | null;
   delay_minutes: number | null;
   aircraft_type: string | null;
+  altitude_ft?: number | null;
+  speed_kmh?: number | null;
+  heading_deg?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 // ── Real lat/lon for distance calculation ────────────────────────────────────
@@ -462,6 +472,41 @@ function buildCanonicalFlightNumber(flightNumber: string, airlineIata: string, a
 
 // ── Aviation Edge → Flight adapter ───────────────────────────────────────────
 
+const GLOBAL_AIRPORTS: Record<string, { city: string; name: string; country: string }> = {
+  TUN: { city: "Tunis", name: "Tunis-Carthage Intl. Airport", country: "Tunisia" },
+  CDG: { city: "Paris", name: "Charles de Gaulle Airport", country: "France" },
+  ORY: { city: "Paris", name: "Paris-Orly Airport", country: "France" },
+  LHR: { city: "London", name: "Heathrow Airport", country: "United Kingdom" },
+  FRA: { city: "Frankfurt", name: "Frankfurt Airport", country: "Germany" },
+  FCO: { city: "Rome", name: "Leonardo da Vinci–Fiumicino Airport", country: "Italy" },
+  MXP: { city: "Milan", name: "Malpensa Airport", country: "Italy" },
+  MAD: { city: "Madrid", name: "Adolfo Suárez Madrid–Barajas Airport", country: "Spain" },
+  BCN: { city: "Barcelona", name: "Josep Tarradellas Barcelona–El Prat Airport", country: "Spain" },
+  IST: { city: "Istanbul", name: "Istanbul Airport", country: "Turkey" },
+  SAW: { city: "Istanbul", name: "Sabiha Gökçen Intl. Airport", country: "Turkey" },
+  DOH: { city: "Doha", name: "Hamad International Airport", country: "Qatar" },
+  DXB: { city: "Dubai", name: "Dubai International Airport", country: "United Arab Emirates" },
+  AMM: { city: "Amman", name: "Queen Alia International Airport", country: "Jordan" },
+  CAI: { city: "Cairo", name: "Cairo International Airport", country: "Egypt" },
+  JED: { city: "Jeddah", name: "King Abdulaziz International Airport", country: "Saudi Arabia" },
+  CMN: { city: "Casablanca", name: "Mohammed V International Airport", country: "Morocco" },
+  ALG: { city: "Algiers", name: "Houari Boumediene Airport", country: "Algeria" },
+  GVA: { city: "Geneva", name: "Geneva Airport", country: "Switzerland" },
+  BRU: { city: "Brussels", name: "Brussels Airport", country: "Belgium" },
+  VIE: { city: "Vienna", name: "Vienna International Airport", country: "Austria" },
+  MUC: { city: "Munich", name: "Munich Airport", country: "Germany" },
+  DUS: { city: "Düsseldorf", name: "Düsseldorf Airport", country: "Germany" },
+  LYS: { city: "Lyon", name: "Lyon–Saint-Exupéry Airport", country: "France" },
+  NCE: { city: "Nice", name: "Nice Côte d'Azur Airport", country: "France" },
+  MRS: { city: "Marseille", name: "Marseille Provence Airport", country: "France" },
+  MLA: { city: "Malta", name: "Malta International Airport", country: "Malta" },
+  DSS: { city: "Dakar", name: "Blaise Diagne International Airport", country: "Senegal" },
+  YUL: { city: "Montreal", name: "Montréal-Trudeau International Airport", country: "Canada" },
+  DJE: { city: "Djerba", name: "Djerba–Zarzis International Airport", country: "Tunisia" },
+  MIR: { city: "Monastir", name: "Monastir Habib Bourguiba Intl. Airport", country: "Tunisia" },
+  NBE: { city: "Enfidha", name: "Enfidha–Hammamet International Airport", country: "Tunisia" },
+};
+
 function adaptAEFlight(f: AEFlight): Flight {
   const depCoords = getCoords(f.dep_iata);
   const arrCoords = getCoords(f.arr_iata);
@@ -478,8 +523,17 @@ function adaptAEFlight(f: AEFlight): Flight {
   else if (arrTs < now) progress = 1;
 
   const distanceKm = haversineKm(f.dep_iata, f.arr_iata);
-  const depCity = f.dep_airport && f.dep_airport !== f.dep_iata ? f.dep_airport : f.dep_iata;
-  const arrCity = f.arr_airport && f.arr_airport !== f.arr_iata ? f.arr_airport : f.arr_iata;
+
+  const depMeta = GLOBAL_AIRPORTS[f.dep_iata.toUpperCase()];
+  const arrMeta = GLOBAL_AIRPORTS[f.arr_iata.toUpperCase()];
+
+  const depCity = depMeta?.city || (f.dep_airport && f.dep_airport !== f.dep_iata && f.dep_airport !== "—" ? f.dep_airport : f.dep_iata);
+  const depName = depMeta?.name || depCity;
+  const depCountry = depMeta?.country || "";
+
+  const arrCity = arrMeta?.city || (f.arr_airport && f.arr_airport !== f.arr_iata && f.arr_airport !== "—" ? f.arr_airport : f.arr_iata);
+  const arrName = arrMeta?.name || arrCity;
+  const arrCountry = arrMeta?.country || "";
 
   let status: FlightStatus =
     f.status === 'in_air'    ? 'in_air'    :
@@ -505,8 +559,8 @@ function adaptAEFlight(f: AEFlight): Flight {
     airlineCode: f.airline_iata ?? '??',
     airlineIcao: f.airline_icao ?? '',
     airlineReliability: 0, // Not available from Aviation Edge — not displayed
-    from: { code: f.dep_iata, city: depCity, name: depCity, country: '', x: depCoords.x, y: depCoords.y },
-    to:   { code: f.arr_iata, city: arrCity, name: arrCity, country: '', x: arrCoords.x, y: arrCoords.y },
+    from: { code: f.dep_iata, city: depCity, name: depName, country: depCountry, x: depCoords.x, y: depCoords.y },
+    to:   { code: f.arr_iata, city: arrCity, name: arrName, country: arrCountry, x: arrCoords.x, y: arrCoords.y },
     departureTime: depTime,
     arrivalTime: arrTime,
     scheduledDeparture: f.dep_scheduled,
@@ -525,6 +579,11 @@ function adaptAEFlight(f: AEFlight): Flight {
     prediction: null,
     passengerRights: null,
     delayCause: null,
+    altitudeFt: f.altitude_ft ?? null,
+    speedKts: f.speed_kmh ? Math.round(f.speed_kmh / 1.852) : null,
+    headingDeg: f.heading_deg ?? null,
+    latitude: f.latitude ?? null,
+    longitude: f.longitude ?? null,
   };
 }
 

@@ -113,7 +113,7 @@ export default function SuperAdminMessages() {
   const [reply, setReply] = useState("");
   const [sendingReply, setSendingReply] = useState(false);
   const [composing, setComposing] = useState(false);
-  const [composeForm, setComposeForm] = useState({ subject: "", body: "", category: "general", to_user_id: "" });
+  const [composeForm, setComposeForm] = useState({ subject: "", body: "", to_user_id: "" });
   const [sendingMessage, setSendingMessage] = useState(false);
 
   const inboxMarkedRef = useRef(false);
@@ -270,7 +270,7 @@ export default function SuperAdminMessages() {
     const payload = {
       subject: composeForm.subject,
       body: composeForm.body,
-      category: composeForm.category,
+      category: "general",
       to_user_id: parseInt(composeForm.to_user_id)
     };
     
@@ -280,7 +280,7 @@ export default function SuperAdminMessages() {
     if (err) setError(err);
     else {
       setComposing(false);
-      setComposeForm({ subject: "", body: "", category: "general", to_user_id: "" });
+      setComposeForm({ subject: "", body: "", to_user_id: "" });
       setFolder("sent");
       await loadMessages();
     }
@@ -695,30 +695,7 @@ export default function SuperAdminMessages() {
                 />
               </div>
 
-              <div style={{ marginBottom: "1.25rem" }}>
-                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--adm-text-muted)", marginBottom: "0.5rem" }}>PRIORITY / CATEGORY</label>
-                <div className="flex gap-2 flex-wrap">
-                  {[
-                    { value: "general", label: "💬 General" },
-                    { value: "technical", label: "🔧 Technical" },
-                    { value: "operational", label: "🚨 Operational" },
-                    { value: "request", label: "📋 Request" },
-                  ].map((c) => (
-                    <button
-                      key={c.value} type="button"
-                      onClick={() => setComposeForm(f => ({ ...f, category: c.value }))}
-                      className={cn(
-                        "px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer transition-all",
-                        composeForm.category === c.value
-                          ? "bg-amber-500/10 border-amber-500 text-amber-500"
-                          : "bg-transparent border-white/10 text-muted-foreground hover:text-white"
-                      )}
-                    >
-                      {c.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+
 
               <div style={{ marginBottom: "1.25rem" }}>
                 <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--adm-text-muted)", marginBottom: "0.5rem" }}>SUBJECT</label>

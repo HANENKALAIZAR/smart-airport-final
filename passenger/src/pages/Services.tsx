@@ -16,6 +16,7 @@ import {
 import { PublicNav } from "@/components/PublicNav";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useTranslation } from "react-i18next";
 import {
   tunisianAirports,
   tunisianServices,
@@ -36,6 +37,7 @@ const categories = [
 ] as const;
 
 const Services = () => {
+  const { t } = useTranslation();
   const [airport, setAirport] = useState<TunisianAirportCode>("TUN");
   const [active, setActive] = useState<string>("all");
   const [query, setQuery] = useState("");
@@ -55,12 +57,15 @@ const Services = () => {
       if (s.airport !== airport) return false;
       if (active !== "all" && s.category !== active) return false;
       if (q) {
-        const hay = `${s.name} ${s.description} ${s.terminal} ${s.category}`.toLowerCase();
+        const sKey = `service_${s.id.replace(/-/g, "_")}`;
+        const tName = t(`${sKey}_name`, s.name).toLowerCase();
+        const tDesc = t(`${sKey}_desc`, s.description).toLowerCase();
+        const hay = `${tName} ${tDesc} ${s.terminal} ${s.category}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
     });
-  }, [airport, active, query]);
+  }, [airport, active, query, t]);
 
   const activeAirport = tunisianAirports.find((a) => a.code === airport)!;
 
@@ -74,6 +79,9 @@ const Services = () => {
     });
     return map;
   }, [airport]);
+
+  const activeAirportName = t(`airport_${activeAirport.code}_name`, activeAirport.name);
+  const activeAirportRegion = t(`airport_${activeAirport.code}_region`, activeAirport.region);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -101,15 +109,14 @@ const Services = () => {
             >
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[11px] uppercase tracking-[0.22em] text-white/90 mb-6">
                 <Building2 className="h-3 w-3 text-primary" />
-                Tunisian airports · Services & amenities
+                {t("services_hero_eyebrow", "Tunisian airports · Services & amenities")}
               </div>
               <h1 className="font-display text-5xl sm:text-6xl md:text-7xl text-white leading-[0.98] drop-shadow-lg">
-                Everything you need,{" "}
-                <span className="italic text-primary">terminal side</span>
+                {t("services_hero_title", "Everything you need,")}{" "}
+                <span className="italic text-primary">{t("services_hero_title_accent", "terminal side")}</span>
               </h1>
               <p className="mt-6 max-w-xl mx-auto text-base md:text-lg text-white/85 leading-relaxed">
-                Lounges, dining, shopping, assistance and wellness across Tunisia's four
-                international airports — Tunis, Monastir, Enfidha and Djerba.
+                {t("services_hero_subtitle", "Lounges, dining, shopping, assistance and wellness across Tunisia's four international airports — Tunis, Monastir, Enfidha and Djerba.")}
               </p>
 
               <div className="mt-10 max-w-xl mx-auto">
@@ -118,7 +125,7 @@ const Services = () => {
                   <Input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search a lounge, café, boutique or service…"
+                    placeholder={t("services_search_placeholder", "Search a lounge, café, boutique or service…")}
                     className="ps-12 h-14 rounded-full bg-white/95 dark:bg-background/95 backdrop-blur-md border-white/30 text-base shadow-2xl focus-visible:ring-primary"
                   />
                 </div>
@@ -139,11 +146,13 @@ const Services = () => {
           <div className="flex flex-wrap items-center gap-3">
             <div className="text-xs uppercase tracking-[0.22em] text-muted-foreground hidden md:flex items-center gap-2 me-2">
               <Plane className="h-3.5 w-3.5 text-primary rtl-flip rotate-[-35deg]" />
-              Airport
+              {t("services_airport", "Airport")}
             </div>
             <div className="flex gap-2 overflow-x-auto scrollbar-none -mx-1 px-1 flex-1">
               {tunisianAirports.map((a) => {
                 const isActive = a.code === airport;
+                const translatedCity = t(`airport_${a.code}_city`, a.city);
+                const translatedRegion = t(`airport_${a.code}_region`, a.region);
                 return (
                   <button
                     key={a.code}
@@ -166,14 +175,14 @@ const Services = () => {
                       {a.code}
                     </span>
                     <span className="flex flex-col items-start leading-tight">
-                      <span className="font-medium">{a.city}</span>
+                      <span className="font-medium">{translatedCity}</span>
                       <span
                         className={cn(
                           "text-[10px] uppercase tracking-wider",
                           isActive ? "text-background/70" : "text-muted-foreground"
                         )}
                       >
-                        {a.region}
+                        {translatedRegion}
                       </span>
                     </span>
                   </button>
@@ -198,14 +207,16 @@ const Services = () => {
             >
               <div>
                 <div className="text-xs uppercase tracking-[0.22em] text-primary font-medium">
-                  {activeAirport.iata} · {activeAirport.region}
+                  {activeAirport.iata} · {activeAirportRegion}
                 </div>
                 <h2 className="font-display text-3xl md:text-4xl mt-2">
-                  {activeAirport.name}
+                  {activeAirportName}
                 </h2>
                 <p className="text-muted-foreground mt-1.5">
-                  {filtered.length} service{filtered.length === 1 ? "" : "s"} available
-                  {active !== "all" && ` in ${active}`}
+                  {filtered.length === 1
+                    ? t("services_count_one", "1 service available")
+                    : t("services_count_other", { count: filtered.length })}
+                  {active !== "all" && ` ${t("services_in")} ${t(`services.${active}`)}`}
                 </p>
               </div>
               <div className="inline-flex items-center gap-2 rounded-full border border-success/30 bg-success/10 px-3 py-1.5 text-xs font-medium text-success">
@@ -213,7 +224,7 @@ const Services = () => {
                   <span className="absolute inline-flex h-full w-full rounded-full bg-success opacity-60 animate-ping" />
                   <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" />
                 </span>
-                {filtered.filter((s) => s.open).length} open now
+                {t("services_open_now", { count: filtered.filter((s) => s.open).length })}
               </div>
             </motion.div>
           </AnimatePresence>
@@ -235,7 +246,7 @@ const Services = () => {
                   )}
                 >
                   <c.icon className="h-3.5 w-3.5" />
-                  {c.label}
+                  {t(`services.${c.key}`, c.label)}
                   <span
                     className={cn(
                       "inline-flex items-center justify-center h-5 min-w-[20px] px-1.5 rounded-full text-[10px] font-semibold tabular",
@@ -271,9 +282,9 @@ const Services = () => {
               className="text-center py-16 border border-dashed border-border rounded-2xl"
             >
               <Sparkles className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
-              <p className="text-foreground font-medium">No services match your search</p>
+              <p className="text-foreground font-medium">{t("services_no_results", "No services match your search")}</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Try a different category or clear the search.
+                {t("services_try_different", "Try a different category or clear the search.")}
               </p>
               <Button
                 variant="outline"
@@ -284,7 +295,7 @@ const Services = () => {
                 }}
                 className="mt-4 rounded-full"
               >
-                Reset filters
+                {t("services_reset_filters", "Reset filters")}
               </Button>
             </motion.div>
           )}
@@ -296,7 +307,7 @@ const Services = () => {
         <div className="max-w-[1300px] mx-auto px-6 md:px-8 flex flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-3">
             <img src={logoUrl} alt="Logo" className="h-9 w-auto object-contain" />
-            <span>Smart Airport platform for Tunisia</span>
+            <span>{t("services_platform_tunisia", "Smart Airport platform for Tunisia")}</span>
           </div>
           <div>© {new Date().getFullYear()} — TUN · MIR · NBE · DJE</div>
         </div>
@@ -306,7 +317,12 @@ const Services = () => {
 };
 
 function ServiceCard({ service, index }: { service: AirportService; index: number }) {
+  const { t } = useTranslation();
   const Icon = categories.find((c) => c.key === service.category)?.icon ?? Sparkles;
+  const serviceKey = `service_${service.id.replace(/-/g, "_")}`;
+  const translatedName = t(`${serviceKey}_name`, service.name);
+  const translatedDesc = t(`${serviceKey}_desc`, service.description);
+
   return (
     <motion.div
       layout
@@ -328,17 +344,17 @@ function ServiceCard({ service, index }: { service: AirportService; index: numbe
               : "bg-muted text-muted-foreground border-border"
           )}
         >
-          {service.open ? "Open" : "Closed"}
+          {service.open ? t("services_open", "Open") : t("services_closed", "Closed")}
         </span>
       </div>
-      <h4 className="mt-4 font-display text-xl leading-tight">{service.name}</h4>
-      <p className="mt-1.5 text-sm text-muted-foreground line-clamp-2">{service.description}</p>
+      <h4 className="mt-4 font-display text-xl leading-tight">{translatedName}</h4>
+      <p className="mt-1.5 text-sm text-muted-foreground line-clamp-2">{translatedDesc}</p>
       <div className="mt-5 pt-4 border-t border-border/60 flex items-center justify-between text-xs text-muted-foreground">
         <span className="inline-flex items-center gap-1.5">
           <MapPin className="h-3 w-3" /> {service.terminal}
         </span>
         <span className="inline-flex items-center gap-1.5 tabular">
-          <Clock className="h-3 w-3" /> {service.walkMin} min walk
+          <Clock className="h-3 w-3" /> {t("services.walkMin", { n: service.walkMin })}
         </span>
         <span className="inline-flex items-center gap-1 text-foreground tabular">
           <Star className="h-3 w-3 fill-primary text-primary" /> {service.rating}

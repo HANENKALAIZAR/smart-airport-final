@@ -52,25 +52,25 @@ export default function AdminSidebar({ onTabChange, onLogout, isRejected, collap
     const isSuperAdmin = activeRole === 'super_admin' || activeRole === 'superadmin';
 
     let menuItems = [
-        { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-        { to: '/dashboard/analytics', icon: TrendingUp, label: 'Analytics' },
-        { to: '/dashboard/predict', icon: Target, label: 'Predict Delay' },
+        { to: '/dashboard', icon: LayoutDashboard, labelKey: 'dashboard', id: 'dashboard' },
+        { to: '/dashboard/analytics', icon: TrendingUp, labelKey: 'analytics', id: 'analytics' },
+        { to: '/dashboard/predict', icon: Target, labelKey: 'predictDelay', id: 'predict' },
         ...(isSuperAdmin ? [
-            { to: '/dashboard/ai', icon: BrainCircuit, label: 'AI Explanations' },
+            { to: '/dashboard/ai', icon: BrainCircuit, labelKey: 'aiExplanations', id: 'ai' },
         ] : []),
-        { to: '/dashboard/messages', icon: MessageSquare, label: 'Messages' },
+        { to: '/dashboard/messages', icon: MessageSquare, labelKey: 'messages', id: 'messages' },
         ...(isSuperAdmin ? [] : [
-            { to: '/dashboard/profile', icon: UserCircle, label: 'Profile' },
+            { to: '/dashboard/profile', icon: UserCircle, labelKey: 'profile', id: 'profile' },
         ]),
+        { to: '/dashboard/global', icon: Globe, labelKey: 'globalOps', id: 'global' },
         ...(isSuperAdmin ? [
-            { to: '/dashboard/settings', icon: Settings, label: 'Settings' },
-            { to: '/dashboard/global', icon: Globe, label: 'Global Ops' },
-            { to: '/dashboard/users', icon: Users, label: 'Admin Users' },
+            { to: '/dashboard/settings', icon: Settings, labelKey: 'settings', id: 'settings' },
+            { to: '/dashboard/users', icon: Users, labelKey: 'adminUsers', id: 'users' },
         ] : []),
     ];
 
     if (isRejected) {
-        menuItems = [{ to: '/dashboard/settings', icon: Settings, label: 'Settings' }];
+        menuItems = [{ to: '/dashboard/settings', icon: Settings, labelKey: 'settings', id: 'settings' }];
     }
 
     const userInitial = isSuperAdmin ? 'SA' : 'A';
@@ -109,23 +109,24 @@ export default function AdminSidebar({ onTabChange, onLogout, isRejected, collap
             </div>
 
             <nav className="admin-sidebar__nav">
-                {menuItems.map(({ to, icon: Icon, label }) => {
+                {menuItems.map(({ to, icon: Icon, labelKey, id }) => {
                     const isMsgTab = to === '/dashboard/messages';
+                    const displayLabel = t(labelKey);
                     return (
                         <NavLink
                             key={to}
                             to={to}
-                            title={collapsed ? label : undefined}
+                            title={collapsed ? displayLabel : undefined}
                             className={({ isActive }) =>
                                 `admin-sidebar__item${isActive ? ' active' : ''}${collapsed ? ' admin-sidebar__item--icon' : ''}`
                             }
-                            onClick={() => onTabChange(label.toLowerCase())}
+                            onClick={() => onTabChange(id)}
                             style={isMsgTab && (msgUnread > 0 || collapsed) ? { position: 'relative' } : undefined}
                         >
                             <Icon size={20} style={{ flexShrink: 0 }} />
                             {!collapsed && (
                                 <span style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayLabel}</span>
                                     {isMsgTab && msgUnread > 0 && (
                                         <span
                                             style={{

@@ -8,7 +8,7 @@ sys.path.append(str(Path("c:/Users/gzhan/Downloads/smart-airport-postgres-featur
 from app.database import SessionLocal
 from app.routers.admin_analytics import get_full_analytics
 
-def test_scenario(db, days, iata):
+def run_scenario(db, days, iata):
     print(f"\n--- Testing Scenario: {iata} for {days} days ---")
     try:
         res = get_full_analytics(days=days, airport_iata=iata, db=db, _user=None)
@@ -46,11 +46,11 @@ def test_scenario(db, days, iata):
 def main():
     db = SessionLocal()
     try:
-        test_scenario(db, 7, "TUN")
-        test_scenario(db, 30, "TUN")
-        test_scenario(db, 7, "DJE")
-        test_scenario(db, 30, "MIR")
-        test_scenario(db, 30, "NBE")
+        run_scenario(db, 7, "TUN")
+        run_scenario(db, 30, "TUN")
+        run_scenario(db, 7, "DJE")
+        run_scenario(db, 30, "MIR")
+        run_scenario(db, 30, "NBE")
     finally:
         db.close()
 

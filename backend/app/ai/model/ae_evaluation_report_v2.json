@@ -1,21 +1,22 @@
 {
-  "version": "ae-v2-20260515-1314",
-  "trained_at": "2026-05-15T13:14:29.981715+00:00",
-  "notes": "CLI run \u2014 v2",
+  "version": "ae-v2-20260602-2056",
+  "trained_at": "2026-06-02T20:56:12.561744+00:00",
+  "notes": "auto-retrain: ['drift: sustained critical drift']",
   "training_mode": "multi_model_v2",
   "metrics": {
-    "mae": 18.33,
-    "rmse": 28.19,
-    "r2": 0.0399
+    "mae": 16.34,
+    "rmse": 25.77,
+    "r2": 0.0306
   },
   "dataset": {
-    "total_rows": 586,
-    "train_rows": 468,
-    "test_rows": 118,
-    "cutoff_date": "2026-05-14",
+    "total_rows": 10875,
+    "train_rows": 8700,
+    "test_rows": 2175,
+    "cutoff_date": "2026-05-24",
     "feature_columns": [
       "dep_hour",
       "is_weekend",
+      "is_peak_hour",
       "distance_km",
       "duration_min",
       "airline_enc",
@@ -32,353 +33,331 @@
     ]
   },
   "winner": {
-    "name": "catboost",
-    "mae": 18.33,
-    "rmse": 28.19,
-    "r2": 0.0399,
+    "name": "random_forest",
+    "mae": 16.34,
+    "rmse": 25.77,
+    "r2": 0.0306,
     "beats_baseline": true,
-    "improvement_pct": 5.3,
-    "cv_mae_mean": 13.44,
-    "cv_mae_std": 3.35
+    "improvement_pct": 6.9,
+    "cv_mae_mean": 15.88,
+    "cv_mae_std": 0.39
   },
   "all_models": [
     {
       "name": "xgboost",
-      "mae": 20.25,
-      "rmse": 31.02,
-      "r2": -0.1625,
-      "beats_baseline": false,
-      "improvement_pct": -4.7,
-      "cv_mae_mean": 13.96,
-      "cv_mae_std": 3.31,
-      "cv_folds": 5
-    },
-    {
-      "name": "lightgbm",
-      "mae": 21.32,
-      "rmse": 31.31,
-      "r2": -0.1847,
-      "beats_baseline": false,
-      "improvement_pct": -10.2,
-      "cv_mae_mean": 15.36,
-      "cv_mae_std": 4.12,
-      "cv_folds": 5
-    },
-    {
-      "name": "catboost",
-      "mae": 18.33,
-      "rmse": 28.19,
-      "r2": 0.0399,
+      "mae": 16.49,
+      "rmse": 26.05,
+      "r2": 0.0099,
       "beats_baseline": true,
-      "improvement_pct": 5.3,
-      "cv_mae_mean": 13.44,
-      "cv_mae_std": 3.35,
+      "improvement_pct": 6.1,
+      "cv_mae_mean": 16.49,
+      "cv_mae_std": 0.73,
       "cv_folds": 5
     },
     {
       "name": "random_forest",
-      "mae": 20.71,
-      "rmse": 30.41,
-      "r2": -0.1172,
-      "beats_baseline": false,
-      "improvement_pct": -7.0,
-      "cv_mae_mean": 13.27,
-      "cv_mae_std": 2.73,
+      "mae": 16.34,
+      "rmse": 25.77,
+      "r2": 0.0306,
+      "beats_baseline": true,
+      "improvement_pct": 6.9,
+      "cv_mae_mean": 15.88,
+      "cv_mae_std": 0.39,
       "cv_folds": 5
     }
   ],
   "baseline": {
-    "route_mae": 22.4,
-    "airline_mae": 19.35,
-    "global_mean_delay": 25.24
+    "route_mae": 17.55,
+    "airline_mae": 18.42,
+    "global_mean_delay": 21.88
   },
   "calibration": {
-    "pct_within_5min": 28.8,
-    "pct_within_15min": 52.5,
-    "pct_within_30min": 85.6
+    "pct_within_5min": 26.7,
+    "pct_within_15min": 62.8,
+    "pct_within_30min": 87.2
   },
   "airline_errors": [
     {
-      "group": "NO",
-      "n": 1,
-      "mae": 55.46,
-      "mean_actual": 97.0,
-      "mean_pred": 41.54
-    },
-    {
-      "group": "E4",
-      "n": 1,
-      "mae": 38.07,
-      "mean_actual": 1.0,
-      "mean_pred": 39.07
-    },
-    {
-      "group": "BJ",
-      "n": 18,
-      "mae": 33.31,
-      "mean_actual": 36.03,
-      "mean_pred": 27.06
-    },
-    {
-      "group": "QR",
-      "n": 1,
-      "mae": 32.17,
-      "mean_actual": 1.0,
-      "mean_pred": 33.17
-    },
-    {
-      "group": "WY",
-      "n": 1,
-      "mae": 31.72,
-      "mean_actual": 1.0,
-      "mean_pred": 32.72
-    },
-    {
-      "group": "WB",
-      "n": 1,
-      "mae": 31.12,
-      "mean_actual": 1.0,
-      "mean_pred": 32.12
-    },
-    {
-      "group": "AT",
-      "n": 1,
-      "mae": 28.76,
-      "mean_actual": 13.0,
-      "mean_pred": 41.76
-    },
-    {
-      "group": "X3",
-      "n": 2,
-      "mae": 28.71,
-      "mean_actual": 15.0,
-      "mean_pred": 43.71
-    },
-    {
-      "group": "GW",
-      "n": 2,
-      "mae": 27.97,
-      "mean_actual": 45.0,
-      "mean_pred": 32.91
-    },
-    {
-      "group": "TU",
-      "n": 19,
-      "mae": 26.44,
-      "mean_actual": 21.63,
-      "mean_pred": 36.31
-    },
-    {
-      "group": "O8",
-      "n": 1,
-      "mae": 24.31,
-      "mean_actual": 25.0,
-      "mean_pred": 0.69
-    },
-    {
-      "group": "RJ",
-      "n": 1,
-      "mae": 20.15,
-      "mean_actual": 0.0,
-      "mean_pred": 20.15
-    },
-    {
-      "group": "EK",
-      "n": 1,
-      "mae": 19.67,
-      "mean_actual": 48.0,
-      "mean_pred": 28.33
+      "group": "SN",
+      "n": 8,
+      "mae": 44.11,
+      "mean_actual": 55.38,
+      "mean_pred": 16.86
     },
     {
       "group": "PU",
-      "n": 1,
-      "mae": 18.99,
-      "mean_actual": 21.0,
-      "mean_pred": 39.99
-    },
-    {
-      "group": "AF",
-      "n": 2,
-      "mae": 17.48,
-      "mean_actual": 12.0,
-      "mean_pred": 29.48
-    },
-    {
-      "group": "UG",
-      "n": 7,
-      "mae": 15.54,
-      "mean_actual": 10.43,
-      "mean_pred": 13.36
-    },
-    {
-      "group": "YL",
-      "n": 1,
-      "mae": 15.0,
-      "mean_actual": 5.0,
-      "mean_pred": 20.0
-    },
-    {
-      "group": "LG",
-      "n": 1,
-      "mae": 14.9,
-      "mean_actual": 8.0,
-      "mean_pred": 22.9
-    },
-    {
-      "group": "UZ",
       "n": 4,
-      "mae": 14.82,
-      "mean_actual": 13.75,
-      "mean_pred": 3.81
+      "mae": 42.6,
+      "mean_actual": 73.75,
+      "mean_pred": 66.02
     },
     {
-      "group": "",
+      "group": "Q4",
       "n": 6,
-      "mae": 14.78,
-      "mean_actual": 12.83,
-      "mean_pred": 19.11
+      "mae": 39.86,
+      "mean_actual": 29.54,
+      "mean_pred": 22.57
+    },
+    {
+      "group": "NB",
+      "n": 18,
+      "mae": 34.27,
+      "mean_actual": 21.08,
+      "mean_pred": 21.14
+    },
+    {
+      "group": "FB",
+      "n": 8,
+      "mae": 29.59,
+      "mean_actual": 36.0,
+      "mean_pred": 21.92
+    },
+    {
+      "group": "X9",
+      "n": 12,
+      "mae": 28.01,
+      "mean_actual": 33.58,
+      "mean_pred": 47.72
+    },
+    {
+      "group": "AH",
+      "n": 21,
+      "mae": 26.72,
+      "mean_actual": 19.81,
+      "mean_pred": 14.71
+    },
+    {
+      "group": "TU",
+      "n": 421,
+      "mae": 25.11,
+      "mean_actual": 24.68,
+      "mean_pred": 37.77
+    },
+    {
+      "group": "LB",
+      "n": 1,
+      "mae": 25.04,
+      "mean_actual": 0.0,
+      "mean_pred": 25.04
+    },
+    {
+      "group": "1I",
+      "n": 2,
+      "mae": 24.21,
+      "mean_actual": 19.0,
+      "mean_pred": 20.69
+    },
+    {
+      "group": "BN",
+      "n": 1,
+      "mae": 23.28,
+      "mean_actual": 0.0,
+      "mean_pred": 23.28
+    },
+    {
+      "group": "WY",
+      "n": 18,
+      "mae": 23.27,
+      "mean_actual": 30.11,
+      "mean_pred": 18.94
+    },
+    {
+      "group": "EW",
+      "n": 13,
+      "mae": 23.21,
+      "mean_actual": 17.54,
+      "mean_pred": 34.93
+    },
+    {
+      "group": "R5",
+      "n": 22,
+      "mae": 22.42,
+      "mean_actual": 11.27,
+      "mean_pred": 28.02
+    },
+    {
+      "group": "IA",
+      "n": 2,
+      "mae": 21.67,
+      "mean_actual": 22.0,
+      "mean_pred": 0.33
+    },
+    {
+      "group": "BM",
+      "n": 13,
+      "mae": 21.19,
+      "mean_actual": 25.46,
+      "mean_pred": 13.43
+    },
+    {
+      "group": "QR",
+      "n": 21,
+      "mae": 20.71,
+      "mean_actual": 27.1,
+      "mean_pred": 17.11
+    },
+    {
+      "group": "WB",
+      "n": 21,
+      "mae": 20.71,
+      "mean_actual": 27.1,
+      "mean_pred": 17.16
+    },
+    {
+      "group": "UX",
+      "n": 2,
+      "mae": 19.42,
+      "mean_actual": 17.5,
+      "mean_pred": 36.92
+    },
+    {
+      "group": "AT",
+      "n": 27,
+      "mae": 18.91,
+      "mean_actual": 19.48,
+      "mean_pred": 26.93
     }
   ],
   "route_errors": [
     {
-      "group": "ALG->TUN",
+      "group": "NIM->TUN",
       "n": 1,
-      "mae": 141.65,
-      "mean_actual": 173.3,
-      "mean_pred": 31.65
+      "mae": 111.78,
+      "mean_actual": 0.0,
+      "mean_pred": 111.78
     },
     {
-      "group": "MIR->FRA",
-      "n": 1,
-      "mae": 71.74,
-      "mean_actual": 95.0,
-      "mean_pred": 23.26
+      "group": "CKY->TUN",
+      "n": 2,
+      "mae": 106.31,
+      "mean_actual": 36.0,
+      "mean_pred": 142.31
     },
     {
-      "group": "LYS->TUN",
-      "n": 1,
-      "mae": 55.46,
-      "mean_actual": 97.0,
-      "mean_pred": 41.54
+      "group": "MIR->BRQ",
+      "n": 2,
+      "mae": 91.53,
+      "mean_actual": 81.13,
+      "mean_pred": 86.45
     },
     {
-      "group": "MRS->TUN",
+      "group": "TUN->TOE",
+      "n": 3,
+      "mae": 73.69,
+      "mean_actual": 0.0,
+      "mean_pred": 73.69
+    },
+    {
+      "group": "DSS->TUN",
+      "n": 1,
+      "mae": 71.77,
+      "mean_actual": 73.0,
+      "mean_pred": 144.77
+    },
+    {
+      "group": "ABJ->TUN",
       "n": 4,
-      "mae": 44.65,
-      "mean_actual": 43.82,
-      "mean_pred": 20.21
+      "mae": 68.41,
+      "mean_actual": 58.5,
+      "mean_pred": 112.67
     },
     {
-      "group": "MIR->WAW",
+      "group": "DJE->TIA",
       "n": 1,
-      "mae": 38.07,
-      "mean_actual": 1.0,
-      "mean_pred": 39.07
+      "mae": 54.15,
+      "mean_actual": 75.0,
+      "mean_pred": 20.85
     },
     {
-      "group": "DJE->FRA",
-      "n": 2,
-      "mae": 35.48,
-      "mean_actual": 10.0,
-      "mean_pred": 45.48
+      "group": "MIR->LIL",
+      "n": 1,
+      "mae": 51.49,
+      "mean_actual": 12.0,
+      "mean_pred": 63.49
     },
     {
-      "group": "GVA->TUN",
-      "n": 2,
-      "mae": 34.74,
-      "mean_actual": 41.0,
-      "mean_pred": 75.74
-    },
-    {
-      "group": "DOH->TUN",
+      "group": "VIE->TUN",
       "n": 3,
-      "mae": 31.67,
-      "mean_actual": 1.0,
-      "mean_pred": 32.67
+      "mae": 47.99,
+      "mean_actual": 2.67,
+      "mean_pred": 50.66
     },
     {
-      "group": "MIR->NCE",
-      "n": 1,
-      "mae": 30.25,
-      "mean_actual": 15.0,
-      "mean_pred": 45.25
+      "group": "MAD->TUN",
+      "n": 6,
+      "mae": 47.43,
+      "mean_actual": 54.88,
+      "mean_pred": 64.38
     },
     {
-      "group": "MIR->GDN",
-      "n": 1,
-      "mae": 29.7,
-      "mean_actual": 0.0,
-      "mean_pred": 29.7
-    },
-    {
-      "group": "MIR->DJE",
-      "n": 2,
-      "mae": 29.5,
-      "mean_actual": 0.0,
-      "mean_pred": 29.5
-    },
-    {
-      "group": "IST->TUN",
+      "group": "LED->MIR",
       "n": 3,
-      "mae": 29.35,
-      "mean_actual": 52.67,
-      "mean_pred": 23.32
+      "mae": 44.08,
+      "mean_actual": 64.67,
+      "mean_pred": 20.59
     },
     {
-      "group": "CMN->TUN",
+      "group": "FRA->MIR",
+      "n": 8,
+      "mae": 41.02,
+      "mean_actual": 14.88,
+      "mean_pred": 55.89
+    },
+    {
+      "group": "TUN->MAD",
+      "n": 5,
+      "mae": 39.3,
+      "mean_actual": 47.05,
+      "mean_pred": 18.48
+    },
+    {
+      "group": "BLQ->TUN",
+      "n": 6,
+      "mae": 39.03,
+      "mean_actual": 14.83,
+      "mean_pred": 53.86
+    },
+    {
+      "group": "DUS->TUN",
+      "n": 11,
+      "mae": 37.39,
+      "mean_actual": 19.91,
+      "mean_pred": 57.3
+    },
+    {
+      "group": "BCN->TUN",
+      "n": 4,
+      "mae": 36.87,
+      "mean_actual": 30.25,
+      "mean_pred": 50.79
+    },
+    {
+      "group": "TUN->DSS",
       "n": 2,
-      "mae": 28.7,
-      "mean_actual": 36.5,
-      "mean_pred": 36.56
+      "mae": 36.42,
+      "mean_actual": 70.5,
+      "mean_pred": 106.92
     },
     {
-      "group": "DJE->BOD",
-      "n": 1,
-      "mae": 28.55,
+      "group": "TUN->YUL",
+      "n": 2,
+      "mae": 34.83,
       "mean_actual": 0.0,
-      "mean_pred": 28.55
+      "mean_pred": 34.83
     },
     {
-      "group": "MIR->LEJ",
-      "n": 1,
-      "mae": 26.86,
-      "mean_actual": 0.0,
-      "mean_pred": 26.86
+      "group": "CDG->MIR",
+      "n": 9,
+      "mae": 34.39,
+      "mean_actual": 44.0,
+      "mean_pred": 35.64
     },
     {
-      "group": "BEN->TUN",
-      "n": 3,
-      "mae": 25.9,
-      "mean_actual": 19.67,
-      "mean_pred": 16.93
-    },
-    {
-      "group": "MRS->DJE",
-      "n": 1,
-      "mae": 25.5,
-      "mean_actual": 38.0,
-      "mean_pred": 12.5
-    },
-    {
-      "group": "FRA->DJE",
-      "n": 1,
-      "mae": 24.83,
-      "mean_actual": 20.0,
-      "mean_pred": 44.83
-    },
-    {
-      "group": "MIR->BER",
-      "n": 1,
-      "mae": 22.82,
-      "mean_actual": 0.0,
-      "mean_pred": 22.82
-    },
-    {
-      "group": "LGW->TUN",
-      "n": 1,
-      "mae": 22.41,
-      "mean_actual": 42.0,
-      "mean_pred": 64.41
+      "group": "BRU->DJE",
+      "n": 7,
+      "mae": 34.28,
+      "mean_actual": 45.43,
+      "mean_pred": 24.79
     }
   ],
   "leakage_check": "PASSED \u2014 delay_minutes not in feature set",

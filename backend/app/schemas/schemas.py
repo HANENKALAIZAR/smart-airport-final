@@ -52,6 +52,9 @@ class FlightListOut(FlightBase):
     airline: AirlineOut
     origin_airport: AirportOut
     dest_airport: AirportOut
+    gate: Optional[str] = None
+    terminal: Optional[str] = None
+    gate_source: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -62,9 +65,9 @@ class FlightDetailOut(FlightListOut):
     actual_arrival: Optional[datetime] = None
     prediction: Optional["PredictionOut"] = None
     passenger_rights: Optional[list["PassengerRightOut"]] = None
-    gate: Optional[str] = None
-    terminal: Optional[str] = None
     delay_cause: Optional["DelayCause"] = None
+    displayed_dep_source: Optional[str] = None
+    displayed_arr_source: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -216,6 +219,11 @@ class UserOut(BaseModel):
     correction_attempts: int = 0
     onboarding_status: Optional[str] = None
     rejection_reasons: Optional[str] = None
+    profile_edit_unlocked: bool = False
+    profile_unlock_identity: bool = False
+    profile_unlock_passport: bool = False
+    profile_unlock_cin_doc: bool = False
+    profile_unlock_contact: bool = False
 
     @field_validator("id_document_status", "gender", "emergency_contact_relationship", mode="before")
     @classmethod
@@ -265,7 +273,7 @@ class PatchMySettingsRequest(BaseModel):
     profile_photo_url: Optional[str] = None
     full_name: Optional[str] = None
     date_of_birth: Optional[str] = None
-    gender: Optional[Literal["Male", "Female"]] = None
+    gender: Optional[Literal["Male", "Female", "Other", "na"]] = None
     nationality: Optional[str] = None
     residential_address: Optional[str] = None
     emergency_contact_name: Optional[str] = None
@@ -353,6 +361,11 @@ class AdminReviewDetail(BaseModel):
     rejected_fields: Optional[list[str]] = None
     correction_attempts: int = 0
     profile_complete: int = 0
+    profile_edit_unlocked: bool = False
+    profile_unlock_identity: bool = False
+    profile_unlock_passport: bool = False
+    profile_unlock_cin_doc: bool = False
+    profile_unlock_contact: bool = False
 
     @field_validator("id_document_status", "gender", "emergency_contact_relationship", mode="before")
     @classmethod
@@ -376,11 +389,17 @@ class AiAlertGeneratedBody(BaseModel):
     brief_cause: str = ""
     recommendation: str = ""
     risk_pct: int = 0
+    airport_iata: Optional[str] = None  # Required when called by super_admin
+    route: Optional[str] = None
+    delay_formatted: Optional[str] = None
 
 
 class AiAlertActionBody(BaseModel):
     flight_number: str
     action: Literal["approved", "rejected"]
+    airport_iata: Optional[str] = None  # Required when called by super_admin
+    route: Optional[str] = None
+    delay_formatted: Optional[str] = None
 
 
 class ForgotPasswordRequest(BaseModel):

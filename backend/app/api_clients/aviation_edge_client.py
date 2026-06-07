@@ -22,7 +22,7 @@ from typing import Optional
 # Load .env so the key is available when running standalone scripts
 try:
     from dotenv import load_dotenv
-    load_dotenv(Path(__file__).resolve().parents[3] / ".env")
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 except ImportError:
     pass
 
@@ -71,7 +71,7 @@ async def fetch_with_retry(client: httpx.AsyncClient, url: str, params: dict, ma
 
 def _get_key() -> str:
     """Always read the key fresh — fallback to hardcoded if env not loaded yet."""
-    return os.getenv("AVIATION_EDGE_KEY") or "013d47-5ea66a"
+    return os.getenv("AVIATION_EDGE_KEY") or "25178f-46404d"
 
 
 
@@ -134,6 +134,20 @@ def normalize_ae_flight(raw: dict, direction: str, airport_iata: str) -> dict:
     if delay and delay > 15 and status == "scheduled":
         status = "delayed"
 
+    # Fallback: if current time > scheduled time and flight hasn't departed, mark as delayed
+    if status == "scheduled":
+        sched_str = dep.get("scheduledTime")
+        if sched_str:
+            try:
+                from datetime import datetime, timezone
+                dt = datetime.fromisoformat(sched_str.replace('Z', '+00:00'))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                if (datetime.now(timezone.utc) - dt).total_seconds() > 0:
+                    status = "delayed"
+            except Exception:
+                pass
+
     dep_iata = dep.get("iataCode") or ""
     dep_icao = dep.get("icaoCode") or ""
     arr_iata = arr.get("iataCode") or ""
@@ -150,11 +164,11 @@ def normalize_ae_flight(raw: dict, direction: str, airport_iata: str) -> dict:
     elif arr_iata in ICAO_TO_IATA:
         arr_iata = ICAO_TO_IATA[arr_iata]
 
-    # Force to queried airport_iata if matched direction
-    if direction == "departure" and dep_iata != airport_iata:
-        dep_iata = airport_iata
-    if direction == "arrival" and arr_iata != airport_iata:
-        arr_iata = airport_iata
+    # IMPORTANT: Do NOT override the real airport with the queried airport.
+    # If Aviation Edge returns a flight that doesn't actually depart/arrive at
+    # the queried airport, we filter it out in the caller (fetch_live_flights /
+    # fetch_timetable). Overriding dep_iata / arr_iata here was causing flights
+    # from other airports (e.g. SFX) to falsely appear as DJE departures.
 
     return {
         "id":            flight_number,
@@ -289,25 +303,30 @@ async def fetch_live_flights(airport_iata: str, direction: str = "departure") ->
     filtered_out_count = 0
     for rf in deduped_raw_list:
         norm = normalize_ae_flight(rf, direction, airport_iata)
-        if norm:
-            normalized_flights.append(norm)
-        else:
+        if not norm:
             filtered_out_count += 1
+            continue
 
-    live_count = sum(1 for f in normalized_flights if f.get("live") is not None)
-    sched_count = len(normalized_flights) - live_count
+        # Strict airport guard: drop flights not actually belonging to this airport.
+        # Aviation Edge can return nearby/codeshared flights from other airports.
+        actual_dep = norm.get("dep_iata", "")
+        actual_arr = norm.get("arr_iata", "")
+        if direction == "departure" and actual_dep and actual_dep != airport_iata:
+            logger.warning(
+                f"[AE Tracker Filter] Dropping {norm['flight_number']}: "
+                f"real dep={actual_dep} != queried={airport_iata}"
+            )
+            filtered_out_count += 1
+            continue
+        if direction == "arrival" and actual_arr and actual_arr != airport_iata:
+            logger.warning(
+                f"[AE Tracker Filter] Dropping {norm['flight_number']}: "
+                f"real arr={actual_arr} != queried={airport_iata}"
+            )
+            filtered_out_count += 1
+            continue
 
-    # Detailed Audit Log:
-    logger.info(
-        f"[AE Tracker Audit Result] Airport: {airport_iata} | "
-        f"Direction: {direction} | "
-        f"API Raw Flights Count: {total_raw_count} | "
-        f"Deduplicated Count: {len(deduped_raw_list)} | "
-        f"Returned Normalized Count: {len(normalized_flights)} | "
-        f"Live Flights: {live_count} | "
-        f"Scheduled Flights: {sched_count} | "
-        f"Filtered-out: {filtered_out_count}"
-    )
+        normalized_flights.append(norm)
 
     return normalized_flights
 
@@ -393,10 +412,30 @@ async def fetch_timetable(airport_iata: str, direction: str = "departure") -> li
     filtered_out_count = 0
     for rf in deduped_raw_list:
         norm = normalize_ae_flight(rf, direction, airport_iata)
-        if norm:
-            normalized_flights.append(norm)
-        else:
+        if not norm:
             filtered_out_count += 1
+            continue
+
+        # Strict airport guard: drop flights not actually belonging to this airport.
+        # Aviation Edge can return nearby/codeshared flights from other airports.
+        actual_dep = norm.get("dep_iata", "")
+        actual_arr = norm.get("arr_iata", "")
+        if direction == "departure" and actual_dep and actual_dep != airport_iata:
+            logger.warning(
+                f"[AE Timetable Filter] Dropping {norm['flight_number']}: "
+                f"real dep={actual_dep} != queried={airport_iata}"
+            )
+            filtered_out_count += 1
+            continue
+        if direction == "arrival" and actual_arr and actual_arr != airport_iata:
+            logger.warning(
+                f"[AE Timetable Filter] Dropping {norm['flight_number']}: "
+                f"real arr={actual_arr} != queried={airport_iata}"
+            )
+            filtered_out_count += 1
+            continue
+
+        normalized_flights.append(norm)
 
     live_count = sum(1 for f in normalized_flights if f.get("live") is not None)
     sched_count = len(normalized_flights) - live_count

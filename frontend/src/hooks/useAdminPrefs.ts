@@ -6,6 +6,7 @@
  * persisted in localStorage. Used by the new admin auth pages.
  */
 import { useEffect, useState } from 'react';
+import { useLanguage } from '../context/LanguageContext';
 
 export type AdminTheme = 'dark' | 'light';
 export type AdminLang  = 'en' | 'fr';
@@ -38,14 +39,14 @@ export function useAdminTheme(): [AdminTheme, (t: AdminTheme) => void] {
 }
 
 export function useAdminLang(): [AdminLang, (l: AdminLang) => void] {
-  const [lang, setLang] = useState<AdminLang>(() => {
-    if (typeof window === 'undefined') return 'en';
-    return (localStorage.getItem('admin_lang') as AdminLang) || 'en';
-  });
+  const { language, setLanguage } = useLanguage();
+  // Safe cast: if global is Arabic ('ar'), fallback to French ('fr') for admin onboarding panels
+  const adminLang = (language === 'ar' ? 'fr' : language) as AdminLang;
+  
+  const updateLang = (newLang: AdminLang) => {
+    setLanguage(newLang);
+    localStorage.setItem('admin_lang', newLang);
+  };
 
-  useEffect(() => {
-    localStorage.setItem('admin_lang', lang);
-  }, [lang]);
-
-  return [lang, setLang];
+  return [adminLang, updateLang];
 }

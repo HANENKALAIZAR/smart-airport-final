@@ -225,6 +225,7 @@ LANGUAGE
 - Reply in the same language and register as the passenger
 - Mixed-language message: use the dominant language
 - Never switch Arabic script/dialect from what the passenger used
+- CRITICAL: Never mix multiple languages (e.g. French, Arabic, English) in a single response under any circumstances. If the conversation is in French, use 100% French and never include Arabic words. If it is in English, use 100% English.
 - For French: Use natural and elegant phrasing. Avoid literal repetitions or direct translation cliches like "prévu comme prévu" (use "est actuellement à l'heure", "est programmé comme prévu", or "est à l'heure" instead).
 
 ═══════════════════════════════════════
@@ -923,32 +924,34 @@ async function runAgent(message, history = [], conversationId = 'default', selec
         }
       }
 
+      const replyLang = parsed.message ? detectLanguage(parsed.message, detectedLang) : detectedLang;
+
       // Clean and translate actions to whitelisted ones only
       if (parsed.actions && Array.isArray(parsed.actions)) {
         const cleanedActions = [];
         parsed.actions.forEach(act => {
           const actLower = act.toLowerCase();
           if (actLower.includes('alternative') || actLower.includes('rebook') || actLower.includes('autre vol') || actLower.includes('vol alternatif')) {
-            cleanedActions.push(detectedLang === 'fr' ? 'Voir les vols alternatifs' : detectedLang === 'ar' ? 'عرض الرحلات البديلة' : 'View alternative flights');
+            cleanedActions.push(replyLang === 'fr' ? 'Voir les vols alternatifs' : replyLang === 'ar' ? 'عرض الرحلات البديلة' : 'View alternative flights');
           } else if (actLower.includes('rights') || actLower.includes('droit')) {
-            cleanedActions.push(detectedLang === 'fr' ? 'Droits des passagers' : detectedLang === 'ar' ? 'حقوق المسافرين' : 'Passenger Rights');
+            cleanedActions.push(replyLang === 'fr' ? 'Droits des passagers' : replyLang === 'ar' ? 'حقوق المسافرين' : 'Passenger Rights');
           } else if (actLower.includes('services') || actLower.includes('aéroport') || actLower.includes('restaurant') || actLower.includes('lounge') || actLower.includes('wifi')) {
-            cleanedActions.push(detectedLang === 'fr' ? 'Services aéroportuaires' : detectedLang === 'ar' ? 'خدمات المطار' : 'Airport Services');
+            cleanedActions.push(replyLang === 'fr' ? 'Services aéroportuaires' : replyLang === 'ar' ? 'خدمات المطار' : 'Airport Services');
           } else if (actLower.includes('hotel') || actLower.includes('hébergement')) {
-            cleanedActions.push(detectedLang === 'fr' ? 'Hôtels à proximité' : detectedLang === 'ar' ? 'فنادق قريبة' : 'Nearby Hotels');
+            cleanedActions.push(replyLang === 'fr' ? 'Hôtels à proximité' : replyLang === 'ar' ? 'فنادق قريبة' : 'Nearby Hotels');
           } else if (actLower.includes('status') || actLower.includes('statut') || actLower.includes('track') || actLower.includes('suivre')) {
-            cleanedActions.push(detectedLang === 'fr' ? 'Statut du vol' : detectedLang === 'ar' ? 'حالة الرحلة' : 'Flight Status');
+            cleanedActions.push(replyLang === 'fr' ? 'Statut du vol' : replyLang === 'ar' ? 'حالة الرحلة' : 'Flight Status');
           } else if (actLower.includes('agent')) {
-            cleanedActions.push(detectedLang === 'fr' ? 'Demander à un agent' : detectedLang === 'ar' ? 'الاستفسار من وكيل' : 'Ask an agent');
+            cleanedActions.push(replyLang === 'fr' ? 'Demander à un agent' : replyLang === 'ar' ? 'الاستفسار من وكيل' : 'Ask an agent');
           }
         });
         parsed.actions = [...new Set(cleanedActions)];
       }
 
       if (!parsed.actions || parsed.actions.length === 0) {
-        parsed.actions = detectedLang === 'fr'
+        parsed.actions = replyLang === 'fr'
           ? ['Voir les vols alternatifs', 'Services aéroportuaires', 'Droits des passagers']
-          : detectedLang === 'ar'
+          : replyLang === 'ar'
             ? ['عرض الرحلات البديلة', 'خدمات المطار', 'حقوق المسافرين']
             : ['View alternative flights', 'Airport Services', 'Passenger Rights'];
       }
@@ -993,4 +996,15 @@ function clearConversationHistory() {
   sessions.clear();
 }
 
-module.exports = { runAgent, getConversationHistory, clearConversationHistory };
+function clearSession(conversationId) {
+  sessions.delete(conversationId);
+  sessions.delete(conversationId + '_history');
+  const timer = sessions.get(conversationId + '_timer');
+  if (timer) {
+    clearTimeout(timer);
+    sessions.delete(conversationId + '_timer');
+  }
+  console.log(`🧹 [Session] Manually cleared ${conversationId}`);
+}
+
+module.exports = { runAgent, getConversationHistory, clearConversationHistory, clearSession };

@@ -105,6 +105,30 @@ class AEFlightSnapshot(Base):
     last_verified_at        = Column(TIMESTAMP(timezone=True), nullable=True)
     provider_sources        = Column(JSON, nullable=True)                  # JSONB on PG
 
+    # ── FlightAware Smart Enrichment (added migrate_v21) ───────────────────
+
+    # Cooldown / audit
+    fa_last_called_at    = Column(TIMESTAMP(timezone=True), nullable=True)   # when FA was last called
+    fa_call_count        = Column(Integer, nullable=False, default=0)         # total FA calls for this flight
+    fa_call_reason       = Column(String(100), nullable=True)                 # why FA was triggered
+
+    # FA-sourced gate/terminal (separate from AE values to preserve originals)
+    fa_dep_gate          = Column(String(10), nullable=True)
+    fa_arr_gate          = Column(String(10), nullable=True)
+    fa_dep_terminal      = Column(String(10), nullable=True)
+    fa_arr_terminal      = Column(String(10), nullable=True)
+
+    # Original AE times preserved before any FA correction
+    ae_dep_actual        = Column(DateTime, nullable=True)
+    ae_arr_actual        = Column(DateTime, nullable=True)
+
+    # Source-tracking for times shown in the dashboard
+    displayed_dep_source = Column(String(20), nullable=True)  # 'aviation_edge' | 'flightaware'
+    displayed_arr_source = Column(String(20), nullable=True)  # 'aviation_edge' | 'flightaware'
+
+    # Verification flag — set by AE ingestion when AE data has a detected gap or conflict
+    needs_fa_verification = Column(Boolean, nullable=False, default=False)
+
     __table_args__ = (
         # Primary dedup key – one row per flight per day per Tunisian airport per direction
         Index(

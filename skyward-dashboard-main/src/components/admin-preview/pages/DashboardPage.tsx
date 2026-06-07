@@ -24,16 +24,7 @@ type FlightRow = {
   direction: "departure" | "arrival"; aircraft?: string;
 };
 
-const FLIGHTS: FlightRow[] = [
-  { id: 1, num: "TU721", airline: "Tunisair",   route: "TUN → CDG", routeFull: "Paris Charles de Gaulle", time: "08:49", terminal: "1", gate: "B3", weather: "Storm",  delay: 45, risk: "high",   status: "Delayed",  direction: "departure", aircraft: "Boeing 737-800" },
-  { id: 2, num: "TU302", airline: "Tunisair",   route: "DJE → FCO", routeFull: "Rome Fiumicino",         time: "10:19", terminal: "1", gate: "A7", weather: "Clear",  delay: 0,  risk: "low",    status: "On Time",  direction: "departure", aircraft: "Airbus A320" },
-  { id: 3, num: "AF1234",airline: "Air France", route: "CDG → TUN", routeFull: "Paris CDG",              time: "14:34", terminal: "2", gate: "C2", weather: "Cloudy", delay: 0,  risk: "low",    status: "Boarding", direction: "arrival",   aircraft: "Airbus A319" },
-  { id: 4, num: "LH490", airline: "Lufthansa",  route: "FRA → MIR", routeFull: "Frankfurt",              time: "15:19", terminal: "2", gate: "D1", weather: "Wind",   delay: 20, risk: "medium", status: "Delayed",  direction: "arrival",   aircraft: "Airbus A321" },
-  { id: 5, num: "TU505", airline: "Tunisair",   route: "TUN → LHR", routeFull: "London Heathrow",        time: "19:49", terminal: "1", gate: "B9", weather: "Clear",  delay: 0,  risk: "low",    status: "Boarding", direction: "departure", aircraft: "Boeing 737-800" },
-  { id: 6, num: "IB3456",airline: "Iberia",     route: "MAD → NBE", routeFull: "Madrid Barajas",         time: "13:34", terminal: "1", gate: "A3", weather: "Clear",  delay: 0,  risk: "low",    status: "Landed",   direction: "arrival",   aircraft: "Airbus A320" },
-  { id: 7, num: "TU801", airline: "Tunisair",   route: "MIR → DUS", routeFull: "Düsseldorf",             time: "21:49", terminal: "1", gate: "C5", weather: "Storm",  delay: 0,  risk: "high",   status: "Canceled", direction: "departure", aircraft: "Boeing 737-800" },
-  { id: 8, num: "VY1234",airline: "Vueling",    route: "BCN → DJE", routeFull: "Barcelona",              time: "16:00", terminal: "2", gate: "D4", weather: "Clear",  delay: 5,  risk: "low",    status: "Departed", direction: "arrival",   aircraft: "Airbus A320" },
-];
+// Removed hardcoded FLIGHTS mock array
 
 // AI alerts only reference standardized airport codes
 type OpsTeam = "Ground Ops" | "Crew Scheduling" | "Air Traffic" | "Maintenance" | "Weather Desk";
@@ -222,13 +213,77 @@ function inTimeRange(time: string, range: TimeRange) {
 
 export default function DashboardPage({
   dateLabel,
+  isoDate,
   role = "superadmin",
   onOpenAnalytics,
 }: {
   dateLabel: string;
+  isoDate?: string;
   role?: "superadmin" | "admin";
   onOpenAnalytics?: () => void;
 }) {
+  const [flightsData, setFlightsData] = useState<FlightRow[]>([]);
+  const [loadingFlights, setLoadingFlights] = useState(false);
+  const [flightsError, setFlightsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchFlights = async () => {
+      setLoadingFlights(true);
+      setFlightsError(null);
+      try {
+        const d = isoDate || new Date().toISOString().split("T")[0];
+        // Ensure proxy works or use localhost if needed
+        const res = await fetch(`http://localhost:8000/api/flights?date=${d}`);
+        if (!res.ok) throw new Error("Failed to fetch flights");
+        const data = await res.json();
+        
+        const mapped: FlightRow[] = data.map((f: any, idx: number) => {
+          const isDep = f.direction === "departure";
+          const routeStr = `${f.dep_iata} → ${f.arr_iata}`;
+          const routeFull = isDep ? f.arr_airport : f.dep_airport;
+          const timeRaw = isDep ? f.dep_scheduled : f.arr_scheduled;
+          const time = timeRaw ? new Date(timeRaw).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "--:--";
+          const terminal = isDep ? f.dep_terminal : f.arr_terminal;
+          const gate = isDep ? f.dep_gate : f.arr_gate;
+          const delayStr = isDep ? f.dep_delay : f.arr_delay;
+          const delay = delayStr ? parseInt(delayStr, 10) : 0;
+          
+          let statusMapped: FlightStatus = "On Time";
+          const s = (f.status || "").toLowerCase();
+          if (s.includes("delay")) statusMapped = "Delayed";
+          else if (s.includes("cancel")) statusMapped = "Canceled";
+          else if (s.includes("board")) statusMapped = "Boarding";
+          else if (s.includes("depart")) statusMapped = "Departed";
+          else if (s.includes("land") || s.includes("arriv")) statusMapped = "Landed";
+
+          return {
+            id: idx,
+            num: f.flight_number || "UNK",
+            airline: f.airline_name || f.airline_iata || "Unknown",
+            route: routeStr,
+            routeFull: routeFull || "",
+            time,
+            terminal: terminal || "-",
+            gate: gate || "-",
+            weather: "Clear",
+            delay: isNaN(delay) ? 0 : delay,
+            risk: "low",
+            status: statusMapped,
+            direction: isDep ? "departure" : "arrival",
+            aircraft: f.aircraft_icao || f.aircraft_iata || "-",
+          };
+        });
+        setFlightsData(mapped);
+      } catch (err: any) {
+        console.error(err);
+        setFlightsError(err.message);
+      } finally {
+        setLoadingFlights(false);
+      }
+    };
+    fetchFlights();
+  }, [isoDate]);
+
   const [search, setSearch] = useState("");
   // Draft (in-form) filter values — only push into applied state when "Apply" is clicked.
   const [draftStatus, setDraftStatus] = useState<StatusFilter>("all");
@@ -276,7 +331,7 @@ export default function DashboardPage({
     setPage(1);
   };
 
-  const filtered = useMemo(() => FLIGHTS.filter(f => {
+  const filtered = useMemo(() => flightsData.filter(f => {
     if (statusFilter !== "all" && f.status !== statusFilter) return false;
     if (riskFilter !== "all" && f.risk !== riskFilter) return false;
     if (directionTab !== "all" && f.direction !== directionTab) return false;
@@ -309,8 +364,8 @@ export default function DashboardPage({
     });
   }, [alerts, role, aiAirport, aiRisk]);
 
-  const departureCount = FLIGHTS.filter(f => f.direction === "departure").length;
-  const arrivalCount = FLIGHTS.filter(f => f.direction === "arrival").length;
+  const departureCount = flightsData.filter(f => f.direction === "departure").length;
+  const arrivalCount = flightsData.filter(f => f.direction === "arrival").length;
 
   const resetPage = () => setPage(1);
 
@@ -438,7 +493,7 @@ export default function DashboardPage({
             </div>
             <div style={{ display: "flex", gap: 4, padding: 4, background: "rgba(255,255,255,0.03)", border: "1px solid var(--adm-border)", borderRadius: 10 }}>
               {[
-                { k: "all", l: "All", c: FLIGHTS.length },
+                { k: "all", l: "All", c: flightsData.length },
                 { k: "departure", l: "Departures", c: departureCount, icon: ArrowUp },
                 { k: "arrival", l: "Arrivals", c: arrivalCount, icon: ArrowDown },
               ].map(t => {
@@ -460,13 +515,41 @@ export default function DashboardPage({
           <div style={{ overflowX: "auto" }}>
             <table className="admin-table">
               <thead>
-                <tr><th></th><th>Flight</th><th>Airline</th><th>Route</th><th>Scheduled</th><th>Terminal</th><th>Gate</th><th>Delay</th><th>Status</th></tr>
+                <tr>
+                  <th style={{ width: "35px" }}></th>
+                  <th style={{ width: "11%" }}>Flight</th>
+                  <th style={{ width: "15%" }}>Airline</th>
+                  <th style={{ width: "22%" }}>Route</th>
+                  <th style={{ width: "11%" }}>Scheduled</th>
+                  <th style={{ width: "9%" }}>Terminal</th>
+                  <th style={{ width: "7%" }}>Gate</th>
+                  <th style={{ width: "9%" }}>Delay</th>
+                  <th style={{ width: "115px" }}>Status</th>
+                </tr>
               </thead>
               <tbody>
-                {pageRows.map(f => {
+                {loadingFlights ? (
+                  <tr>
+                    <td colSpan={9} style={{ textAlign: "center", padding: "2rem", color: "var(--adm-text-muted)" }}>
+                      Loading flights...
+                    </td>
+                  </tr>
+                ) : flightsError ? (
+                  <tr>
+                    <td colSpan={9} style={{ textAlign: "center", padding: "2rem", color: "#F87171" }}>
+                      Error loading flights: {flightsError}
+                    </td>
+                  </tr>
+                ) : pageRows.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} style={{ textAlign: "center", padding: "2rem", color: "var(--adm-text-muted)" }}>
+                      No flights found for this date.
+                    </td>
+                  </tr>
+                ) : pageRows.map(f => {
                   const Dir = f.direction === "departure" ? ArrowUp : ArrowDown;
                   const dirColor = f.direction === "departure" ? "#60A5FA" : "#34D399";
-                  const meta = STATUS_META[f.status];
+                  const meta = STATUS_META[f.status] || STATUS_META["On Time"];
                   return (
                     <tr key={f.id} onClick={() => setOpenFlight(f)} style={{ cursor: "pointer" }}>
                       <td><Dir size={16} style={{ color: dirColor }} /></td>
@@ -496,9 +579,6 @@ export default function DashboardPage({
                     </tr>
                   );
                 })}
-                {filtered.length === 0 && (
-                  <tr><td colSpan={9} style={{ textAlign: "center", padding: "2rem", color: "var(--adm-text-muted)" }}>No flights match the selected filters.</td></tr>
-                )}
               </tbody>
             </table>
           </div>

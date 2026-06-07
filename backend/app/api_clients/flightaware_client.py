@@ -214,6 +214,11 @@ def normalize_fa_flight(raw_fa: dict) -> dict:
         "altitude_ft":      float(altitude_raw)     if altitude_raw is not None else None,
         "speed_kmh":        float(speed_raw) * 1.852 if speed_raw is not None else None,  # knots → km/h
         "fetched_at":       _now_utc(),
+        # ── Gate / terminal (FA AeroAPI provides these in origin/destination blocks) ──
+        "dep_gate":         origin.get("gate") or raw_fa.get("gate_origin") or None,
+        "arr_gate":         dest.get("gate")   or raw_fa.get("gate_destination") or None,
+        "dep_terminal":     origin.get("terminal") or raw_fa.get("terminal_origin") or None,
+        "arr_terminal":     dest.get("terminal")   or raw_fa.get("terminal_destination") or None,
         "_raw":             raw_fa,
     }
 

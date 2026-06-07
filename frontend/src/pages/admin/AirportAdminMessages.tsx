@@ -462,12 +462,14 @@ export default function AirportAdminMessages() {
           <p className="admin-page__subtitle">Operations Customer Assistance Desk & Ticket Tracking.</p>
         </div>
         <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
-          <button
-            onClick={() => setComposing(true)}
-            className="inline-flex h-9 items-center gap-2 rounded-lg bg-gradient-cyan px-4 text-xs font-semibold text-primary-foreground shadow-glow border-none cursor-pointer"
-          >
-            <PenSquare size={14} /> Compose to HQ
-          </button>
+          {tab === "superadmin" && (
+            <button
+              onClick={() => setComposing(true)}
+              className="inline-flex h-9 items-center gap-2 rounded-lg bg-gradient-cyan px-4 text-xs font-semibold text-primary-foreground shadow-glow border-none cursor-pointer"
+            >
+              <PenSquare size={14} /> Compose to HQ
+            </button>
+          )}
           
           <div style={{
             display: "inline-flex", padding: 4, gap: 4,

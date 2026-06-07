@@ -261,3 +261,71 @@ class TestSuperAdminSettings:
         assert resp.status_code == 422
         assert "File size must be under 2MB" in resp.json()["error"]
 
+
+class TestExpiredVerificationActions:
+    def test_expired_verification_actions(self, client, super_admin_token, admin_token, db):
+        pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        # Create an admin user whose verification is expired
+        expired_admin = User(
+            email="expired.admin@tunis-carthage.tn",
+            password_hash=pwd.hash("Pass@123"),
+            full_name="Expired Admin",
+            role="admin",
+            airport_iata="TUN",
+            is_active=1,
+            id_document_status="expired_verification",
+        )
+        db.add(expired_admin)
+        db.commit()
+        db.refresh(expired_admin)
+
+        # 1. Non-super admin cannot call these actions
+        resp = client.post(
+            f"/api/users/admins/{expired_admin.id}/reopen-verification",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert resp.status_code == 403
+
+        # 2. Super admin reopen verification
+        resp = client.post(
+            f"/api/users/admins/{expired_admin.id}/reopen-verification",
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "Verification reopened. Admin can now correct and resubmit."
+        db.refresh(expired_admin)
+        assert expired_admin.id_document_status == "rejected"
+        assert expired_admin.is_active == 1
+
+        # Reset back to expired for next action test
+        expired_admin.id_document_status = "expired_verification"
+        db.commit()
+
+        # 3. Super admin archive account
+        resp = client.post(
+            f"/api/users/admins/{expired_admin.id}/archive",
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "Admin account archived successfully."
+        db.refresh(expired_admin)
+        assert expired_admin.id_document_status == "archived"
+        assert expired_admin.is_active == 0
+
+        # Reset back to expired for next action test
+        expired_admin.id_document_status = "expired_verification"
+        expired_admin.is_active = 1
+        db.commit()
+
+        # 4. Super admin permanently reject account
+        resp = client.post(
+            f"/api/users/admins/{expired_admin.id}/permanently-reject",
+            headers={"Authorization": f"Bearer {super_admin_token}"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["message"] == "Admin account permanently rejected."
+        db.refresh(expired_admin)
+        assert expired_admin.id_document_status == "permanently_rejected"
+        assert expired_admin.is_active == 0
+
+

@@ -1,7 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const { runAgent } = require("./services/agent");
+const { runAgent, clearSession } = require("./services/agent");
 const rateLimit = require("express-rate-limit");
 
 const app = express();
@@ -68,7 +68,13 @@ app.post("/api/chat", chatLimiter, async (req, res) => {
  * Clear conversation history for a session
  */
 app.delete("/api/chat/:sessionId", (req, res) => {
-  delete sessions[req.params.sessionId];
+  const { sessionId } = req.params;
+  delete sessions[sessionId];
+  try {
+    clearSession(sessionId);
+  } catch (err) {
+    console.error("Error clearing agent session:", err);
+  }
   res.json({ cleared: true });
 });
 

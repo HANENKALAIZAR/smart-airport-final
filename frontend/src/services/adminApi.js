@@ -292,15 +292,19 @@ export async function apiGetAiAlerts(airportIata, decision = 'all') {
 }
 
 /** AI Operational Suggestions — airport admin (their airport only) */
-export async function apiGetAiSuggestions() {
-  return request('GET', '/admin/ai-suggestions');
+export async function apiGetAiSuggestions(date = null) {
+  const params = new URLSearchParams();
+  if (date) params.set('date', date);
+  const qs = params.toString();
+  return request('GET', `/admin/ai-suggestions${qs ? `?${qs}` : ''}`);
 }
 
 /** AI Operational Suggestions — super admin, optionally filtered by airport or priority */
-export async function apiGetAllAiSuggestions(airportIata = null, priority = null) {
+export async function apiGetAllAiSuggestions(airportIata = null, priority = null, date = null) {
   const params = new URLSearchParams();
   if (airportIata) params.set('airport_iata', airportIata);
   if (priority) params.set('priority', priority);
+  if (date) params.set('date', date);
   const qs = params.toString();
   return request('GET', `/admin/ai-suggestions/all${qs ? `?${qs}` : ''}`);
 }
@@ -324,6 +328,25 @@ export async function apiDeleteAdmin(userId) {
 export async function apiToggleAdminStatus(userId) {
   return request('PATCH', `/users/admins/${userId}/activate`);
 }
+
+export async function apiToggleProfileEdit(userId, unlock, section = null) {
+  const body = { unlock };
+  if (section) body.section = section;
+  return request('PATCH', `/users/admins/${userId}/toggle-edit`, body);
+}
+
+export async function apiReopenVerification(userId) {
+  return request('POST', `/users/admins/${userId}/reopen-verification`, {});
+}
+
+export async function apiArchiveAdmin(userId) {
+  return request('POST', `/users/admins/${userId}/archive`, {});
+}
+
+export async function apiPermanentlyRejectAdmin(userId) {
+  return request('POST', `/users/admins/${userId}/permanently-reject`, {});
+}
+
 
 // ── Messaging ─────────────────────────────────────────────────────────────
 

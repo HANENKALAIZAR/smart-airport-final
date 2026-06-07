@@ -1,5 +1,5 @@
 """
-Multi-Model Training & Comparison Pipeline (Phase 3)
+Multi-Model Training & Comparison Pipeline (Phase 3 — v2.1)
 =====================================================
 Trains XGBoost, LightGBM, and CatBoost on the same enriched feature set,
 evaluates all three with time-series cross-validation, and selects the
@@ -12,13 +12,18 @@ Guarantees
 * Rolling features built from train data before being applied to test.
 * Winner is the model with lowest test MAE that also beats the statistical baseline.
 * All results written to ae_evaluation_report.json for the MLOps controller.
+* Feature column list saved to feature_columns_v2.json sidecar for inference.
 
-New feature set (15 features = 7 original + 8 rolling):
-    dep_hour, is_weekend, distance_km, duration_min,
+New feature set (16 features = 8 base + 8 rolling):
+    dep_hour, is_weekend, is_peak_hour, distance_km, duration_min,
     airline_enc, dep_airport_enc, arr_airport_enc,
     route_avg_delay_hist, airline_avg_delay_hist, hour_avg_delay_hist,
     route_flight_count, airline_flight_count, airport_departure_count,
     dep_month, dep_day_of_week
+
+Data quality filters applied at load time:
+    * final_status != 'cancelled'  (cancelled flights have no delay to predict)
+    * completeness >= 0.6          (low-quality rows excluded from training)
 
 Usage
 -----
@@ -56,16 +61,20 @@ ARCHIVE_DIR  = MODEL_DIR / "archive"
 
 # ── Feature columns ────────────────────────────────────────────────────────────
 BASE_FEATURES = [
-    "dep_hour", "is_weekend", "distance_km", "duration_min",
-    "airline_enc", "dep_airport_enc", "arr_airport_enc",
+    "dep_hour", "is_weekend", "is_peak_hour",     # time-of-day signals
+    "distance_km", "duration_min",                 # route complexity
+    "airline_enc", "dep_airport_enc", "arr_airport_enc",  # categorical encodings
 ]
 ROLLING_FEATURES = [
     "route_avg_delay_hist", "airline_avg_delay_hist", "hour_avg_delay_hist",
     "route_flight_count", "airline_flight_count", "airport_departure_count",
     "dep_month", "dep_day_of_week",
 ]
-ALL_FEATURES = BASE_FEATURES + ROLLING_FEATURES
+ALL_FEATURES = BASE_FEATURES + ROLLING_FEATURES   # 16 features total
 TARGET       = "delay_minutes"
+
+# Sidecar file — stores the exact feature list alongside the .pkl
+FEATURE_COLS_PATH = MODEL_DIR / "feature_columns_v2.json"
 
 # Must never appear as features
 _FORBIDDEN = {
@@ -93,6 +102,13 @@ def _assert_no_leakage(cols: list[str]) -> None:
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _load_dataset(db) -> pd.DataFrame:
+    """
+    Load ML-ready rows from ae_flight_dataset with quality filters:
+      - usable_for_ml=True and aviation_edge source
+      - final_status != 'cancelled'  (cancelled → no delay to predict)
+      - completeness >= 0.6          (low-quality rows excluded)
+      - dep_hour, distance_km, airline_enc not null
+    """
     from app.models.ae_models import AEFlightDataset
     rows = (
         db.query(AEFlightDataset)
@@ -101,16 +117,30 @@ def _load_dataset(db) -> pd.DataFrame:
             AEFlightDataset.dep_hour.isnot(None),
             AEFlightDataset.distance_km.isnot(None),
             AEFlightDataset.airline_enc.isnot(None),
+            # Quality filters
+            AEFlightDataset.final_status != "cancelled",
+            (AEFlightDataset.completeness >= 0.6) | (AEFlightDataset.completeness.is_(None)),
         )
         .order_by(AEFlightDataset.flight_date.asc())
         .all()
     )
     records = []
     for r in rows:
+        # is_peak_hour: read native column, compute from dep_hour if null
+        # Peak hours: 07-09 (morning rush) and 17-20 (evening rush)
+        if r.is_peak_hour is not None:
+            peak = int(r.is_peak_hour)
+        elif r.dep_hour is not None:
+            h = int(r.dep_hour)
+            peak = 1 if (7 <= h <= 9 or 17 <= h <= 20) else 0
+        else:
+            peak = 0
+
         records.append({
             # Base features
             "dep_hour":        r.dep_hour,
             "is_weekend":      r.is_weekend,
+            "is_peak_hour":    peak,
             "distance_km":     r.distance_km,
             "duration_min":    r.duration_min,
             "airline_enc":     r.airline_enc,
@@ -297,7 +327,7 @@ def _error_by_group(test_df: pd.DataFrame, y_pred: np.ndarray, group_col: str) -
 # Main entry point
 # ══════════════════════════════════════════════════════════════════════════════
 
-def train_v2(db, notes: str = "") -> dict:
+def train_v2(db, notes: str = "", persist_to_db: bool = True) -> dict:
     """
     Full multi-model training run with enriched features + time-series CV.
 
@@ -444,7 +474,19 @@ def train_v2(db, notes: str = "") -> dict:
         os.replace(str(tmp_path), str(MODEL_PATH))
         logger.info(f"Champion model saved → {MODEL_PATH}")
 
+        # Write feature column sidecar alongside the .pkl.
+        # future_predictions.py loads this for exact feature-list detection
+        # instead of guessing from model.named_steps["scaler"].n_features_in_.
+        try:
+            tmp_fc = FEATURE_COLS_PATH.with_suffix(".tmp")
+            tmp_fc.write_text(json.dumps(feature_cols, indent=2), encoding="utf-8")
+            os.replace(str(tmp_fc), str(FEATURE_COLS_PATH))
+            logger.info(f"Feature sidecar saved: {len(feature_cols)} features")
+        except Exception as sidecar_err:
+            logger.warning(f"Feature sidecar write failed (non-fatal): {sidecar_err}")
+
         # ── Step 11: Build and save report ────────────────────────────────────
+
         version = datetime.now(timezone.utc).strftime("ae-v2-%Y%m%d-%H%M")
         report = {
             "version":         version,
@@ -497,14 +539,44 @@ def train_v2(db, notes: str = "") -> dict:
         logger.info(f"Report saved → {REPORT_V2}")
 
         # ── Step 12: Persist to DB ────────────────────────────────────────────
+        # persist_to_db=False when called via mlops_controller (which writes
+        # the AEModelVersion row itself via register_model_version / promote_model).
+        if persist_to_db:
+            try:
+                _persist_to_db(db, version, champion, baseline, feature_cols, notes)
+            except Exception as e:
+                logger.warning(f"DB persistence failed (non-fatal): {e}")
+
+        # Upsert global mean into ae_aviation_stats so get_rolling_features_for_inference()
+        # reads the live training mean rather than the hardcoded 21.0 fallback.
         try:
-            _persist_to_db(db, version, champion, baseline, feature_cols, notes)
-        except Exception as e:
-            logger.warning(f"DB persistence failed (non-fatal): {e}")
+            from app.models.ae_models import AEAviationStats
+            global_mean_val = round(float(df[TARGET].mean()), 4)
+            _gm_row = db.query(AEAviationStats).filter(
+                AEAviationStats.stat_type == "global",
+                AEAviationStats.entity_key == "all",
+            ).first()
+            _now_ts = datetime.now(timezone.utc).replace(tzinfo=None)
+            if _gm_row:
+                _gm_row.avg_delay_min = global_mean_val
+                _gm_row.computed_at   = _now_ts
+            else:
+                db.add(AEAviationStats(
+                    stat_type="global", entity_key="all",
+                    avg_delay_min=global_mean_val, computed_at=_now_ts,
+                ))
+            db.commit()
+            logger.info(f"Global mean persisted to ae_aviation_stats: {global_mean_val} min")
+        except Exception as _gm_err:
+            logger.warning(f"Global mean write failed (non-fatal): {_gm_err}")
+            try:
+                db.rollback()
+            except Exception:
+                pass
 
         logger.info("=" * 70)
         logger.info(f"  V2 Training complete: {version}")
-        logger.info(f"  Winner: {champion['name']} — MAE={champion['mae']} | beats_baseline={champion['beats_baseline']}")
+        logger.info(f"  Winner: {champion['name']} MAE={champion['mae']} | beats_baseline={champion['beats_baseline']}")
         logger.info("=" * 70)
 
         return {
@@ -515,6 +587,14 @@ def train_v2(db, notes: str = "") -> dict:
             "metrics":  {"mae": champion["mae"], "rmse": champion["rmse"], "r2": champion["r2"]},
             "baseline": report["baseline"],
             "calibration": calibration,
+            # dataset key required by mlops_controller.register_model_version()
+            "dataset": {
+                "total_rows":      len(df),
+                "train_rows":      len(train_df),
+                "test_rows":       len(test_df),
+                "cutoff_date":     str(cutoff_date),
+                "feature_columns": feature_cols,
+            },
             "verdict": {
                 "better_than_baseline": champion["beats_baseline"],
                 "improvement_vs_baseline_pct": champion["improvement_pct"],

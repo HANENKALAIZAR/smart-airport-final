@@ -74,7 +74,11 @@ ROLLING_FEATURES = [
 ALL_FEATURES = BASE_FEATURES + ROLLING_FEATURES   # 16 features total
 TARGET       = "delay_minutes"
 
-# CatBoost native categorical features (indices computed dynamically)
+# CatBoost native categorical features (reserved for future use)
+# Not currently active because the training pipeline passes float64 numpy arrays
+# and CatBoost refuses cat_features on non-integer arrays. Label encoding
+# (airline_enc, dep_airport_enc, arr_airport_enc) is applied upstream during
+# feature engineering, so ordinal encoding is preserved.
 CATBOOST_CAT_FEATURE_NAMES = ["airline_enc", "dep_airport_enc", "arr_airport_enc"]
 
 # Sidecar file — stores the exact feature list alongside the .pkl
@@ -271,26 +275,18 @@ def _catboost_factory(n_samples: int):
     from catboost import CatBoostRegressor
     n_est = min(400, max(100, n_samples // 3))
 
-    cat_indices = [
-        ALL_FEATURES.index(name)
-        for name in CATBOOST_CAT_FEATURE_NAMES
-        if name in ALL_FEATURES
-    ]
-    if not cat_indices:
-        logger.warning(
-            "CatBoost categorical features not found in ALL_FEATURES — "
-            "proceeding without cat_features"
-        )
-
     kwargs = dict(
         iterations=n_est, depth=6, learning_rate=0.05,
         random_seed=42, loss_function="MAE",
     )
-    if cat_indices:
-        kwargs["cat_features"] = cat_indices
 
-    # No StandardScaler — CatBoost handles feature scales natively
-    # and cat_features requires raw integer codes, not scaled floats
+    # CatBoost native categoricals (cat_features) not used because
+    # the training data is already a homogeneous float64 numpy array
+    # and CatBoost refuses cat_features on non-integer arrays.
+    # Label encoding (airline_enc, dep_airport_enc, arr_airport_enc)
+    # is done upstream during feature engineering, so CatBoost still
+    # receives the ordinal encoding — just without its dedicated
+    # categorical split logic.
     return Pipeline([
         ("regressor", CatBoostRegressor(**kwargs)),
     ])

@@ -3,6 +3,14 @@ ML Configuration – Phase 3B Pipeline Normalization
 ===================================================
 Centralized XGBoost hyperparameters and feature definitions
 shared between training pipelines and prediction inference.
+
+=============================================================
+DEPRECATED — V10 legacy configuration only
+This file is NOT used by any active pipeline.
+Active config is inline in train_v2.py and ml_config is
+referenced only for historical hyperparameter documentation.
+Do NOT import from this file in new code.
+=============================================================
 """
 
 # Core features used in v10 ML pipeline

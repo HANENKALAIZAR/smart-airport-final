@@ -405,8 +405,9 @@ def predict_single_future_flight(
     Uses delay_prediction_model.pkl — no mocks.
     """
     from app.models.ae_models import AEFutureSchedule
-    from app.ai.future_predictions import _load_model, _row_to_vector, _confidence
+    from app.ai.future_predictions import _load_model, _row_to_vector, _confidence, _detect_feature_columns
     from app.ai.historical_ingestion import get_stats_for_flight
+    from app.services.prediction_service import _compute_real_shap
     import numpy as np
 
     row = db.query(AEFutureSchedule).filter(AEFutureSchedule.id == schedule_id).first()
@@ -420,7 +421,10 @@ def predict_single_future_flight(
             detail="ML model not yet trained. Run POST /api/ml/train-ae first.",
         )
 
-    vec = _row_to_vector(row)
+    feature_cols = _detect_feature_columns(model)
+    if not feature_cols:
+        raise ValueError("Cannot detect feature columns from model")
+    vec = _row_to_vector(row, db, feature_cols)
     if vec is None:
         raise HTTPException(
             status_code=422,
@@ -429,6 +433,9 @@ def predict_single_future_flight(
 
     predicted_delay = float(max(0.0, model.predict(vec)[0]))
     confidence      = _confidence(predicted_delay, model)
+
+    # Compute SHAP explanation using the same sklearn Pipeline model
+    shap_explanation = _compute_real_shap(model, vec, _detect_feature_columns(model))
 
     # Fetch intelligence stats from ae_aviation_stats
     stats = get_stats_for_flight(db, row.dep_iata, row.arr_iata, row.airline_iata, row.dep_hour)
@@ -449,6 +456,7 @@ def predict_single_future_flight(
             "confidence":          round(confidence, 3),
             "model_path":          model_path,
             "risk_level":          "High" if predicted_delay > 30 else ("Medium" if predicted_delay > 10 else "Low"),
+            "shap_explanation":    shap_explanation,
         },
         "intelligence": stats,
         "features_used": {

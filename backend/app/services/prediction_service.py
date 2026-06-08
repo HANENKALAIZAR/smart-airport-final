@@ -16,6 +16,7 @@ v10 changes:
 
 import hashlib
 import json
+import math
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -181,34 +182,43 @@ def _cache_key(features: np.ndarray) -> str:
 # ── Rule-based fallback ───────────────────────────────────────────────────
 
 def _rule_based(features: np.ndarray, cols: list) -> tuple[float, int, dict]:
+    """
+    Rule-based fallback using V2 feature set.
+    Triggered when ML model is unavailable.
+    Returns a heuristic delay estimate.
+    """
     fd = dict(zip(cols, features[0]))
 
-    weather_sev = float(fd.get("weather_severity") or 0)
-    congestion  = float(fd.get("congestion_level")  or 0)
-    reliability = float(fd.get("airline_reliability") or 0.80)
-    hist_rate   = float(fd.get("historical_delay_rate") or 0)
+    route_avg = float(fd.get("route_avg_delay_hist", 0.0) or 0.0)
+    airline_avg = float(fd.get("airline_avg_delay_hist", 0.0) or 0.0)
+    hour_avg = float(fd.get("hour_avg_delay_hist", 0.0) or 0.0)
 
-    risk = (
-        3.0
-        + weather_sev * 28.0
-        + congestion  * 15.0
-        + (1.0 - reliability) * 18.0
-        + hist_rate   * 10.0
-    )
-    risk = min(max(risk, 0), 100)
+    base_delay = 0.0
+    if route_avg > 0 or airline_avg > 0 or hour_avg > 0:
+        weights = [0.5, 0.3, 0.2]
+        signals = [route_avg, airline_avg, hour_avg]
+        base_delay = sum(w * s for w, s in zip(weights, signals))
+    else:
+        dep_hour = float(fd.get("dep_hour", 12) or 12)
+        is_peak = float(fd.get("is_peak_hour", 0) or 0)
+        is_weekend = float(fd.get("is_weekend", 0) or 0)
+        base_delay = 22.0
+        if is_peak:
+            base_delay += 5.0
+        if not is_weekend:
+            base_delay += 2.0
 
-    predicted_delay = 0
-    if risk > 40:
-        mix = weather_sev * 0.5 + congestion * 0.3 + (1 - reliability) * 0.2
-        predicted_delay = int(15 + mix * 100)
+    base_delay = max(0.0, min(300.0, base_delay))
+    risk = min(100.0, (base_delay / 60.0) * 100.0)
+    predicted_delay = int(round(base_delay))
 
     contributions = {
-        "Weather Severity":   round(weather_sev * 28.0, 2),
-        "Airport Congestion": round(congestion  * 15.0, 2),
-        "Airline Reliability":round((1.0 - reliability) * 18.0, 2),
-        "Route History":      round(hist_rate   * 10.0, 2),
-        "Time of Day":        round(float(fd.get("hour_of_day") or 0) / 24.0 * 5.0, 2),
+        "Route Historical Delay": round(route_avg, 2),
+        "Airline Historical Delay": round(airline_avg, 2),
+        "Hour Historical Delay": round(hour_avg, 2),
+        "Time of Day": round(float(fd.get("dep_hour", 0) or 0) / 24.0 * 5.0, 2),
     }
+
     return risk, predicted_delay, contributions
 
 
@@ -328,7 +338,12 @@ def _ml_prediction(features: np.ndarray, cols: list) -> tuple[float, int, dict]:
 
     if isinstance(_model, SklearnPipeline):
         # Regression pipeline: predicts delay_minutes
-        delay_raw    = float(max(0, _model.predict(features)[0]))
+        delay_raw    = float(_model.predict(features)[0])
+        # TODO: Load target_clip_p99.json and use stored value
+        # File: backend/app/ai/model/target_clip_p99.json
+        if delay_raw is None or (isinstance(delay_raw, float) and math.isnan(delay_raw)):
+            delay_raw = 0.0
+        delay_raw    = max(0.0, min(300.0, delay_raw))
         # Map delay minutes to a 0-100 risk score:
         # 0 min → 0%, 15 min → 30%, 30 min → 55%, 60+ min → 85%+
         risk_score   = min(100.0, delay_raw / 60.0 * 85.0 + (5.0 if delay_raw > 0 else 0))

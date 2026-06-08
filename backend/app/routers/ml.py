@@ -8,6 +8,7 @@ All endpoints require admin JWT. Training requires super_admin.
 """
 
 import logging
+import math
 from datetime import datetime, timezone
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
@@ -278,7 +279,12 @@ def predict_from_ae_features(
     vec = np.array([full_vector], dtype=np.float32)
 
     try:
-        predicted_delay = float(max(0.0, model.predict(vec)[0]))
+        raw_pred = float(model.predict(vec)[0])
+        # TODO: Load target_clip_p99.json and use stored value
+        # File: backend/app/ai/model/target_clip_p99.json
+        if raw_pred is None or (isinstance(raw_pred, float) and math.isnan(raw_pred)):
+            raw_pred = 0.0
+        predicted_delay = float(max(0.0, min(300.0, raw_pred)))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Inference failed (check feature dims, V2 expects 15): {e}")
 

@@ -1,24 +1,17 @@
 import logging
 """
-Prediction Service (v10)
-=========================
-Loads trained XGBoost model + SHAP explainer and generates predictions.
+Prediction Service
+==================
+Loads the trained model + SHAP explainer and generates predictions.
+Falls back to rule-based estimation if no model is available.
 
-v10 changes:
-  - threading.Lock() prevents race conditions during hot-reload.
-  - Feature columns loaded from feature_columns.json sidecar (falls back
-    to the 18-column v10 list if file missing).
-  - SHAP output enriched: base_value + feature_contributions with raw values.
-  - Predictions are persisted to the predictions table when a db session
-    is supplied.
-  - run_batch_predictions() generates predictions for upcoming DB flights.
+Improvements:
+  - Model is pre-loaded at app startup (not lazily on first request)
+  - TTLCache (5 min) avoids re-running XGBoost on identical feature sets
 """
 
 import hashlib
 import json
-import math
-import threading
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -27,557 +20,275 @@ from cachetools import TTLCache
 
 from app.config import settings
 from app.schemas.schemas import PredictionOut
-
 logger = logging.getLogger(__name__)
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
-_MODEL_DIR        = Path(settings.MODEL_DIR)
-_CLASSIFIER_PATH  = _MODEL_DIR / "delay_classifier.json"
-_REGRESSOR_PATH   = _MODEL_DIR / "delay_regressor.json"
-_EXPLAINER_PATH   = _MODEL_DIR / "shap_explainer.pkl"
-# V2 sidecar takes priority; fall back to legacy V1 sidecar
-_FEAT_COLS_PATH   = (
-    _MODEL_DIR / "feature_columns_v2.json"   # written by train_v2.py
-    if (_MODEL_DIR / "feature_columns_v2.json").exists()
-    else _MODEL_DIR / "feature_columns.json"  # legacy V1
-)
-# Clip from P99 of training target — replaces hardcoded 300.0
-_P99_CLIP_PATH = _MODEL_DIR / "target_clip_p99.json"
-if _P99_CLIP_PATH.exists():
-    import json
-    _P99_CLIP = json.load(open(_P99_CLIP_PATH))["target_clip_p99"]
-else:
-    _P99_CLIP = 300.0
-
-# ── Default feature columns ────────────────────────────────────────────────────
-# Used only when feature_columns_v2.json sidecar is absent.
-# Must match ALL_FEATURES in train_v2.py (V2.1: 16 features).
-_DEFAULT_FEATURE_COLUMNS = [
-    "dep_hour", "is_weekend", "is_peak_hour",
-    "distance_km", "duration_min",
-    "airline_enc", "dep_airport_enc", "arr_airport_enc",
-    "route_avg_delay_hist", "airline_avg_delay_hist", "hour_avg_delay_hist",
-    "route_flight_count", "airline_flight_count", "airport_departure_count",
-    "dep_month", "dep_day_of_week",
+# ── Feature columns (must match training order) ──────────────────────────
+FEATURE_COLUMNS = [
+    "weather_severity",
+    "origin_weather_severity",
+    "dest_weather_severity",
+    "hour_of_day",
+    "day_of_week",
+    "month",
+    "is_weekend",
+    "congestion_level",
+    "origin_congestion",
+    "dest_congestion",
+    "airline_reliability",
+    "distance_km",
+    "historical_delay_rate",
 ]
 
 FEATURE_LABELS = {
-    # V1 base features
-    "dep_hour":        "Time of Day",
-    "is_weekend":      "Weekend Flight",
-    "is_peak_hour":    "Peak Hour Departure",   # V2.1
-    "distance_km":     "Flight Distance",
-    "duration_min":    "Flight Duration",
-    "airline_enc":     "Airline",
-    "dep_airport_enc": "Origin Airport",
-    "arr_airport_enc": "Destination Airport",
-    # V2 rolling features
-    "route_avg_delay_hist":    "Route Historical Delay",
-    "airline_avg_delay_hist":  "Airline Historical Delay",
-    "hour_avg_delay_hist":     "Hour Historical Delay",
-    "route_flight_count":      "Route Traffic Volume",
-    "airline_flight_count":    "Airline Traffic Volume",
-    "airport_departure_count": "Airport Departure Load",
-    "dep_month":               "Month",
-    "dep_day_of_week":         "Day of Week",
+    "weather_severity":         "Weather Severity",
+    "origin_weather_severity":  "Origin Weather",
+    "dest_weather_severity":    "Destination Weather",
+    "hour_of_day":              "Time of Day",
+    "day_of_week":              "Day of Week",
+    "month":                    "Month",
+    "is_weekend":               "Weekend",
+    "congestion_level":         "Congestion Level",
+    "origin_congestion":        "Origin Airport Congestion",
+    "dest_congestion":          "Destination Airport Congestion",
+    "airline_reliability":      "Airline Reliability",
+    "distance_km":              "Flight Distance",
+    "historical_delay_rate":    "Route History",
 }
 
-# ── Module-level state (guarded by _lock) ─────────────────────────────────
-_lock             = threading.Lock()
-_model            = None   # sklearn Pipeline (StandardScaler + XGBRegressor)
-_explainer        = None
-_feature_columns  = _DEFAULT_FEATURE_COLUMNS[:]
+# Human-readable phrases for building explanation sentences
+_HUMAN_PHRASES: dict[str, str] = {
+    "Weather Severity":               "adverse weather conditions",
+    "Origin Weather":                  "poor weather at the departure airport",
+    "Destination Weather":             "poor weather at the destination airport",
+    "Time of Day":                     "the time of day (peak hours)",
+    "Day of Week":                     "the day of the week",
+    "Month":                           "seasonal patterns",
+    "Weekend":                         "weekend travel patterns",
+    "Congestion Level":                "air traffic congestion",
+    "Origin Airport Congestion":       "congestion at the departure airport",
+    "Destination Airport Congestion":  "congestion at the destination airport",
+    "Airline Reliability":             "the airline's historical reliability",
+    "Flight Distance":                 "the flight distance",
+    "Route History":                   "historical delay patterns on this route",
+    # Rule-based fallback labels
+    "Weather Conditions":              "weather conditions",
+    "Airport Congestion":              "airport congestion",
+    "Airline Reliability":             "the airline's historical reliability",
+    "Route History":                   "historical delay patterns on this route",
+}
 
-# NOTE: _regressor is the sklearn Pipeline regression model (delay_prediction_model.pkl)
-# For the passenger passenger endpoint we use it to predict delay minutes directly.
-_regressor        = None
 
-# ── TTL prediction cache (5 min, 512 slots) ───────────────────────────────
+def generate_explanation_text(shap_explanation: dict, predicted_delay_min: int, risk_score: float) -> str:
+    """
+    Convert top SHAP features into a natural-language sentence.
+    Returns a human-readable explanation for the prediction.
+    """
+    if not shap_explanation:
+        return "No detailed explanation is available for this prediction."
+
+    # Only consider features that increase delay risk (positive SHAP = more delay)
+    positive = {k: v for k, v in shap_explanation.items() if v > 0}
+    # Fall back to all features if none are positive (edge case)
+    source = positive if positive else shap_explanation
+
+    # Sort by absolute contribution, pick top 3
+    top = sorted(source.items(), key=lambda x: abs(x[1]), reverse=True)[:3]
+    phrases = [_HUMAN_PHRASES.get(feat, feat.lower()) for feat, _ in top]
+
+    if not phrases:
+        return "No detailed explanation is available for this prediction."
+
+    # Build sentence
+    if risk_score < 30:
+        prefix = "This flight has a low delay risk."
+        if phrases:
+            prefix += f" Minor contributing factors include {phrases[0]}."
+        return prefix
+
+    if len(phrases) == 1:
+        factors_str = phrases[0]
+    elif len(phrases) == 2:
+        factors_str = f"{phrases[0]} and {phrases[1]}"
+    else:
+        factors_str = f"{phrases[0]}, {phrases[1]}, and {phrases[2]}"
+
+    if predicted_delay_min > 0:
+        delay_str = f" of approximately {predicted_delay_min} minutes"
+    else:
+        delay_str = ""
+
+    return (
+        f"This flight is predicted to be delayed{delay_str} mainly due to "
+        f"{factors_str}. "
+        f"These factors were identified by the AI model as the strongest "
+        f"contributors to the delay risk."
+    )
+
+# ── In-memory prediction cache (TTL = 5 minutes, max 512 entries) ─────────
 _prediction_cache: TTLCache = TTLCache(maxsize=512, ttl=300)
+
+# ── Model state (loaded once at startup) ──────────────────────────────────
+_model = None
+_explainer = None
+_regressor = None
 
 
 # ── Model loading ─────────────────────────────────────────────────────────
 
 def load_model():
     """
-    Load the trained sklearn Pipeline (StandardScaler + XGBRegressor) from
-    delay_prediction_model.pkl — the model produced by train_v2.py.
-    Also loads the feature column list from feature_columns_v2.json sidecar
-    (falls back to feature_columns.json for legacy V1, then to _DEFAULT_FEATURE_COLUMNS).
-    Thread-safe — called at startup and after training (hot-reload).
+    Load XGBoost model + SHAP explainer from disk.
+    Called ONCE at application startup via main.py @app.on_event("startup").
     """
-    global _model, _explainer, _regressor, _feature_columns, _FEAT_COLS_PATH
+    global _model, _explainer, _regressor
 
-    with _lock:
-        # Priority 1: sklearn pipeline (V2 regression model)
-        _PKL_PATH = _MODEL_DIR / "delay_prediction_model.pkl"
-        if _PKL_PATH.exists():
-            try:
-                import joblib
-                _model = joblib.load(str(_PKL_PATH))
-                _regressor = _model
-                logger.info(f"Sklearn pipeline loaded from {_PKL_PATH}")
-            except Exception as e:
-                logger.warning(f"sklearn pipeline loading failed: {e} — using rule-based")
-                _model = None
-                _regressor = None
-        elif _CLASSIFIER_PATH.exists():
-            try:
-                import xgboost as xgb
-                _model = xgb.XGBClassifier()
-                _model._estimator_type = "classifier"
-                _model.load_model(str(_CLASSIFIER_PATH))
-                logger.info(f"XGBoost classifier loaded from {_CLASSIFIER_PATH}")
-            except Exception as e:
-                logger.warning(f"XGBoost loading failed: {e} — using rule-based")
-                _model = None
-        else:
-            logger.info("No model file found — using rule-based fallback")
-            return
+    model_dir = Path(settings.MODEL_DIR)
+    classifier_path = model_dir / "delay_classifier.json"
+    regressor_path   = model_dir / "delay_regressor.json"
+    explainer_path   = model_dir / "shap_explainer.pkl"
 
-        if _EXPLAINER_PATH.exists():
-            try:
-                import joblib
-                _explainer = joblib.load(str(_EXPLAINER_PATH))
-            except Exception:
-                _explainer = None
+    if not classifier_path.exists():
+        logger.info(f" No model found at {classifier_path} -- using rule-based fallback")
+        return
 
-        # Feature column sidecar: prefer V2, fall back to V1, then hardcoded default
-        v2_sidecar = _MODEL_DIR / "feature_columns_v2.json"
-        v1_sidecar = _MODEL_DIR / "feature_columns.json"
-        sidecar = v2_sidecar if v2_sidecar.exists() else (v1_sidecar if v1_sidecar.exists() else None)
-        if sidecar:
-            try:
-                _feature_columns = json.loads(sidecar.read_text(encoding="utf-8"))
-                logger.info(f"Feature columns loaded from sidecar: {sidecar.name} ({len(_feature_columns)} features)")
-            except Exception as e:
-                logger.warning(f"Sidecar load failed ({e}) — using default columns")
-                _feature_columns = _DEFAULT_FEATURE_COLUMNS[:]
-        else:
-            _feature_columns = _DEFAULT_FEATURE_COLUMNS[:]
+    try:
+        import xgboost as xgb
+        import joblib
 
-        _prediction_cache.clear()
+        _model = xgb.XGBClassifier()
+        _model.load_model(str(classifier_path))
 
-        logger.info(
-            f"Model ready: {len(_feature_columns)} features | "
-            f"SHAP={'yes' if _explainer else 'no'}"
-        )
+        if regressor_path.exists():
+            _regressor = xgb.XGBRegressor()
+            _regressor.load_model(str(regressor_path))
+
+        if explainer_path.exists():
+            _explainer = joblib.load(str(explainer_path))
+
+        logger.info("AI model loaded at startup (XGBoost + SHAP)")
+    except Exception as e:
+        logger.warning(f" Model loading failed: {e} -- switching to rule-based fallback")
+        _model = None
 
 
-# ── Feature extraction ────────────────────────────────────────────────────
-
-def _extract_features(features_obj, cols: list) -> np.ndarray:
-    """Extract feature array from SQLAlchemy model or dict. NaN for missing values."""
+def _extract_features(features_obj) -> np.ndarray:
+    """Extract feature array from SQLAlchemy model or dict."""
     if isinstance(features_obj, dict):
-        values = [
-            float(features_obj[col]) if features_obj.get(col) is not None else np.nan
-            for col in cols
-        ]
+        values = [float(features_obj.get(col, 0)) for col in FEATURE_COLUMNS]
     else:
-        values = [
-            float(getattr(features_obj, col)) if getattr(features_obj, col, None) is not None else np.nan
-            for col in cols
-        ]
-    return np.array([values], dtype=np.float32)
+        values = [float(getattr(features_obj, col, 0)) for col in FEATURE_COLUMNS]
+    return np.array([values])
 
 
 def _cache_key(features: np.ndarray) -> str:
-    safe = np.nan_to_num(features, nan=0.0)
-    return hashlib.md5(safe.tobytes()).hexdigest()
+    """Stable hash of feature vector for cache lookup."""
+    return hashlib.md5(features.tobytes()).hexdigest()
 
 
 # ── Rule-based fallback ───────────────────────────────────────────────────
 
-def _rule_based(features: np.ndarray, cols: list) -> tuple[float, int, dict]:
-    """
-    Rule-based fallback using V2 feature set.
-    Triggered when ML model is unavailable.
-    Returns a heuristic delay estimate.
-    """
-    fd = dict(zip(cols, features[0]))
+def _rule_based_prediction(features: np.ndarray) -> tuple[float, int, dict]:
+    f = features[0]
+    fd = dict(zip(FEATURE_COLUMNS, f))
 
-    route_avg = float(fd.get("route_avg_delay_hist", 0.0) or 0.0)
-    airline_avg = float(fd.get("airline_avg_delay_hist", 0.0) or 0.0)
-    hour_avg = float(fd.get("hour_avg_delay_hist", 0.0) or 0.0)
+    weather_sev = float(fd["weather_severity"])
+    congestion  = float(fd["congestion_level"])
+    reliability = float(fd["airline_reliability"])
+    hist_rate   = float(fd["historical_delay_rate"])
 
-    base_delay = 0.0
-    if route_avg > 0 or airline_avg > 0 or hour_avg > 0:
-        weights = [0.5, 0.3, 0.2]
-        signals = [route_avg, airline_avg, hour_avg]
-        base_delay = sum(w * s for w, s in zip(weights, signals))
-    else:
-        dep_hour = float(fd.get("dep_hour", 12) or 12)
-        is_peak = float(fd.get("is_peak_hour", 0) or 0)
-        is_weekend = float(fd.get("is_weekend", 0) or 0)
-        base_delay = 22.0
-        if is_peak:
-            base_delay += 5.0
-        if not is_weekend:
-            base_delay += 2.0
+    risk = (
+        3.0
+        + weather_sev * 28.0
+        + congestion  * 15.0
+        + (1.0 - reliability) * 18.0
+        + hist_rate * 10.0
+    )
+    risk = min(max(risk, 0), 100)
 
-    base_delay = max(0.0, min(_P99_CLIP, base_delay))
-    risk = min(100.0, (base_delay / 60.0) * 100.0)
-    predicted_delay = int(round(base_delay))
+    predicted_delay = 0
+    if risk > 40:
+        mix = weather_sev * 0.5 + congestion * 0.3 + (1 - reliability) * 0.2
+        predicted_delay = int(15 + mix * 100)
 
     contributions = {
-        "Route Historical Delay": round(route_avg, 2),
-        "Airline Historical Delay": round(airline_avg, 2),
-        "Hour Historical Delay": round(hour_avg, 2),
-        "Time of Day": round(float(fd.get("dep_hour", 0) or 0) / 24.0 * 5.0, 2),
+        "Weather Severity":   round(weather_sev * 28.0, 2),
+        "Airport Congestion": round(congestion * 15.0, 2),
+        "Airline Reliability":round((1.0 - reliability) * 18.0, 2),
+        "Route History":      round(hist_rate * 10.0, 2),
+        "Time of Day":        round(float(fd["hour_of_day"]) / 24.0 * 5.0, 2),
     }
-
     return risk, predicted_delay, contributions
 
 
-def _compute_real_shap(model, features: np.ndarray, cols: list) -> dict:
-    """
-    Compute real SHAP values using shap.TreeExplainer on the XGBoost regressor
-    inside the sklearn Pipeline.
+# ── ML-based prediction ───────────────────────────────────────────────────
 
-    Returns a dict: {
-        "base_value": float,
-        "feature_contributions": {
-            "<Human Label>": {"shap": float, "value": float}
-        },
-        "narrative": str  (human-readable explanation for airport admins)
-    }
+def _ml_prediction(features: np.ndarray) -> tuple[float, int, dict]:
+    proba = _model.predict_proba(features)[0]
+    risk_score = float(proba[1]) * 100
 
-    Falls back gracefully if shap is not installed or the model is not XGBoost.
-    """
-    import shap
-    from sklearn.pipeline import Pipeline as SklearnPipeline
-
-    result = {"base_value": None, "feature_contributions": {}, "narrative": ""}
-
-    try:
-        if not isinstance(model, SklearnPipeline):
-            return result
-
-        scaler    = model.named_steps.get("scaler")
-        regressor = model.named_steps.get("regressor")
-        if regressor is None or scaler is None:
-            return result
-
-        # Scale the input (SHAP must receive the same transformed input as the regressor)
-        X_scaled = scaler.transform(features)
-
-        # TreeExplainer works directly on tree models — no background data needed
-        explainer  = shap.TreeExplainer(regressor)
-        shap_vals  = explainer.shap_values(X_scaled)   # shape: (1, n_features)
-        base_val   = float(explainer.expected_value)
-        sv         = shap_vals[0]                       # shape: (n_features,)
-
-        contributions = {}
-        for i, col in enumerate(cols):
-            label = FEATURE_LABELS.get(col, col)
-            raw   = float(features[0][i]) if i < features.shape[1] else 0.0
-            contributions[label] = {
-                "shap":  round(float(sv[i]), 4),
-                "value": round(raw, 4),
-            }
-
-        result["base_value"]            = round(base_val, 4)
-        result["feature_contributions"] = contributions
-        result["narrative"]             = _generate_narrative(contributions, base_val)
-
-    except ImportError:
-        logger.debug("[SHAP] shap library not installed — skipping real SHAP")
-    except Exception as e:
-        logger.warning(f"[SHAP] Real SHAP computation failed: {e}")
-
-    return result
-
-
-def _generate_narrative(contributions: dict, base_value: float) -> str:
-    """
-    Generate a human-readable explanation sentence from SHAP values.
-
-    Example output:
-        "This flight has elevated delay risk mainly because the route historically
-         has frequent delays (+8.3 min) and the departure hour is usually congested
-         (+5.1 min). The airline is performing well (-3.2 min baseline offset)."
-    """
-    # Sort by absolute SHAP impact, descending
-    sorted_contrib = sorted(
-        contributions.items(),
-        key=lambda x: abs(x[1]["shap"]),
-        reverse=True,
+    predicted_delay = (
+        max(0, int(_regressor.predict(features)[0]))
+        if _regressor is not None
+        else int(risk_score * 1.5)
     )
 
-    # Separate positive (delay-increasing) and negative (delay-reducing)
-    drivers     = [(k, v) for k, v in sorted_contrib if v["shap"] > 0.5]
-    mitigators  = [(k, v) for k, v in sorted_contrib if v["shap"] < -0.5]
-
-    parts = []
-
-    if drivers:
-        top_drivers = drivers[:3]
-        driver_text = ", ".join(
-            f"{k} (+{v['shap']:.1f} min)" for k, v in top_drivers
-        )
-        parts.append(f"This flight has elevated delay risk mainly because: {driver_text}")
-    else:
-        parts.append("No strong delay risk factors were detected for this flight.")
-
-    if mitigators:
-        top_mit = mitigators[:2]
-        mit_text = ", ".join(
-            f"{k} ({v['shap']:.1f} min)" for k, v in top_mit
-        )
-        parts.append(f"Positive factors reducing delay risk: {mit_text}.")
-
-    if base_value > 10:
-        parts.append(
-            f"The model's baseline average delay for this type of flight is {base_value:.1f} min."
-        )
-
-    return " ".join(parts)
-
-
-def _ml_prediction(features: np.ndarray, cols: list) -> tuple[float, int, dict]:
-    """
-    Run the sklearn Pipeline or XGBoost model.
-    The sklearn Pipeline (delay_prediction_model.pkl) predicts delay_minutes directly
-    (regression). The risk score is derived from the delay estimate.
-    Real SHAP is computed via shap.TreeExplainer for the regression path.
-    """
-    from sklearn.pipeline import Pipeline as SklearnPipeline
-
-    if isinstance(_model, SklearnPipeline):
-        # Regression pipeline: predicts delay_minutes
-        delay_raw    = float(_model.predict(features)[0])
-        if delay_raw is None or (isinstance(delay_raw, float) and math.isnan(delay_raw)):
-            delay_raw = 0.0
-        delay_raw    = max(0.0, min(_P99_CLIP, delay_raw))
-        # Map delay minutes to a 0-100 risk score:
-        # 0 min → 0%, 15 min → 30%, 30 min → 55%, 60+ min → 85%+
-        risk_score   = min(100.0, delay_raw / 60.0 * 85.0 + (5.0 if delay_raw > 0 else 0))
-        predicted_delay = int(round(delay_raw))
-
-        # Real SHAP explanation (TreeExplainer on the XGBoost regressor)
-        explanation = _compute_real_shap(_model, features, cols)
-
-    else:
-        # XGBoost classifier (legacy path — predict_proba)
-        proba       = _model.predict_proba(features)[0]
-        risk_score  = float(proba[1]) * 100
-        predicted_delay = int(risk_score * 1.5)
-
-        explanation = {"base_value": None, "feature_contributions": {}, "narrative": ""}
-        if _explainer is not None:
-            try:
-                shap_vals = _explainer.shap_values(features)
-                sv = shap_vals[1][0] if isinstance(shap_vals, list) else shap_vals[0]
-                base_value = float(
-                    _explainer.expected_value[1]
-                    if isinstance(_explainer.expected_value, (list, np.ndarray))
-                    else _explainer.expected_value
-                )
-                contributions = {}
-                for i, col in enumerate(cols):
-                    label = FEATURE_LABELS.get(col, col)
-                    raw   = float(features[0][i]) if not np.isnan(features[0][i]) else None
-                    contributions[label] = {
-                        "shap":  round(float(sv[i]), 4),
-                        "value": round(raw, 4) if raw is not None else None,
-                    }
-                explanation["base_value"]            = base_value
-                explanation["feature_contributions"] = contributions
-                explanation["narrative"]             = _generate_narrative(contributions, base_value)
-            except Exception as e:
-                logger.warning(f"SHAP explanation failed: {e}")
-
-    return risk_score, predicted_delay, explanation
-
-
-# ── Persist to DB ─────────────────────────────────────────────────────────
-
-def _persist_prediction(
-    result: PredictionOut,
-    db,
-    flight_id: Optional[int] = None,
-    flight_number: Optional[str] = None,
-):
-    """Write a prediction row to the predictions table (best-effort)."""
-    if db is None:
-        return
-    try:
-        from app.models.models import Prediction
-        row = Prediction(
-            flight_id           = flight_id,
-            flight_number       = flight_number,
-            risk_score          = result.risk_score,
-            predicted_delay_min = result.predicted_delay_min,
-            confidence          = result.confidence,
-            shap_explanation    = result.shap_explanation,
-            model_version       = result.model_version,
-        )
-        db.add(row)
-        db.commit()
-    except Exception as e: # SQLAlchemy exceptions imported locally
-        from sqlalchemy.exc import SQLAlchemyError
-        if not isinstance(e, SQLAlchemyError):
-            raise
-        logger.warning(f"Prediction persistence failed: {e}")
+    contributions: dict = {}
+    if _explainer is not None:
         try:
-            db.rollback()
-        except SQLAlchemyError:
-            pass
+            shap_values = _explainer.shap_values(features)
+            sv = shap_values[1][0] if isinstance(shap_values, list) else shap_values[0]
+            for i, col in enumerate(FEATURE_COLUMNS):
+                label = FEATURE_LABELS.get(col, col)
+                contributions[label] = round(float(sv[i]), 4)
+        except Exception as e:
+            logger.warning(f"  SHAP explanation failed: {e}")
+    else:
+        importances = _model.feature_importances_
+        for i, col in enumerate(FEATURE_COLUMNS):
+            label = FEATURE_LABELS.get(col, col)
+            contributions[label] = round(float(importances[i] * features[0][i]), 4)
+
+    return risk_score, predicted_delay, contributions
 
 
 # ── Public API ────────────────────────────────────────────────────────────
 
-def _run_prediction(
-    features_obj,
-    db=None,
-    flight_id: Optional[int] = None,
-    flight_number: Optional[str] = None,
-) -> PredictionOut:
-    cols = _feature_columns
-
-    # ── Feature enrichment ────────────────────────────────────────────────
-    # When the incoming dict comes from live_feature_builder (7 keys) but
-    # the loaded model expects 16 features, we must enrich on the fly.
-    if isinstance(features_obj, dict):
-        enriched = dict(features_obj)
-
-        # Add is_peak_hour if missing (computed from dep_hour)
-        if "is_peak_hour" in cols and "is_peak_hour" not in enriched:
-            h = int(enriched.get("dep_hour") or 0)
-            enriched["is_peak_hour"] = 1 if (7 <= h <= 9 or 17 <= h <= 20) else 0
-
-        # Add rolling features if any are missing and db is available
-        rolling_needed = [c for c in cols if c not in enriched and c in (
-            "route_avg_delay_hist", "airline_avg_delay_hist", "hour_avg_delay_hist",
-            "route_flight_count", "airline_flight_count", "airport_departure_count",
-            "dep_month", "dep_day_of_week",
-        )]
-        if rolling_needed and db is not None:
-            try:
-                from app.ml.rolling_features import get_rolling_features_for_inference
-                from datetime import date
-                dep_iata    = enriched.get("dep_iata") or enriched.get("dep_airport")
-                arr_iata    = enriched.get("arr_iata") or enriched.get("arr_airport")
-                airline_iata = enriched.get("airline_iata") or enriched.get("airline")
-                dep_hour    = int(enriched.get("dep_hour") or 0)
-                rolling = get_rolling_features_for_inference(
-                    dep_iata=dep_iata, arr_iata=arr_iata,
-                    airline_iata=airline_iata, dep_hour=dep_hour,
-                    flight_date=date.today(), db=db,
-                )
-                for k, v in rolling.items():
-                    if k not in enriched:
-                        enriched[k] = v
-            except Exception as enrich_err:
-                logger.debug(f"[PredictionService] Rolling feature enrichment failed: {enrich_err}")
-                # Fill missing rolling features with 0
-                for c in rolling_needed:
-                    enriched.setdefault(c, 0.0)
-
-        features_obj = enriched
-    # ──────────────────────────────────────────────────────────────────
-
-    features = _extract_features(features_obj, cols)
+def _run_prediction(features: np.ndarray, source: str = "ml") -> PredictionOut:
+    """Run prediction with caching."""
     key = _cache_key(features)
 
     if key in _prediction_cache:
+        logger.debug(f" prediction key={key[:8]}")
         return _prediction_cache[key]
 
-    with _lock:
-        if _model is not None:
-            try:
-                risk, delay, explanation = _ml_prediction(features, cols)
-                version = "xgboost-v10"
-            except Exception as e:
-                logger.warning(f"ML prediction failed (shape mismatch?): {e} — falling back to rule-based")
-                risk, delay, contributions = _rule_based(features, cols)
-                explanation = {"base_value": None, "feature_contributions": {
-                    k: {"shap": v, "value": None} for k, v in contributions.items()
-                }}
-                version = "rule-based-v1-fallback"
-        else:
-            risk, delay, contributions = _rule_based(features, cols)
-            explanation = {"base_value": None, "feature_contributions": {
-                k: {"shap": v, "value": None} for k, v in contributions.items()
-            }}
-            version = "rule-based-v1"
+    if _model is not None:
+        risk, delay, explanation = _ml_prediction(features)
+        version = "xgboost-v1"
+    else:
+        risk, delay, explanation = _rule_based_prediction(features)
+        version = "rule-based-v1"
+
+    sorted_exp = dict(sorted(explanation.items(), key=lambda x: abs(x[1]), reverse=True))
+    human_text = generate_explanation_text(sorted_exp, delay, risk)
 
     result = PredictionOut(
-        risk_score          = round(risk, 2),
-        predicted_delay_min = delay,
-        confidence          = round(min(risk / 100, 1.0), 3),
-        shap_explanation    = explanation,
-        model_version       = version,
-        predicted_at        = datetime.utcnow(),
+        risk_score=round(risk, 2),
+        predicted_delay_min=delay,
+        confidence=round(min(risk / 100, 1.0), 3),
+        shap_explanation=sorted_exp,
+        explanation_text=human_text,
+        model_version=version,
     )
 
     _prediction_cache[key] = result
-
-    _persist_prediction(result, db, flight_id=flight_id, flight_number=flight_number)
-
     return result
 
 
-def predict_flight(features_obj, db=None, flight_id: Optional[int] = None) -> PredictionOut:
+def predict_flight(features_obj) -> PredictionOut:
     """Generate prediction from a FlightFeature ORM object."""
-    return _run_prediction(features_obj, db=db, flight_id=flight_id)
+    return _run_prediction(_extract_features(features_obj))
 
 
-def predict_from_dict(
-    features_dict: dict,
-    db=None,
-    flight_id: Optional[int] = None,
-    flight_number: Optional[str] = None,
-) -> PredictionOut:
-    """Generate prediction from a feature dict."""
-    return _run_prediction(
-        features_dict, db=db, flight_id=flight_id, flight_number=flight_number
-    )
-
-
-# ── Batch predictions ─────────────────────────────────────────────────────
-
-def run_batch_predictions(db) -> int:
-    """
-    Generate and persist predictions for flights scheduled in the next 24h
-    that have features but no prediction in the last hour.
-
-    Returns:
-        Number of predictions generated.
-    """
-    from app.models.models import Flight, FlightFeature, Prediction
-
-    now          = datetime.utcnow()
-    future_cut   = now + timedelta(hours=24)
-    recent_cut   = now - timedelta(hours=1)
-
-    # Flight IDs with a recent prediction
-    recent_ids = (
-        db.query(Prediction.flight_id)
-        .filter(
-            Prediction.flight_id.isnot(None),
-            Prediction.predicted_at >= recent_cut,
-        )
-        .subquery()
-    )
-
-    pairs = (
-        db.query(Flight, FlightFeature)
-        .join(FlightFeature, FlightFeature.flight_id == Flight.id)
-        .filter(
-            Flight.scheduled_departure.between(now, future_cut),
-            Flight.id.notin_(recent_ids.select()),
-        )
-        .all()
-    )
-
-    count = 0
-    for flight, feat in pairs:
-        try:
-            predict_flight(feat, db=db, flight_id=flight.id)
-            count += 1
-        except (ValueError, TypeError, RuntimeError) as e:
-            logger.warning(f"Batch prediction failed for flight {flight.id}: {e}")
-
-    logger.info(f"Batch predictions complete: {count} generated")
-    return count
+def predict_from_dict(features_dict: dict) -> PredictionOut:
+    """Generate prediction from a dictionary of features."""
+    return _run_prediction(_extract_features(features_dict))

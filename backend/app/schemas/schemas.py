@@ -7,8 +7,6 @@ from pydantic import BaseModel, field_validator
 from typing import Optional, Literal
 
 
-
-
 # ── Airport ──────────────────────────────────────────────────
 
 class AirportOut(BaseModel):
@@ -52,9 +50,6 @@ class FlightListOut(FlightBase):
     airline: AirlineOut
     origin_airport: AirportOut
     dest_airport: AirportOut
-    gate: Optional[str] = None
-    terminal: Optional[str] = None
-    gate_source: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -65,9 +60,6 @@ class FlightDetailOut(FlightListOut):
     actual_arrival: Optional[datetime] = None
     prediction: Optional["PredictionOut"] = None
     passenger_rights: Optional[list["PassengerRightOut"]] = None
-    delay_cause: Optional["DelayCause"] = None
-    displayed_dep_source: Optional[str] = None
-    displayed_arr_source: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -101,6 +93,7 @@ class PredictionOut(BaseModel):
     predicted_delay_min: int
     confidence: float
     shap_explanation: Optional[dict] = None
+    explanation_text: Optional[str] = None
     model_version: Optional[str] = None
     predicted_at: Optional[datetime] = None
 
@@ -172,40 +165,6 @@ class PassengerRightOut(BaseModel):
     description_en: str
     description_fr: Optional[str] = None
     compensation_amount: Optional[str] = None
-    is_active: bool = True
-    valid_from: Optional[date] = None
-    valid_to: Optional[date] = None
-    regulation_version: Optional[str] = None
-    last_updated_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
-
-
-class CompensationLimitOut(BaseModel):
-    region: str
-    category: str
-    label_en: str
-    label_fr: Optional[str] = None
-    label_ar: Optional[str] = None
-    amount_eur: Optional[float] = None
-    amount_usd: Optional[float] = None
-    amount_cad: Optional[float] = None
-    amount_gbp: Optional[float] = None
-    source_sdr: Optional[float] = None
-    is_active: bool = True
-    regulation_version: Optional[str] = None
-    regulation_source: Optional[str] = None
-    last_updated_at: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
-
-
-class CompensationConfigOut(BaseModel):
-    regulations: list[PassengerRightOut]
-    limits: list[CompensationLimitOut]
-    generated_at: datetime
 
     class Config:
         from_attributes = True
@@ -229,37 +188,19 @@ class UserOut(BaseModel):
     airport_iata: Optional[str] = None
     must_change_password: int = 0
     profile_complete: int = 0
-    is_approved: bool = False
     personal_email: Optional[str] = None
-    employee_id: Optional[str] = None
     phone_number: Optional[str] = None
     date_of_birth: Optional[date] = None
-    nationality: Optional[str] = None
-    gender: Optional[str] = None
-    residential_address: Optional[str] = None
-    emergency_contact_name: Optional[str] = None
-    emergency_contact_phone: Optional[str] = None
-    emergency_contact_relationship: Optional[str] = None
-    cin_number: Optional[str] = None
-    cin_document_url: Optional[str] = None
-    cin_document_back_url: Optional[str] = None
-    passport_number: Optional[str] = None
-    passport_document_url: Optional[str] = None
-    passport_expiry_date: Optional[date] = None
+    id_type: Optional[str] = None
+    id_number: Optional[str] = None
+    id_document_url: Optional[str] = None
     profile_photo_url: Optional[str] = None
     id_document_status: Optional[str] = None
     id_document_rejection_reason: Optional[str] = None
-    rejected_fields: Optional[list[str]] = None
-    correction_attempts: int = 0
-    onboarding_status: Optional[str] = None
-    rejection_reasons: Optional[str] = None
-    profile_edit_unlocked: bool = False
-    profile_unlock_identity: bool = False
-    profile_unlock_passport: bool = False
-    profile_unlock_cin_doc: bool = False
-    profile_unlock_contact: bool = False
+    id_fields_unlocked: int = 0
+    correction_request_pending: Optional[bool] = None
 
-    @field_validator("id_document_status", "gender", "emergency_contact_relationship", mode="before")
+    @field_validator("id_type", "id_document_status", mode="before")
     @classmethod
     def _coerce_enums(cls, v):
         if v is None:
@@ -280,92 +221,36 @@ class TokenOut(BaseModel):
     token_type: str = "bearer"
     must_change_password: bool = False
     profile_complete: bool = False
-    is_approved: bool = False
     user: UserOut
 
 
 class ProfileCompleteRequest(BaseModel):
     phone_number: str
-    date_of_birth: str  # YYYY-MM-DD
-    nationality: str
-    gender: Literal["Male", "Female"]
-    residential_address: str
-    emergency_contact_name: str
-    emergency_contact_phone: str
-    emergency_contact_relationship: Literal["Parent", "Spouse", "Sibling", "Friend", "Other"]
-    cin_number: str
-    cin_document_url: str
-    cin_document_back_url: str
-    passport_number: str
-    passport_document_url: str
-    passport_expiry_date: str  # YYYY-MM-DD
-    profile_photo_url: str
+    date_of_birth: str           # ISO date string YYYY-MM-DD
+    id_type: str                 # 'CIN' or 'Passport'
+    id_number: str
+    id_document_url: str         # base64 data URL
+    profile_photo_url: str       # base64 data URL
 
 
 class PatchMySettingsRequest(BaseModel):
     phone_number: Optional[str] = None
     profile_photo_url: Optional[str] = None
-    full_name: Optional[str] = None
-    date_of_birth: Optional[str] = None
-    gender: Optional[Literal["Male", "Female", "Other", "na"]] = None
-    nationality: Optional[str] = None
-    residential_address: Optional[str] = None
-    emergency_contact_name: Optional[str] = None
-    emergency_contact_phone: Optional[str] = None
-    emergency_contact_relationship: Optional[
-        Literal["Parent", "Spouse", "Sibling", "Friend", "Other"]
-    ] = None
-    cin_number: Optional[str] = None
-    cin_document_url: Optional[str] = None
-    cin_document_back_url: Optional[str] = None
-    passport_number: Optional[str] = None
-    passport_document_url: Optional[str] = None
-    passport_expiry_date: Optional[str] = None
-
-
-class SuperAdminSelfProfilePatch(BaseModel):
-    """Super admin may update any of their own profile fields (all optional; send only what changes)."""
-
-    full_name: Optional[str] = None
-    phone_number: Optional[str] = None
-    profile_photo_url: Optional[str] = None
-    date_of_birth: Optional[str] = None  # YYYY-MM-DD
-    cin_number: Optional[str] = None
-    cin_document_url: Optional[str] = None
-    cin_document_back_url: Optional[str] = None
-    passport_number: Optional[str] = None
-    passport_document_url: Optional[str] = None
-    passport_expiry_date: Optional[str] = None
-
-
-class SuperAdminAdminProfilePatch(BaseModel):
-    """Super admin: edit another airport admin’s profile (all optional)."""
-
-    full_name: Optional[str] = None
-    personal_email: Optional[str] = None
-    phone_number: Optional[str] = None
-    profile_photo_url: Optional[str] = None
-    date_of_birth: Optional[str] = None
-    nationality: Optional[str] = None
-    gender: Optional[Literal["Male", "Female"]] = None
-    residential_address: Optional[str] = None
-    emergency_contact_name: Optional[str] = None
-    emergency_contact_phone: Optional[str] = None
-    emergency_contact_relationship: Optional[
-        Literal["Parent", "Spouse", "Sibling", "Friend", "Other"]
-    ] = None
-    cin_number: Optional[str] = None
-    cin_document_url: Optional[str] = None
-    cin_document_back_url: Optional[str] = None
-    passport_number: Optional[str] = None
-    passport_document_url: Optional[str] = None
-    passport_expiry_date: Optional[str] = None
 
 
 class IdDocumentReuploadRequest(BaseModel):
-    cin_document_url: Optional[str] = None
-    cin_document_back_url: Optional[str] = None
-    passport_document_url: Optional[str] = None
+    id_document_url: str
+
+
+class CorrectionRequestOut(BaseModel):
+    id: str
+    reason: str
+    status: str
+    super_admin_note: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
 
 
 class AdminReviewDetail(BaseModel):
@@ -374,34 +259,19 @@ class AdminReviewDetail(BaseModel):
     email: str
     personal_email: Optional[str] = None
     airport_iata: Optional[str] = None
-    employee_id: Optional[str] = None
     phone_number: Optional[str] = None
     date_of_birth: Optional[date] = None
-    nationality: Optional[str] = None
-    gender: Optional[str] = None
-    residential_address: Optional[str] = None
-    emergency_contact_name: Optional[str] = None
-    emergency_contact_phone: Optional[str] = None
-    emergency_contact_relationship: Optional[str] = None
-    cin_number: Optional[str] = None
-    cin_document_url: Optional[str] = None
-    cin_document_back_url: Optional[str] = None
-    passport_number: Optional[str] = None
-    passport_document_url: Optional[str] = None
-    passport_expiry_date: Optional[date] = None
+    id_type: Optional[str] = None
+    id_number: Optional[str] = None
+    id_document_url: Optional[str] = None
     profile_photo_url: Optional[str] = None
     id_document_status: Optional[str] = None
     id_document_rejection_reason: Optional[str] = None
-    rejected_fields: Optional[list[str]] = None
-    correction_attempts: int = 0
     profile_complete: int = 0
-    profile_edit_unlocked: bool = False
-    profile_unlock_identity: bool = False
-    profile_unlock_passport: bool = False
-    profile_unlock_cin_doc: bool = False
-    profile_unlock_contact: bool = False
+    id_fields_unlocked: int = 0
+    correction_request: Optional[CorrectionRequestOut] = None
 
-    @field_validator("id_document_status", "gender", "emergency_contact_relationship", mode="before")
+    @field_validator("id_type", "id_document_status", mode="before")
     @classmethod
     def _coerce_enums(cls, v):
         if v is None:
@@ -415,48 +285,20 @@ class AdminReviewDetail(BaseModel):
 class IdReviewRequest(BaseModel):
     action: Literal["approve", "reject"]
     reason: Optional[str] = None
-    rejected_fields: Optional[list[str]] = None
 
 
-class AiAlertGeneratedBody(BaseModel):
-    flight_number: str
-    brief_cause: str = ""
-    recommendation: str = ""
-    risk_pct: int = 0
-    airport_iata: Optional[str] = None  # Required when called by super_admin
-    route: Optional[str] = None
-    delay_formatted: Optional[str] = None
+class MeCorrectionRequestBody(BaseModel):
+    reason: str
 
 
-class AiAlertActionBody(BaseModel):
-    flight_number: str
-    action: Literal["approved", "rejected"]
-    airport_iata: Optional[str] = None  # Required when called by super_admin
-    route: Optional[str] = None
-    delay_formatted: Optional[str] = None
+class CorrectionDismissBody(BaseModel):
+    note: Optional[str] = None
 
 
-class DecideSuggestionBody(BaseModel):
-    suggestion_key: str
-    airport_iata: str
-    suggestion_type: str
-    status: Literal["approved", "rejected"]
-    suggestion_payload: Optional[dict] = None
-
-
-class SuggestionDecisionOut(BaseModel):
-    id: int
-    suggestion_key: str
-    airport_iata: str
-    suggestion_type: str
-    status: str
-    admin_user_id: Optional[int] = None
-    admin_name: Optional[str] = None
-    timestamp: str
-    suggestion_payload: Optional[dict] = None
-
-    class Config:
-        from_attributes = True
+class IdProfileResubmitRequest(BaseModel):
+    id_type: str
+    id_number: str
+    id_document_url: str
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -511,27 +353,17 @@ class MessageReplyOut(BaseModel):
 class MessageOut(BaseModel):
     id: int
     direction: str
-    from_user_id: Optional[int] = None
+    from_user_id: int
     from_user_name: str
-    from_user_airport: Optional[str] = None
-    to_user_id: Optional[int] = None
-    to_user_name: Optional[str] = None
+    from_user_airport: Optional[str]
+    to_user_id: Optional[int]
+    to_user_name: Optional[str]
     category: str
     subject: str
     body: str
     status: str
-    is_read: bool
     created_at: datetime
     updated_at: datetime
-    passenger_name: Optional[str] = None
-    passenger_email: Optional[str] = None
-    airport_code: Optional[str] = None
-    sender_type: str = "internal"
-    assigned_admin_id: Optional[int] = None
-    assigned_admin_name: Optional[str] = None
-    assigned_at: Optional[datetime] = None
-    deleted_by_sender: bool = False
-    deleted_by_recipient: bool = False
     replies: list[MessageReplyOut] = []
 
     class Config:
@@ -543,14 +375,6 @@ class MessageCreate(BaseModel):
     category: str = "general"
     subject: str
     body: str
-
-
-class PublicFeedbackCreate(BaseModel):
-    name: str
-    email: str
-    airport: str
-    subject: str
-    message: str
 
 
 class MessageReplyCreate(BaseModel):

@@ -11,7 +11,7 @@ import { apiGetAdminAnalytics } from '../../services/adminApi';
 type Period = 'weekly' | 'monthly' | 'yearly' | 'custom';
 
 /* ── Lightweight, memoized Bar Chart ── */
-const BarChart = React.memo(({ data, labels }: { data: number[]; labels: string[] }) => {
+const BarChart = React.memo(({ data, labels, onTimeLabel }: { data: number[]; labels: string[]; onTimeLabel: string }) => {
     const max = Math.max(1, ...data);
     
     // Create 4 subtle horizontal grid lines
@@ -40,7 +40,7 @@ const BarChart = React.memo(({ data, labels }: { data: number[]; labels: string[
                 return (
                     <div 
                         key={i} 
-                        title={`${labels[i]}: ${v}% on-time`} // Native hover tooltip
+                        title={`${labels[i]}: ${v}% ${onTimeLabel}`} // Native hover tooltip
                         style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, cursor: 'crosshair' }}
                     >
                         <div style={{ fontSize: '0.7rem', color: 'var(--adm-text-muted)', fontWeight: 600 }}>{v}%</div>
@@ -96,7 +96,7 @@ export default function AdminAnalytics() {
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const [timeAgoStr, setTimeAgoStr] = useState<string>('Just now');
+    const [timeAgoStr, setTimeAgoStr] = useState<string>('');
     const loadIntervalRef = useRef<number | null>(null);
     const timeIntervalRef = useRef<number | null>(null);
 
@@ -139,19 +139,20 @@ export default function AdminAnalytics() {
 
     // "Last updated X sec ago" logic
     useEffect(() => {
-        if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
-        timeIntervalRef.current = window.setInterval(() => {
-            if (!lastUpdated) return;
+        if (!lastUpdated) { setTimeAgoStr(t('justNow')); return; }
+        const update = () => {
             const diff = Math.floor((new Date().getTime() - lastUpdated.getTime()) / 1000);
-            if (diff < 10) setTimeAgoStr('Just now');
-            else if (diff < 60) setTimeAgoStr(`${diff} sec ago`);
-            else setTimeAgoStr(`${Math.floor(diff / 60)} min ago`);
-        }, 1000);
-
+            if (diff < 10) setTimeAgoStr(t('justNow'));
+            else if (diff < 60) setTimeAgoStr(`${Math.floor(diff)} ${t('secAgo')}`);
+            else setTimeAgoStr(`${Math.floor(diff / 60)} ${t('minAgo')}`);
+        };
+        update();
+        if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
+        timeIntervalRef.current = window.setInterval(update, 1000);
         return () => {
             if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
         };
-    }, [lastUpdated]);
+    }, [lastUpdated, t]);
 
     // ── Mapping Data to UI ──
     const seriesData = data?.dailyPerformance?.map((d: any) => Math.round(d.onTimeRate)) || [];
@@ -171,26 +172,26 @@ export default function AdminAnalytics() {
     const isSkeleton = loading && !data;
 
     const stats = [
-        { l: 'Total Flights', v: data?.summary?.totalFlights || 0, c: COLOR_NEUTRAL, icon: Plane },
-        { l: 'Avg On-Time', v: data?.summary?.onTimeRate != null ? `${data.summary.onTimeRate.toFixed(1)}%` : 'N/A', c: COLOR_SUCCESS, icon: CheckCircle },
-        { l: 'Active Flights', v: data?.summary?.activeFlights || 0, c: COLOR_ACTIVE, icon: Activity },
-        { l: 'Landed Flights', v: data?.summary?.landedFlights || 0, c: '#4ADE80', icon: Plane },
-        { l: 'Scheduled Flights', v: data?.summary?.scheduledFlights || 0, c: 'var(--adm-text-sub)', icon: Calendar },
-        { l: 'Delayed Flights', v: data?.summary?.delayedFlights || 0, c: COLOR_WARNING, icon: Clock },
-        { l: 'Cancellations', v: data?.summary?.cancelledFlights || 0, c: COLOR_ERROR, icon: AlertTriangle },
+        { l: t('admin_analytics_total_flights'), v: data?.summary?.totalFlights || 0, c: COLOR_NEUTRAL, icon: Plane },
+        { l: t('admin_analytics_avg_on_time'), v: data?.summary?.onTimeRate != null ? `${data.summary.onTimeRate.toFixed(1)}%` : t('notAvailable'), c: COLOR_SUCCESS, icon: CheckCircle },
+        { l: t('admin_analytics_active_flights'), v: data?.summary?.activeFlights || 0, c: COLOR_ACTIVE, icon: Activity },
+        { l: t('admin_analytics_landed_flights'), v: data?.summary?.landedFlights || 0, c: '#4ADE80', icon: Plane },
+        { l: t('admin_analytics_scheduled_flights'), v: data?.summary?.scheduledFlights || 0, c: 'var(--adm-text-sub)', icon: Calendar },
+        { l: t('admin_analytics_delayed_flights'), v: data?.summary?.delayedFlights || 0, c: COLOR_WARNING, icon: Clock },
+        { l: t('admin_analytics_cancellations'), v: data?.summary?.cancelledFlights || 0, c: COLOR_ERROR, icon: AlertTriangle },
     ];
 
     const delayFactors = data?.delayFactors || [];
 
     const routes = data?.routeAnalytics || [];
     const maxRouteFlights = routes[0]?.totalFlights || 1;
-    const headerLabel = period === 'yearly' ? 'On-time rate over time' : 'On-time rate by day';
+    const headerLabel = period === 'yearly' ? t('admin_analytics_chart_title_yearly') : t('admin_analytics_chart_title_daily');
 
     const TABS: { k: Period; l: string }[] = [
-        { k: 'weekly', l: 'Weekly' },
-        { k: 'monthly', l: 'Monthly' },
-        { k: 'yearly', l: 'Yearly' },
-        { k: 'custom', l: 'Custom' },
+        { k: 'weekly', l: t('admin_analytics_tab_weekly') },
+        { k: 'monthly', l: t('admin_analytics_tab_monthly') },
+        { k: 'yearly', l: t('admin_analytics_tab_yearly') },
+        { k: 'custom', l: t('admin_analytics_tab_custom') },
     ];
 
     return (
@@ -199,9 +200,9 @@ export default function AdminAnalytics() {
             <div className="admin-page__header">
                 <div>
                     <h1 className="admin-page__title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <TrendingUp size={22} style={{ color: 'var(--adm-accent)' }} /> Analytics
+                        <TrendingUp size={22} style={{ color: 'var(--adm-accent)' }} /> {t('analytics')}
                     </h1>
-                    <p className="admin-page__subtitle">Real-time operational metrics · {selectedAirport.name} ({selectedAirport.iata})</p>
+                    <p className="admin-page__subtitle">{t('admin_analytics_subtitle_prefix')} {selectedAirport.name} ({selectedAirport.iata})</p>
                 </div>
                 <div style={{ display: 'flex', gap: '1.25rem', alignItems: 'center' }}>
                     {/* Live pulse indicator */}
@@ -211,7 +212,7 @@ export default function AdminAnalytics() {
                             <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', background: COLOR_SUCCESS, animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite' }} />
                         </div>
                         <span style={{ fontSize: '0.78rem', color: 'var(--adm-text-sub)', fontWeight: 500 }}>
-                            Live · <span style={{ opacity: 0.8 }}>{timeAgoStr}</span>
+                            {t('live_label')} · <span style={{ opacity: 0.8 }}>{timeAgoStr}</span>
                         </span>
                     </div>
 
@@ -221,7 +222,7 @@ export default function AdminAnalytics() {
                         style={{ padding: '0.4rem 0.8rem' }}
                     >
                         <RefreshCw size={14} className={loading ? 'su-spin' : ''} style={{ marginRight: 6 }} />
-                        <span style={{ fontSize: '0.8rem' }}>Refresh</span>
+                        <span style={{ fontSize: '0.8rem' }}>{t('refresh')}</span>
                     </button>
                 </div>
             </div>
@@ -244,7 +245,7 @@ export default function AdminAnalytics() {
                         <Activity size={22} color={COLOR_SUCCESS} />
                     </div>
                     <div>
-                        <h4 style={{ margin: '0 0 6px 0', fontSize: '0.9rem', color: COLOR_SUCCESS, fontWeight: 700 }}>Executive Summary</h4>
+                        <h4 style={{ margin: '0 0 6px 0', fontSize: '0.9rem', color: COLOR_SUCCESS, fontWeight: 700 }}>{t('admin_analytics_exec_summary')}</h4>
                         <p style={{ margin: 0, fontSize: '0.92rem', color: 'var(--adm-text)', lineHeight: 1.6 }}>
                             {data.executiveSummary.split(/(strong|elevated delays|limited sample|uncategorized|\d+\.\d+%|\b[A-Z]{3}→[A-Z]{3}\b|\d+ tracked flights|\d+ predictions)/g).map((part: string, i: number) => 
                                 part.includes('%') || part.includes('→') || part.match(/\d+/) || part.includes('strong') || part.includes('elevated') || part.includes('limited') ? (
@@ -256,7 +257,7 @@ export default function AdminAnalytics() {
                         </p>
                         {data?.summary?.limitedSampleSize && (
                             <div style={{ marginTop: '0.75rem', fontSize: '0.8rem', color: COLOR_WARNING, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                <AlertTriangle size={14} /> Limited operational sample size may affect accuracy.
+                                <AlertTriangle size={14} /> {t('admin_analytics_limited_sample')}
                             </div>
                         )}
                     </div>
@@ -306,7 +307,7 @@ export default function AdminAnalytics() {
                                 {isSkeleton ? '…' : s.v}
                             </div>
                             <span style={{ fontSize: '0.7rem', color: 'var(--adm-text-muted)' }}>
-                                Selected period
+                                {t('admin_analytics_selected_period')}
                             </span>
                         </div>
                     </div>
@@ -319,26 +320,26 @@ export default function AdminAnalytics() {
                     <div>
                         <h3 style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--adm-text)', marginBottom: 2, marginTop: 0 }}>{headerLabel}</h3>
                         <p style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted)', margin: 0 }}>
-                            {seriesData.length} data points
+                            {t('admin_analytics_data_points').replace('{n}', String(seriesData.length))}
                         </p>
                     </div>
                     <div style={{ display: 'flex', gap: 14, fontSize: '0.78rem' }}>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--adm-text-sub)' }}>
-                            <span style={{ width: 10, height: 10, borderRadius: 2, background: COLOR_SUCCESS }} /> High ≥ 80%
+                            <span style={{ width: 10, height: 10, borderRadius: 2, background: COLOR_SUCCESS }} /> {t('admin_analytics_legend_high')}
                         </span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--adm-text-sub)' }}>
-                            <span style={{ width: 10, height: 10, borderRadius: 2, background: COLOR_WARNING }} /> Med &gt; 50%
+                            <span style={{ width: 10, height: 10, borderRadius: 2, background: COLOR_WARNING }} /> {t('admin_analytics_legend_medium')}
                         </span>
                         <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--adm-text-sub)' }}>
-                            <span style={{ width: 10, height: 10, borderRadius: 2, background: COLOR_ERROR }} /> Low ≤ 50%
+                            <span style={{ width: 10, height: 10, borderRadius: 2, background: COLOR_ERROR }} /> {t('admin_analytics_legend_low')}
                         </span>
                     </div>
                 </div>
                 {seriesData.length > 0 ? (
-                    <BarChart data={seriesData} labels={seriesLabels} />
+                    <BarChart data={seriesData} labels={seriesLabels} onTimeLabel={t('admin_analytics_bar_on_time')} />
                 ) : (
                     <div style={{ height: 220, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--adm-text-muted)', fontSize: '0.85rem' }}>
-                        {loading ? 'Loading operational data...' : 'No operational analytics available for the selected period.'}
+                        {loading ? t('admin_analytics_loading_data') : t('admin_analytics_no_data_period')}
                     </div>
                 )}
             </div>
@@ -349,12 +350,12 @@ export default function AdminAnalytics() {
                 {/* Delay Causes */}
                 <div className="admin-card" style={{ padding: '1.5rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                        <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--adm-text)', margin: 0 }}>Inferred Delay Factors</h3>
+                        <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--adm-text)', margin: 0 }}>{t('admin_analytics_delay_factors_title')}</h3>
                         <AlertTriangle size={16} color="var(--adm-text-muted)" />
                     </div>
                     {delayFactors.length === 1 && delayFactors[0].label === 'Uncategorized Delays' ? (
                         <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: 8, color: 'var(--adm-text-sub)', fontSize: '0.85rem', lineHeight: 1.5 }}>
-                            Exact delay causes are not available from the current AviationEdge dataset. Delays are tracked, but source attribution is incomplete.
+                            {t('admin_analytics_delay_factors_unavailable')}
                         </div>
                     ) : delayFactors.length > 0 ? (
                         <>
@@ -368,7 +369,7 @@ export default function AdminAnalytics() {
                                 return (
                                     <BarRow 
                                         key={f.label} 
-                                        l={<>{f.label} {f.isInferred && <span style={{ fontSize: '0.65rem', opacity: 0.6, marginLeft: 4, fontWeight: 'normal' }}>(Inferred)</span>}</>} 
+                                        l={<>{f.label} {f.isInferred && <span style={{ fontSize: '0.65rem', opacity: 0.6, marginLeft: 4, fontWeight: 'normal' }}>{t('admin_analytics_inferred_label')}</span>}</>} 
                                         v={`${f.count} (${f.percentage}%)`} 
                                         p={f.percentage} 
                                         c={c} 
@@ -376,37 +377,37 @@ export default function AdminAnalytics() {
                                 );
                             })}
                             <p style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted)', marginTop: '1.25rem', fontStyle: 'italic', lineHeight: 1.4 }}>
-                                Delay factors are inferred from available operational indicators, not official root-cause codes.
+                                {t('admin_analytics_delay_factors_note')}
                             </p>
                         </>
                     ) : (
                         <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--adm-text-muted)', fontSize: '0.8rem' }}>
-                            {loading ? 'Processing...' : '0 delayed flights.'}
+                            {loading ? t('admin_analytics_processing') : t('admin_analytics_no_delayed_flights')}
                         </div>
                     )}
                 </div>
 
                 {/* Top Routes */}
                 <div className="admin-card" style={{ padding: '1.5rem' }}>
-                    <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--adm-text)', marginBottom: '1.5rem', marginTop: 0 }}>Top Routes by Volume</h3>
+                    <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--adm-text)', marginBottom: '1.5rem', marginTop: 0 }}>{t('admin_analytics_top_routes')}</h3>
                     {routes.length > 0 ? (
                         routes.slice(0, 5).map((r: any) => (
-                            <BarRow key={r.route} l={r.route} v={`${r.totalFlights} flights — ${r.delayRate}% delayed`} p={(r.totalFlights / maxRouteFlights) * 100} c={COLOR_NEUTRAL} />
+                            <BarRow key={r.route} l={r.route} v={t('admin_analytics_route_row').replace('{flights}', String(r.totalFlights)).replace('{delayRate}', r.delayRate)} p={(r.totalFlights / maxRouteFlights) * 100} c={COLOR_NEUTRAL} />
                         ))
                     ) : (
                         <div style={{ height: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--adm-text-muted)', fontSize: '0.8rem' }}>
-                            {loading ? 'Processing...' : 'No active routes.'}
+                            {loading ? t('admin_analytics_processing') : t('admin_analytics_no_routes')}
                         </div>
                     )}
                 </div>
 
                 {/* AI & Alerts */}
                 <div className="admin-card" style={{ padding: '1.5rem' }}>
-                    <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--adm-text)', marginBottom: '1.5rem', marginTop: 0 }}>AI & Operational Tracking</h3>
+                    <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--adm-text)', marginBottom: '1.5rem', marginTop: 0 }}>{t('admin_analytics_ai_tracking_title')}</h3>
                     
                     {data?.aiAnalytics?.predictionsGenerated === 0 ? (
                         <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: 8, color: 'var(--adm-text-sub)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-                            No AI prediction records available for this period.
+                            {t('admin_analytics_ai_no_predictions')}
                         </div>
                     ) : (
                         <>
@@ -415,7 +416,7 @@ export default function AdminAnalytics() {
                                     <Zap size={20} color={COLOR_SUCCESS} />
                                 </div>
                                 <div>
-                                    <div style={{ fontSize: '0.8rem', color: 'var(--adm-text-sub)' }}>AI Predictions Generated</div>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--adm-text-sub)' }}>{t('admin_analytics_ai_predictions_label')}</div>
                                     <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--adm-text)' }}>
                                         {data?.aiAnalytics?.predictionsGenerated.toLocaleString() || 0}
                                     </div>
@@ -427,7 +428,7 @@ export default function AdminAnalytics() {
                                     <CheckCircle size={20} color={COLOR_WARNING} />
                                 </div>
                                 <div>
-                                    <div style={{ fontSize: '0.8rem', color: 'var(--adm-text-sub)' }}>Est. Prediction Accuracy</div>
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--adm-text-sub)' }}>{t('admin_analytics_ai_accuracy_label')}</div>
                                     <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--adm-text)' }}>
                                         {data?.aiAnalytics?.predictionAccuracy || 0}%
                                     </div>
@@ -443,7 +444,7 @@ export default function AdminAnalytics() {
                             <Bell size={20} color={COLOR_ACTIVE} />
                         </div>
                         <div>
-                            <div style={{ fontSize: '0.8rem', color: 'var(--adm-text-sub)' }}>Total Alerts Dispatched</div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--adm-text-sub)' }}>{t('admin_analytics_ai_alerts_label')}</div>
                             <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--adm-text)' }}>
                                 {data?.alertAnalytics?.alertsSent.toLocaleString() || 0}
                             </div>

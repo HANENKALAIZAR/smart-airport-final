@@ -393,8 +393,14 @@ def write_seed_sql(records: list[dict], path: Path):
         ("EU", "EC 261/2004", 120, None, 1500,   "refreshment", "Free refreshments and 2 phone calls", "Rafraîchissements gratuits et 2 appels", None),
         ("EU", "EC 261/2004", 180, None, 1500,    "compensation", "€250 compensation for flights ≤1500 km", "Indemnisation de 250€ pour vols ≤1500 km", "€250"),
         ("EU", "EC 261/2004", 180, 1500, 3500,    "compensation", "€400 compensation for flights 1500-3500 km", "Indemnisation de 400€ pour vols 1500-3500 km", "€400"),
-        ("EU", "EC 261/2004", 240, 3500, None,    "compensation", "€600 compensation for flights >3500 km", "Indemnisation de 600€ pour vols >3500 km", "€600"),
+        ("EU", "EC 261/2004", 180, 3500, None,    "compensation", "€600 compensation for flights >3500 km", "Indemnisation de 600€ pour vols >3500 km", "€600"),
         ("EU", "EC 261/2004", 300, None, None,    "hotel", "Hotel accommodation + transport if overnight", "Hébergement + transport si nuit", None),
+        # UK 261
+        ("UK", "UK 261", 120, None, 1500,         "refreshment", "Free refreshments and 2 phone calls", "Rafraîchissements gratuits et 2 appels", None),
+        ("UK", "UK 261", 180, None, 1500,          "compensation", "£220 compensation for flights ≤1500 km", "Indemnisation de 220£ pour vols ≤1500 km", "£220"),
+        ("UK", "UK 261", 180, 1500, 3500,          "compensation", "£350 compensation for flights 1500-3500 km", "Indemnisation de 350£ pour vols 1500-3500 km", "£350"),
+        ("UK", "UK 261", 180, 3500, None,          "compensation", "£520 compensation for flights >3500 km", "Indemnisation de 520£ pour vols >3500 km", "£520"),
+        ("UK", "UK 261", 300, None, None,          "hotel", "Hotel accommodation + transport if overnight", "Hébergement + transport si nuit", None),
         # US DOT
         ("US", "DOT Regulations", 180, None, None, "reboard", "Right to deplane after 3h tarmac delay", None, None),
         ("US", "DOT Regulations", 0,   None, None, "refund", "Full refund for significant delays/cancellations", None, None),
@@ -402,9 +408,6 @@ def write_seed_sql(records: list[dict], path: Path):
         ("CA", "APPR", 180, None, None,           "compensation", "CAD $400 compensation for delays 3-6 hours", None, "CAD $400"),
         ("CA", "APPR", 360, None, None,           "compensation", "CAD $700 compensation for delays 6-9 hours", None, "CAD $700"),
         ("CA", "APPR", 540, None, None,           "compensation", "CAD $1,000 compensation for delays ≥9 hours", None, "CAD $1,000"),
-        # GCC
-        ("GCC", "General Duty of Care", 180, None, None, "meal",  "Airline must provide meals and refreshments", None, None),
-        ("GCC", "General Duty of Care", 480, None, None, "hotel", "Airline must provide hotel if overnight delay", None, None),
     ]
     for r in rights:
         dist_min_sql = str(r[3]) if r[3] is not None else "NULL"

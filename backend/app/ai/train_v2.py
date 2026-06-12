@@ -37,6 +37,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,10 +56,12 @@ logger = logging.getLogger(__name__)
 
 MODEL_DIR    = Path(__file__).resolve().parent / "model"
 MODEL_PATH   = MODEL_DIR / "delay_prediction_model.pkl"
+CANDIDATE_PATH = MODEL_DIR / "candidate_model.pkl"
 REPORT_PATH  = MODEL_DIR / "ae_evaluation_report.json"
 REPORT_V2    = MODEL_DIR / "ae_evaluation_report_v2.json"
 ARCHIVE_DIR  = MODEL_DIR / "archive"
 EXPLAINER_PATH = MODEL_DIR / "shap_explainer.pkl"
+CANDIDATE_EXPLAINER_PATH = MODEL_DIR / "candidate_shap_explainer.pkl"
 
 # ── Feature columns ────────────────────────────────────────────────────────────
 BASE_FEATURES = [
@@ -508,28 +511,51 @@ def train_v2(db, notes: str = "", persist_to_db: bool = True) -> dict:
         train_preds = best_model.predict(X_train)
         train_mae = float(mean_absolute_error(y_train, train_preds))
 
-        # ── Step 10: Save champion model ──────────────────────────────────────
+        # ── Step 10: Save candidate model ────────────────────────────────────
+        # Saved to CANDIDATE_PATH; mlops_controller promotes to MODEL_PATH
+        # after promotion gates pass. CLI runs (persist_to_db=True) promote
+        # immediately below.
         MODEL_DIR.mkdir(parents=True, exist_ok=True)
-        tmp_path = MODEL_PATH.with_suffix(".tmp")
+        tmp_path = CANDIDATE_PATH.with_suffix(".tmp")
         joblib.dump(best_model, str(tmp_path))
-        os.replace(str(tmp_path), str(MODEL_PATH))
-        logger.info(f"Champion model saved → {MODEL_PATH}")
+        os.replace(str(tmp_path), str(CANDIDATE_PATH))
+        logger.info(f"Candidate model saved → {CANDIDATE_PATH}")
 
-        # Save SHAP explainer atomically — must match champion model
+        # Save SHAP explainer to candidate path — promoted alongside model
         try:
             import shap
             explainer = shap.TreeExplainer(
                 best_model.named_steps["regressor"]
             )
-            tmp_exp = EXPLAINER_PATH.with_suffix(".tmp")
+            tmp_exp = CANDIDATE_EXPLAINER_PATH.with_suffix(".tmp")
             joblib.dump(explainer, str(tmp_exp))
-            os.replace(str(tmp_exp), str(EXPLAINER_PATH))
-            logger.info("SHAP explainer updated atomically with champion model")
+            os.replace(str(tmp_exp), str(CANDIDATE_EXPLAINER_PATH))
+            logger.info("SHAP explainer saved to candidate path")
         except Exception as e:
             logger.warning(
                 f"SHAP save failed: {e}. "
                 f"Pipeline steps: {list(best_model.named_steps.keys())}"
             )
+
+        # CLI / direct API runs promote immediately (no gate check)
+        if persist_to_db and CANDIDATE_PATH.exists():
+            try:
+                ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+                if MODEL_PATH.exists():
+                    archive_name = f"delay_prediction_model_{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}.pkl"
+                    shutil.copy2(str(MODEL_PATH), str(ARCHIVE_DIR / archive_name))
+                tmp = MODEL_PATH.with_suffix(".promoting")
+                shutil.copy2(str(CANDIDATE_PATH), str(tmp))
+                os.replace(str(tmp), str(MODEL_PATH))
+                if CANDIDATE_EXPLAINER_PATH.exists():
+                    tmp_exp = EXPLAINER_PATH.with_suffix(".promoting")
+                    shutil.copy2(str(CANDIDATE_EXPLAINER_PATH), str(tmp_exp))
+                    os.replace(str(tmp_exp), str(EXPLAINER_PATH))
+                CANDIDATE_PATH.unlink(missing_ok=True)
+                CANDIDATE_EXPLAINER_PATH.unlink(missing_ok=True)
+                logger.info(f"Champion model saved → {MODEL_PATH}")
+            except Exception as e:
+                logger.warning(f"Immediate promotion failed (CLI mode): {e}")
 
         # Write feature column sidecar alongside the .pkl.
         # future_predictions.py loads this for exact feature-list detection
@@ -612,7 +638,13 @@ def train_v2(db, notes: str = "", persist_to_db: bool = True) -> dict:
         # the AEModelVersion row itself via register_model_version / promote_model).
         if persist_to_db:
             try:
-                _persist_to_db(db, version, champion, baseline, feature_cols, notes)
+                _persist_to_db(
+                    db, version, champion, baseline, feature_cols, notes,
+                    dataset_size=len(df),
+                    train_rows=len(train_df),
+                    test_rows=len(test_df),
+                    cutoff_date=cutoff_date
+                )
             except Exception as e:
                 logger.warning(f"DB persistence failed (non-fatal): {e}")
 
@@ -656,6 +688,7 @@ def train_v2(db, notes: str = "", persist_to_db: bool = True) -> dict:
             "metrics":  {"mae": champion["mae"], "rmse": champion["rmse"], "r2": champion["r2"]},
             "baseline": report["baseline"],
             "calibration": calibration,
+            "model_path": str(CANDIDATE_PATH),
             # dataset key required by mlops_controller.register_model_version()
             "dataset": {
                 "total_rows":      len(df),
@@ -685,7 +718,11 @@ def train_v2(db, notes: str = "", persist_to_db: bool = True) -> dict:
 
 
 def _persist_to_db(db, version: str, champion: dict, baseline: dict,
-                   feature_cols: list, notes: str) -> None:
+                   feature_cols: list, notes: str,
+                   dataset_size: int | None = None,
+                   train_rows: int | None = None,
+                   test_rows: int | None = None,
+                   cutoff_date = None) -> None:
     from app.models.ae_models import AEModelVersion
     from datetime import timezone
 
@@ -699,7 +736,10 @@ def _persist_to_db(db, version: str, champion: dict, baseline: dict,
         model_version        = version,
         trained_at           = datetime.now(timezone.utc).replace(tzinfo=None),
         model_path           = str(MODEL_PATH),
-        dataset_size         = None,    # filled by caller via mlops_controller
+        dataset_size         = dataset_size,
+        train_rows           = train_rows,
+        test_rows            = test_rows,
+        cutoff_date          = cutoff_date,
         mae                  = champion["mae"],
         rmse                 = champion["rmse"],
         r2_score             = champion["r2"],

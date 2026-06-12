@@ -190,55 +190,6 @@ function localizeActions(actions, lang) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SYSTEM PROMPT
-// ─────────────────────────────────────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are a professional airport assistant AI deployed at Tunisian airports (TUN, DJE, MIR, NBE). Help passengers with flight status, rights checking, airport services, alternative flights searching, and nearby hotels. Be extremely brief, concise, and direct.
-
-═══════════════════════════════════════
-CORE RULES
-═══════════════════════════════════════
-- NEVER introduce yourself or say your name
-- NEVER say "I'm here to help", "I'm happy to help", or any filler phrase
-- Keep all replies EXTREMELY SHORT — maximum 1 concise and direct sentence.
-- NEVER invent flights, times, prices, or compensation amounts
-- If 'Alternative flights' or 'Vols alternatifs' is listed in the rights data, explicitly mention: "Based on this delay/cancellation, you may be eligible for an alternative flight at no extra cost."
-- NEVER claim they have free alternative flights or compensation unless the rights data explicitly includes it.
-- NEVER suggest, mention, or link to actions like "Booking", "Requesting Meal Voucher", "Submitting Compensation Request", "Visit Airport Information Desk", or "Contact Airline". The assistant does not support booking, requests, desk visits, or contacting.
-- For off-topic or unsupported topics (like bookings, requests, or visits), reply with exactly one short sentence redirecting to the whitelisted topics or human agents, and NEVER generate actions/buttons for them.
-- If data is unavailable, say so honestly and tell the passenger where to verify
-- If hotel data_source is 'static_offline_fallback', explicitly state that live data is unavailable and you are showing saved/offline recommendations.
-- ALWAYS reply in the EXACT language the passenger used
-- For Arabic: mirror the passenger's style (Darija or MSA) exactly
-- ALWAYS return valid JSON only — no markdown, no plain text, no code fences
-
-═══════════════════════════════════════
-MISSING CONTEXT
-═══════════════════════════════════════
-- Flight number missing and needed: ask ONCE, briefly
-- Delay unknown: default to 180 min for rights calculation, do NOT invent a reason
-- Airport unknown: default to TUN
-- Airline unknown: NEVER assume any specific airline
-
-═══════════════════════════════════════
-LANGUAGE
-═══════════════════════════════════════
-- Reply in the same language and register as the passenger
-- Mixed-language message: use the dominant language
-- Never switch Arabic script/dialect from what the passenger used
-- CRITICAL: Never mix multiple languages (e.g. French, Arabic, English) in a single response under any circumstances. If the conversation is in French, use 100% French and never include Arabic words. If it is in English, use 100% English.
-- For French: Use natural and elegant phrasing. Avoid literal repetitions or direct translation cliches like "prévu comme prévu" (use "est actuellement à l'heure", "est programmé comme prévu", or "est à l'heure" instead).
-
-═══════════════════════════════════════
-STRICT JSON RULES
-═══════════════════════════════════════
-- Output ONLY the JSON object — starts with { ends with }
-- Double quotes everywhere
-- "actions" NEVER empty for delayed/cancelled flights
-- "isFollowUp": true if not the first exchange
-- NEVER add fields not listed above
-- NEVER wrap in markdown or code fences`;
-
-// ─────────────────────────────────────────────────────────────────────────────
 // SESSION STORE
 // ─────────────────────────────────────────────────────────────────────────────
 const sessions = new Map();
@@ -563,6 +514,272 @@ const tools = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GROQ-COMPATIBLE TOOL DEFINITIONS  (OpenAI function-calling format)
+// These are passed to the LLM so it can decide which tool to call.
+// ─────────────────────────────────────────────────────────────────────────────
+const TOOL_DEFINITIONS = [
+  {
+    name: 'getFlightStatus',
+    description: 'Get real-time flight status, schedule, gate, terminal, delay minutes, and route for a specific flight number',
+    parameters: {
+      flightNumber: { type: 'string', description: 'Flight number (e.g. TU741, AF1083)' }
+    },
+    required: ['flightNumber']
+  },
+  {
+    name: 'getPassengerRights',
+    description: 'Get passenger rights information including cash compensation amounts, care entitlements (meals, hotel, communication), and rebooking/refund options based on delay duration and route type',
+    parameters: {
+      delayMinutes: { type: 'number', description: 'Delay in minutes (default 180 if unknown)' },
+      routeType: {
+        type: 'string',
+        enum: ['tunisia_to_eu', 'eu_to_tunisia', 'domestic', 'tunisia_international', 'other'],
+        description: 'Route type classification from getFlightStatus result'
+      },
+      status: {
+        type: 'string',
+        enum: ['delayed', 'cancelled', 'active', 'in_air', 'scheduled', 'landed', 'diverted', 'unknown', 'on_time'],
+        description: 'Flight status — normalized internally for rights calculation'
+      },
+      lang: { type: 'string', enum: ['en', 'fr', 'ar'], description: 'Response language' }
+    },
+    required: ['delayMinutes', 'routeType', 'status']
+  },
+  {
+    name: 'getAirportServices',
+    description: 'Get available services at a specific airport including free WiFi, restaurants/cafes, lounges, and their locations/operating hours',
+    parameters: {
+      airportCode: { type: 'string', description: 'IATA airport code (e.g. TUN, DJE, MIR, NBE)' }
+    },
+    required: ['airportCode']
+  },
+  {
+    name: 'getAlternativeFlights',
+    description: 'Search for alternative flights on the same route (origin → destination) for passengers who have missed or been delayed on their original flight',
+    parameters: {
+      origin: { type: 'string', description: 'Origin IATA airport code (e.g. TUN)' },
+      destination: { type: 'string', description: 'Destination IATA airport code (e.g. CDG)' }
+    },
+    required: ['origin', 'destination']
+  },
+  {
+    name: 'searchHotelsNearAirport',
+    description: 'Search for hotels near a specific airport. Returns hotel names, star ratings, estimated price per night, distance from airport, and whether the data is live or offline fallback',
+    parameters: {
+      airportCode: { type: 'string', description: 'IATA airport code (e.g. TUN, DJE, MIR, NBE, CDG)' },
+      radiusMetres: { type: 'number', description: 'Search radius in metres, default 12000' }
+    },
+    required: ['airportCode']
+  },
+  {
+    name: 'subscribeToFlightAlerts',
+    description: 'Subscribe an email address to receive real-time alerts about flight status changes for a specific flight number',
+    parameters: {
+      email: { type: 'string', description: 'Passenger email address' },
+      flightNumber: { type: 'string', description: 'Flight number to monitor (e.g. TU741)' }
+    },
+    required: ['email', 'flightNumber']
+  }
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TOOL DISPATCHER — routes a Groq tool call to the correct service function
+// ─────────────────────────────────────────────────────────────────────────────
+async function executeToolCall(toolCall, session) {
+  const { name, args } = toolCall;
+  console.log(`🔧 [Groq Tool Call] ${name}(${JSON.stringify(args)})`);
+
+  switch (name) {
+    case 'getFlightStatus':
+      return await tools.getFlightStatus(args.flightNumber, session);
+
+    case 'getPassengerRights': {
+      const { getRouteType } = require('./airports');
+      const dep = session.origin || session.selectedAirport || 'TUN';
+      const arr = session.destination || 'CDG';
+      const airCode = session.airline ? session.airline.substring(0, 2) : 'TU';
+      const routeType = session.route_type || getRouteType(dep, arr, airCode);
+
+      // Normalize real flight statuses to the rights engine's expected values
+      const rawStatus = (args.status || session.status || 'delayed').toLowerCase();
+      const normalizeStatus = (s) => {
+        if (['active', 'in_air', 'scheduled', 'on_time'].includes(s)) return 'on_time';
+        if (s === 'landed') return 'cancelled';
+        return s; // 'delayed', 'cancelled', 'diverted', 'unknown' pass through
+      };
+      const normalizedStatus = normalizeStatus(rawStatus);
+
+      console.log(`  ⇢ normalized status: "${rawStatus}" → "${normalizedStatus}"`);
+      return await tools.getPassengerRights(
+        args.delayMinutes || session.delayMinutes || 180,
+        args.routeType || routeType,
+        normalizedStatus,
+        args.lang || session.language || 'en'
+      );
+    }
+
+    case 'getAirportServices':
+      return await tools.getAirportServices(
+        args.airportCode || session.selectedAirport || session.origin || 'TUN'
+      );
+
+    case 'getAlternativeFlights':
+      return await tools.getAlternativeFlights(
+        args.origin || session.origin,
+        args.destination || session.destination
+      );
+
+    case 'searchHotelsNearAirport': {
+      const { searchHotelsNearAirport: searchHotels } = require('./hotelsService');
+      const hotels = await searchHotels(args.airportCode, { radiusMetres: args.radiusMetres || 12000 });
+      return hotels.map(h => ({
+        name: h.name,
+        stars: Math.round(h.rating || 3),
+        pricePerNight: h.pricePerNight || 150,
+        distanceKm: h.distanceKm || null,
+        data_source: h.source === 'google_places' ? 'live_google_places' : 'static_offline_fallback'
+      }));
+    }
+
+    case 'subscribeToFlightAlerts':
+      return await tools.subscribeToFlightAlerts(args.email, args.flightNumber, session);
+
+    default:
+      return { error: `Unknown tool: ${name}` };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SYSTEM PROMPT — updated with intent-reasoning rules for missed flights
+// ─────────────────────────────────────────────────────────────────────────────
+const SYSTEM_PROMPT = `You are a professional airport assistant AI deployed at Tunisian airports (TUN, DJE, MIR, NBE). Help passengers with flight status, rights checking, airport services, alternative flights searching, and nearby hotels. Be extremely brief, concise, and direct.
+
+═══════════════════════════════════════
+CORE RULES
+═══════════════════════════════════════
+- NEVER introduce yourself or say your name
+- NEVER say "I'm here to help", "I'm happy to help", or any filler phrase
+- Keep all replies EXTREMELY SHORT — maximum 1 concise and direct sentence.
+- NEVER invent flights, times, prices, or compensation amounts
+- If 'Alternative flights' or 'Vols alternatifs' is listed in the rights data, explicitly mention: "Based on this delay/cancellation, you may be eligible for an alternative flight at no extra cost."
+- NEVER claim they have free alternative flights or compensation unless the rights data explicitly includes it.
+- NEVER suggest, mention, or link to actions like "Booking", "Requesting Meal Voucher", "Submitting Compensation Request", "Visit Airport Information Desk", or "Contact Airline". The assistant does not support booking, requests, desk visits, or contacting.
+- For off-topic or unsupported topics (like bookings, requests, or visits), reply with exactly one short sentence redirecting to the whitelisted topics or human agents, and NEVER generate actions/buttons for them.
+- If data is unavailable, say so honestly and tell the passenger where to verify
+- If hotel data_source is 'static_offline_fallback', explicitly state that live data is unavailable and you are showing saved/offline recommendations.
+- ALWAYS reply in the EXACT language the passenger used
+- For Arabic: mirror the passenger's style (Darija or MSA) exactly
+- ALWAYS return valid JSON only — no markdown, no plain text, no code fences
+
+═══════════════════════════════════════
+PASSENGER INTENT REASONING
+═══════════════════════════════════════
+- If a passenger asks for alternative flights and the original flight has already departed or landed, ALWAYS assume the passenger missed their flight unless they explicitly state otherwise. Treat this as a missed-flight scenario. Provide alternative flight options. NEVER refuse alternative flight queries solely because the original flight has already departed.
+- If a passenger provides a flight code that has already landed, do NOT assume they were on board. Default to the missed-flight interpretation when they ask for alternatives.
+- Use tool results to determine flight status. If the tool says the flight has already departed/landed and the passenger is asking about alternatives, call getAlternativeFlights with the origin and destination from the flight data.
+- Distinguish these scenarios:
+  · ONBOARD INQUIRY: passenger is currently traveling — provide real-time status
+  · MISSED FLIGHT: passenger did not board a departed/landed flight — offer alternative flights
+  · FUTURE PLANNING: asking about upcoming options — provide schedule info
+  · GENERAL INQUIRY: airport services, hotels, rights — use appropriate tools
+- When a flight has already landed/departed and the passenger asks for "alternatives" or "another flight", call the getAlternativeFlights tool for that route. Do not simply say the flight has already left — offer a solution.
+
+═══════════════════════════════════════
+MISSING CONTEXT
+═══════════════════════════════════════
+- Flight number missing and needed: ask ONCE, briefly
+- Delay unknown: default to 180 min for rights calculation, do NOT invent a reason
+- Airport unknown: default to TUN
+- Airline unknown: NEVER assume any specific airline
+
+═══════════════════════════════════════
+LANGUAGE
+═══════════════════════════════════════
+- Reply in the same language and register as the passenger
+- Mixed-language message: use the dominant language
+- Never switch Arabic script/dialect from what the passenger used
+- CRITICAL: Never mix multiple languages (e.g. French, Arabic, English) in a single response under any circumstances. If the conversation is in French, use 100% French and never include Arabic words. If it is in English, use 100% English.
+- For French: Use natural and elegant phrasing. Avoid literal repetitions or direct translation cliches like "prévu comme prévu" (use "est actuellement à l'heure", "est programmé comme prévu", or "est à l'heure" instead).
+
+═══════════════════════════════════════
+TOOL USE
+═══════════════════════════════════════
+- You have access to the following tools: getFlightStatus, getPassengerRights, getAirportServices, getAlternativeFlights, searchHotelsNearAirport, subscribeToFlightAlerts
+- Use these tools to fetch real data. NEVER invent flight data, hotel data, or rights information.
+- For hotel queries: prefer calling searchHotelsNearAirport. Rely on its results.
+- For flight alternatives: call getFlightStatus first to get route info, then call getAlternativeFlights with the origin and destination.
+- After receiving tool results, incorporate them into your final JSON response.
+- Do NOT call the same tool twice with identical arguments in a row. If the tool returned successfully, use the data.
+- When a passenger asks about rights for a flight that is currently in-air or on-time, call getPassengerRights anyway and explain what rights WOULD apply if a delay or cancellation occurred. Do not refuse to answer.
+- Once you have all the data you need from tool calls, produce your final JSON response. Do not keep calling tools.
+
+═══════════════════════════════════════
+RESPONSE SCOPE RULES
+═══════════════════════════════════════
+
+Rule 1 — FLIGHT STATUS queries only:
+Return ONLY these fields: flight number, airline, current status (on time / delayed / cancelled / in air / landed / diverted), delay duration in minutes (if applicable), scheduled departure and arrival times, actual departure time (if available), gate and terminal (if known).
+NEVER include: rights, compensation, meal vouchers, hotel entitlements, rebooking options, or any other information not explicitly asked. A status query must answer ONLY the flight status.
+
+Rule 2 — PASSENGER RIGHTS logic:
+Before listing any entitlements, examine the flight status and delay from the tool results. Apply these rules strictly:
+
+  • If status is "in_air", "active", "scheduled", or "on_time" AND delay is 0, null, or less than 120 minutes:
+    → State clearly: "Your flight is currently on time. No compensation or care entitlements currently apply."
+    → THEN explain what WOULD apply if a delay or cancellation occurs (summary only — do not list as current rights):
+      - If the flight arrives 3+ hours late: possible compensation (amount depends on route distance and applicable regulation — look up from compensation_config.json or backend API)
+      - If cancelled: full refund or rerouting, plus compensation if less than 14 days' notice
+      - If denied boarding: denied boarding compensation applies
+    → NEVER present these as current entitlements. Frame them as hypothetical.
+
+  • If delay is 120+ minutes (2 hours or more):
+    → State care entitlements: meals/refreshments, two free phone calls or emails, hotel accommodation if overnight stay is needed.
+
+  • If delay is 180+ minutes (3 hours or more) for applicable routes:
+    → State compensation amounts by route distance. Look up exact amounts from compensation_config.json (EU/UK regulations) or the backend GET /api/passenger/compensation-config endpoint. Never hardcode the amounts.
+
+  • If cancelled:
+    → State: full refund of the ticket OR rerouting to the final destination at the earliest opportunity. Compensation applies if notified less than 14 days before departure.
+
+  • If denied boarding:
+    → State denied boarding compensation plus rerouting or refund.
+
+  • For "diverted" status: treat similarly to "delayed" — care entitlements apply after 2+ hours of delay from original arrival.
+
+  • For "landed" and passenger asks about rights for a missed connection:
+    → Check the delay of the connecting flight. If the connection was delayed 3+ hours departing the origin, compensation may apply under EC 261. Otherwise, no automatic entitlement through the flight rights regulation (check airline policy for missed connections).
+
+Rule 3 — NEVER MIX RESPONSE TYPES:
+A flight status response must NEVER contain rights information. A passenger rights response must NEVER contain airport services or hotel information unless also separately asked about those topics. Each response answers EXACTLY what was asked, nothing more.
+
+═══════════════════════════════════════
+STRICT JSON RULES
+═══════════════════════════════════════
+- Output ONLY the JSON object — starts with { ends with }
+- Double quotes everywhere
+- "actions" NEVER empty for delayed/cancelled flights
+- "isFollowUp": true if not the first exchange
+- NEVER add fields not listed above
+- NEVER wrap in markdown or code fences
+
+═══════════════════════════════════════
+OUTPUT FORMAT (WITH TOOL DATA)
+═══════════════════════════════════════
+{
+  "type": "multi" or "general",
+  "message": "Conversational reply — 1 sentence, direct, covers all intents, grounded in tool results",
+  "flight": { "flightNumber": "...", "airline": "...", "route": "...", "status": "...", "delay": ..., "scheduledDeparture": "...", "scheduledArrival": "...", "gate": "...", "terminal": "..." },
+  "rights": [{ "title": "...", "detail": "..." }],
+  "flights": [{ "flightNumber": "...", "airline": "...", "departure": "...", "status": "..." }],
+  "hotels": [{ "name": "...", "stars": ..., "pricePerNight": ..., "data_source": "live_google_places" }],
+  "services": [{ "name": "...", "location": "...", "detail": "..." }],
+  "suggestion": "Brief helpful next-step tip.",
+  "actions": ["Action 1", "Action 2"],
+  "isFollowUp": false
+}
+If no tool data is available for a key, omit that key entirely from the JSON.`;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MAIN AGENT
 // ─────────────────────────────────────────────────────────────────────────────
 async function runAgent(message, history = [], conversationId = 'default', selectedAirport = null) {
@@ -719,184 +936,107 @@ async function runAgent(message, history = [], conversationId = 'default', selec
 
     conversationHistory = [...conversationHistory.slice(-9), { role: 'user', content: message }];
 
-    // ── Tool execution ─────────────────────────────────────────────────────────
-    let toolData = {};
-    let hasToolData = false;
+    // ── LLM call WITH Groq function calling ──────────────────────────────────
+    // The LLM decides which tools to call based on TOOL_DEFINITIONS.
+    // We loop until the LLM returns a final response (no more toolCalls).
+    //
+    // REQUIRED message sequence for each tool round:
+    //   system → user → assistant(tool_calls) → tool → [assistant(tool_calls) → tool] → assistant(text)
+    //
+    // The tool_calls `id` in the assistant message MUST match the `tool_call_id`
+    // in the subsequent tool message. We preserve Groq's original id.
 
-    // Flight Status
-    if (intents.includes('flight_status') && session.flightNumber) {
-      const res = await tools.getFlightStatus(session.flightNumber, session);
-      if (res.type === 'general') {
-        toolData.flight_error = res.message;
-      } else {
-        toolData.flight = res;
-      }
-      hasToolData = true;
-      sessions.set(conversationId, session);
-    }
+    const systemMessage = SYSTEM_PROMPT;
+    let llmMessages = [{ role: 'system', content: systemMessage }, ...conversationHistory];
+    let llmResponse = await chat(llmMessages, TOOL_DEFINITIONS);
 
-    // Alternative flights
-    if (intents.includes('alternative_flights') && session.origin && session.destination) {
-      const res = await tools.getAlternativeFlights(session.origin, session.destination);
-      if (res.type === 'general') {
-        toolData.flights_error = res.message;
-      } else {
-        toolData.flights = res.flights;
-      }
-      hasToolData = true;
-    }
+    // ── Tool execution loop ─────────────────────────────────────────────────
+    let toolCallCount = 0;
+    const MAX_TOOL_CALLS = 6;
 
-    // Hotels
-    if (intents.includes('hotels')) {
-      const code = session.selectedAirport || session.origin;
-      if (code) {
-        const { AIRPORTS } = require('./airports');
-        const airport = AIRPORTS[code];
-        if (airport) {
-          const hotels = await searchHotelsNearAirport(code);
-          if (hotels && hotels.length > 0) {
-            toolData.hotels = hotels.map(h => ({ 
-              name: h.name, 
-              stars: Math.round(h.rating || 3), 
-              pricePerNight: h.pricePerNight || 150,
-              data_source: h.source === 'google_places' ? 'live_google_places' : 'static_offline_fallback'
-            }));
-          } else {
-            toolData.hotels = (airport.hotels_nearby || []).map(h => ({ name: h.name, stars: h.stars || 3, pricePerNight: parseInt(h.approx_price) || 120 }));
-          }
-          hasToolData = true;
+    while (llmResponse.toolCalls && llmResponse.toolCalls.length > 0 && toolCallCount < MAX_TOOL_CALLS) {
+      toolCallCount++;
+
+      // Build ONE assistant message containing ALL tool calls from this round
+      const toolCallsEntry = llmResponse.toolCalls.map(tc => ({
+        id: tc.id,
+        type: 'function',
+        function: {
+          name: tc.name,
+          arguments: JSON.stringify(tc.args)
         }
-      }
-    }
+      }));
 
-    // Services
-    if (intents.includes('airport_services')) {
-      const code = session.selectedAirport || session.origin;
-      if (code) {
-        const sd = await tools.getAirportServices(code);
-        if (sd?.services) toolData.services = sd.services;
-        hasToolData = true;
-      }
-    }
+      conversationHistory.push({
+        role: 'assistant',
+        content: null,
+        tool_calls: toolCallsEntry
+      });
 
-    // Rights
-    if (intents.includes('passenger_rights')) {
-      const { getRouteType } = require('./airports');
-      const dep = session.origin || session.selectedAirport || 'TUN';
-      const arr = session.destination || 'CDG';
-      const airCode = session.airline ? session.airline.substring(0, 2) : 'TU';
-      const routeType = session.route_type || getRouteType(dep, arr, airCode);
-      const mins = session.delayMinutes || 180;
-      const status = session.status || 'delayed';
-      const rd = await tools.getPassengerRights(mins, routeType, status, detectedLang);
-      if (rd?.rights) toolData.rights = rd.rights;
-      hasToolData = true;
-    }
-
-    // Programmatic override for alternative flights request when flight number is known
-    if (intents.includes('alternative_flights') && session.flightNumber) {
-      console.log(`✈️ [Programmatic Override] Alternative flights requested for ${session.flightNumber}`);
-      const airlineName = getAirlineName(session.flightNumber, session.airline);
-      const delayVal = session.delayMinutesKnown ? session.delayMinutes : null;
-      const { message: altMessage, actions: altActions } = generateAlternativeFlightsResponse(
-        session.flightNumber,
-        airlineName,
-        delayVal,
-        session.delayMinutesKnown,
-        session.status,
-        detectedLang
-      );
-      
-      const responseObj = {
-        type: 'multi',
-        message: altMessage,
-        flight: toolData.flight,
-        rights: toolData.rights,
-        flights: toolData.flights,
-        hotels: toolData.hotels,
-        services: toolData.services,
-        suggestion: detectedLang === 'fr' 
-          ? 'Vérifiez auprès du comptoir de la compagnie pour plus de détails.' 
-          : detectedLang === 'ar'
-            ? 'يرجى التحقق من مكتب شركة الطيران لمزيد من التفاصيل.'
-            : 'Check with the airline desk for more details.',
-        actions: altActions,
-        isFollowUp: history.length > 2
-      };
-
-      // Clean/sanitize actions of alternative flights to remove screen/display/rebook
-      if (responseObj.actions && Array.isArray(responseObj.actions)) {
-        responseObj.actions = responseObj.actions.filter(act => {
-          const actLower = act.toLowerCase();
-          return !actLower.includes('écran') && !actLower.includes('affichage') && !actLower.includes('display') && !actLower.includes('screen');
+      // Execute every tool call and append a tool result for each
+      for (const tc of llmResponse.toolCalls) {
+        const toolResult = await executeToolCall({ name: tc.name, args: tc.args }, session);
+        sessions.set(conversationId, session);
+        conversationHistory.push({
+          role: 'tool',
+          content: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult),
+          tool_call_id: tc.id
         });
       }
 
-      conversationHistory.push({ role: 'assistant', content: JSON.stringify(responseObj) });
-      sessions.set(conversationId + '_history', conversationHistory);
-
-      return {
-        reply: JSON.stringify(responseObj),
-        updatedHistory: [...history,
-        { role: 'user', content: message },
-        { role: 'assistant', content: JSON.stringify(responseObj) }],
-      };
+      // Next LLM call — tool results are now in history for the model to consume
+      llmMessages = [{ role: 'system', content: systemMessage }, ...conversationHistory];
+      llmResponse = await chat(llmMessages, TOOL_DEFINITIONS);
     }
 
-    // ── LLM call ─────────────────────────────────────────────────────────────
-    const hasAlternative = toolData.rights && toolData.rights.some(r => 
-      r.title === 'Alternative flights' || r.title === 'Vols alternatifs' || r.title === 'رحلات بديلة'
-    );
-    const reroutingPrompt = hasAlternative 
-      ? 'CRITICAL INSTRUCTION: You MUST explicitly mention: "Based on this delay/cancellation, you may be eligible for an alternative flight at no extra cost."'
-      : 'CRITICAL INSTRUCTION: Do NOT mention free alternative flights or compensation, as the current flight status does not guarantee it.';
-
-    const systemMessage = hasToolData
-      ? `${SYSTEM_PROMPT}\n\n═══════════════════════════════════════\nCURRENT REQUEST CONTEXT\n═══════════════════════════════════════\n${reroutingPrompt}\n\nRespond ONLY with a valid JSON object. Combine the following data into your JSON response using the SAME top-level keys. Write a conversational response addressing all queries in the 'message' field.\nREAL DATA TO USE (Do not invent anything else):\n${JSON.stringify(toolData)}\n\nYour response format must EXACTLY match this shape (exclude blocks if you have no data for them):\n{\n  "type": "multi",\n  "message": "Conversational reply covering all intents",\n  "flight": {...},\n  "rights": [...],\n  "flights": [...],\n  "hotels": [...],\n  "services": [...],\n  "suggestion": "Helpful next step.",\n  "actions": ["Action 1", "Action 2"],\n  "isFollowUp": false\n}`
-      : `${SYSTEM_PROMPT}\n\nYour response format must EXACTLY match this shape:\n{\n  "type": "general",\n  "message": "Conversational reply",\n  "actions": ["Flight Status", "Passenger Rights", "Airport Services"],\n  "isFollowUp": false\n}`;
-
-    const llmMessages = [{ role: 'system', content: systemMessage }, ...conversationHistory];
-    const llmResponse = await chat(llmMessages, []);
+    // If we hit the loop guard without a text response, gracefully fall back
+    if (llmResponse.toolCalls && llmResponse.toolCalls.length > 0) {
+      console.log(`⚠️ [Agent] Tool call limit (${MAX_TOOL_CALLS}) reached — forcing text response`);
+      llmResponse = {
+        reply: JSON.stringify({
+          type: 'general',
+          message: 'I found your flight information but had trouble formatting the response. Please try again.',
+          actions: ['Passenger Rights', 'Alternative Flights', 'Airport Services'],
+          isFollowUp: history.length > 2
+        }),
+        toolCalls: null
+      };
+    }
 
     // ── Parse LLM output ─────────────────────────────────────────────────────
     let parsed;
     try {
-      const jsonMatch = llmResponse.reply.match(/\{[\s\S]*\}/);
-      const cleaned = jsonMatch ? jsonMatch[0] : llmResponse.reply.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+      const rawText = llmResponse.reply;
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      const cleaned = jsonMatch ? jsonMatch[0] : rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
       parsed = JSON.parse(cleaned);
       parsed.isFollowUp = history.length > 2;
 
-      if (['delayed', 'cancelled'].includes(session.status) &&
+      // Ensure delayed/cancelled flights always have actions
+      if (session.status && ['delayed', 'cancelled'].includes(session.status) &&
         (!parsed.actions || parsed.actions.length === 0))
         parsed.actions = ['Passenger Rights', 'Alternative Flights', 'Airport Services'];
 
     } catch (_) {
       console.log(`❌ [LLM] JSON parse failed — building fallback`);
       parsed = {
-          type: 'multi',
-          message: toolData.flight_error || toolData.flights_error || 'Here is the information I found:',
-          flight: toolData.flight,
-          rights: toolData.rights,
-          flights: toolData.flights,
-          hotels: toolData.hotels,
-          services: toolData.services,
-          suggestion: 'Check with the airline desk for more details.',
-          actions: ['Passenger Rights', 'Alternative Flights', 'Airport Services'],
-          isFollowUp: history.length > 2,
+        type: 'general',
+        message: 'Here is the information I found. Please check at the airline desk for more details.',
+        actions: ['Passenger Rights', 'Alternative Flights', 'Airport Services'],
+        isFollowUp: history.length > 2,
       };
     }
 
     // Post-process the parsed JSON object to translate actions and sanitize message/actions
     if (parsed) {
-      // Sanitize flight object: completely remove it if the flight was not found or has undefined details
+      // Sanitize flight object: remove it if it contains undefined/null/none values
       if (parsed.flight) {
         const num = parsed.flight.flightNumber || parsed.flight.number || '';
         const air = parsed.flight.airline || '';
         const numStr = num.toString().toLowerCase();
         const airStr = air.toString().toLowerCase();
         
-        if (toolData.flight_error || 
-            !num || 
+        if (!num || 
             numStr.includes('undef') || numStr.includes('null') || numStr.includes('none') ||
             airStr.includes('undef') || airStr.includes('null') || airStr.includes('none')) {
           delete parsed.flight;
@@ -971,8 +1111,8 @@ async function runAgent(message, history = [], conversationId = 'default', selec
     console.error('[Agent] Unhandled error:', error);
     const fallback = {
       type: 'general',
-      message: 'A technical issue occurred. Please try again or visit the airline service desk.',
-      actions: [],
+      message: 'Our assistant is temporarily unavailable. Please try again in a few moments.',
+      actions: ['Flight Status', 'Airport Services', 'Passenger Rights'],
     };
 
     const safeHistory = sessions.get(conversationId + '_history') || [];

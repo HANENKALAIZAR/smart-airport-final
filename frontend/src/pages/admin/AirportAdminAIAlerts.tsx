@@ -4,12 +4,13 @@ import {
     Navigation, Users, Zap, RefreshCw, ChevronDown,
     ThumbsUp, ThumbsDown, X
 } from 'lucide-react';
-import { apiGetAiSuggestions, apiAiAlertGenerated, apiAiAlertAction } from '../../services/adminApi';
+import { apiGetAiSuggestions, apiDecideSuggestion, apiGetSuggestionDecisions } from '../../services/adminApi';
 import { useAirport } from '../../context/AirportContext';
 import { useLanguage } from '../../context/LanguageContext';
 
 interface Suggestion {
     id: string;
+    key: string;
     priority: 'high' | 'medium' | 'low';
     category: string;
     title: string;
@@ -21,6 +22,19 @@ interface Suggestion {
     predictedDelay?: number | null;
     createdAt: string;
     source: string;
+    structured?: Record<string, any>;
+}
+
+interface DecisionRecord {
+    id: number;
+    suggestionKey: string;
+    airportIata: string;
+    suggestionType: string;
+    status: 'approved' | 'rejected';
+    adminUserId: number | null;
+    adminName: string | null;
+    timestamp: string;
+    suggestionPayload: Record<string, any> | null;
 }
 
 interface SuggestionSummary {
@@ -67,52 +81,278 @@ function formatDelay(min: number | null | undefined): string | null {
     return `+${m}min`;
 }
 
+function formatDelayStr(min: number): string {
+    const h = Math.floor(min / 60);
+    const m = min % 60;
+    if (h > 0 && m > 0) return `${h}h ${m}m`;
+    if (h > 0) return `${h}h`;
+    return `${m}m`;
+}
+
 function formatTime(iso: string) {
     try {
         return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
     } catch { return '—'; }
 }
 
-/**
- * AirportAdminAIAlerts
- * ====================
- * Displays AI Operational Suggestions for the airport admin's airport.
- * Workflow filters: All / Suggested / Approved / Rejected
- * Admin can approve or reject each suggestion.
- * Approved suggestions notify all super admins.
- */
+function localizeSuggestion(s: Suggestion, t: (key: string, fallback?: string, vars?: Record<string, any>) => string) {
+    const str = s.structured || {};
+    const cat = s.category;
+
+    // ── Priority label ──
+    const priorityLabel = t(`priority_${s.priority}`, s.priority.toUpperCase());
+
+    // ── Source label ──
+    const sourceLabel = t('suggestion_source_label', s.source);
+
+    // ── Category label ──
+    const categoryLabel = t(`suggestion_category_${cat}`, cat);
+
+    // ── Delay formatting helper ──
+    const delayMin = s.predictedDelay ?? str.delay_minutes ?? str.predicted_delay_min ?? null;
+
+    // ── Localize title ──
+    let title: string;
+    switch (cat) {
+        case 'delay':
+            title = t('suggestion_title_delay', s.title, { flightNumber: s.flightNumber || '' });
+            break;
+        case 'coordination': {
+            const count = str.delayed_count ?? 0;
+            title = count >= 3
+                ? t('suggestion_title_coordination_many', s.title)
+                : t('suggestion_title_coordination_two', s.title);
+            break;
+        }
+        case 'congestion': {
+            const hour = str.current_hour ?? '';
+            title = (str.active_in_window ?? 0) >= 8
+                ? t('suggestion_title_congestion_high', s.title, { hour })
+                : t('suggestion_title_congestion_moderate', s.title, { hour });
+            break;
+        }
+        case 'prediction':
+            title = t('suggestion_title_prediction', s.title, { flightNumber: s.flightNumber || '' });
+            break;
+        case 'route_reliability':
+            title = t('suggestion_title_route_reliability', s.title, { route: s.route || str.route || '' });
+            break;
+        case 'airline_reliability':
+            title = t('suggestion_title_airline_reliability', s.title, { airline: s.flightNumber || str.airline || '' });
+            break;
+        case 'operational':
+            title = t('suggestion_title_stalled', s.title, { flightNumber: s.flightNumber || '' });
+            break;
+        default:
+            title = s.title;
+    }
+
+    // ── Localize message ──
+    let message: string;
+    const delayStr2 = delayMin != null ? formatDelayStr(delayMin) : '';
+    const airportName = s.airportIata || '';
+    const histRate = str.hist_delay_rate ? String(Math.round(str.hist_delay_rate * 100)) : '';
+    const histNote = histRate ? t('suggestion_hist_note', '', { rate: histRate }) : '';
+
+    switch (cat) {
+        case 'delay': {
+            const dir = t(`direction_${str.direction || 'departure'}`, str.direction || 'departure');
+            const other = str.other_delays_count ?? 0;
+            if (str.gate) {
+                message = t('suggestion_message_delay_with_gate', s.message, {
+                    flightNumber: s.flightNumber || '', route: s.route || '', delay: delayStr2,
+                    direction: dir, otherCount: String(other), histNote, gate: str.gate,
+                });
+            } else {
+                message = t('suggestion_message_delay_no_gate', s.message, {
+                    flightNumber: s.flightNumber || '', route: s.route || '', delay: delayStr2,
+                    direction: dir, otherCount: String(other), histNote,
+                });
+            }
+            break;
+        }
+        case 'coordination': {
+            const count = str.delayed_count ?? 0;
+            if (count >= 3) {
+                message = t('suggestion_message_coordination_many', s.message, {
+                    count: String(count), airport: airportName,
+                    depCount: String(str.dep_count ?? 0), arrCount: String(str.arr_count ?? 0),
+                });
+            } else {
+                message = t('suggestion_message_coordination_two', s.message, { airport: airportName });
+            }
+            break;
+        }
+        case 'congestion': {
+            const count = str.active_in_window ?? 0;
+            const depC = str.dep_count ?? 0;
+            const arrC = str.arr_count ?? 0;
+            const hour2 = str.current_hour ?? 0;
+            const endH = (Number(hour2) + 2) % 24;
+            if (count >= 8) {
+                const gates = str.active_gates ?? 0;
+                message = t('suggestion_message_congestion_high', s.message, {
+                    count: String(count), airport: airportName,
+                    depCount: String(depC), arrCount: String(arrC),
+                    gateCount: String(gates), startHour: String(hour2).padStart(2, '0'),
+                    endHour: String(endH).padStart(2, '0'),
+                });
+            } else if (count >= 5) {
+                message = t('suggestion_message_congestion_medium', s.message, {
+                    count: String(count), airport: airportName,
+                    startHour: String(hour2).padStart(2, '0'),
+                    endHour: String(endH).padStart(2, '0'),
+                });
+            } else {
+                message = t('suggestion_message_congestion_low', s.message, {
+                    count: String(count), airport: airportName,
+                });
+            }
+            break;
+        }
+        case 'prediction': {
+            const conf = str.confidence ?? 0;
+            const time = str.scheduled_departure ?? '?';
+            let gateCtx = '';
+            if (str.gate) {
+                gateCtx = t('suggestion_gate_ctx', '', { gate: str.gate });
+            } else if (str.terminal) {
+                gateCtx = t('suggestion_terminal_ctx', '', { terminal: str.terminal });
+            }
+            message = t('suggestion_message_prediction', s.message, {
+                delay: delayStr2, flightNumber: s.flightNumber || '',
+                route: s.route || '', time, confidence: String(conf),
+                gateCtx, histNote,
+            });
+            break;
+        }
+        case 'route_reliability': {
+            const avgD = str.avg_delay_min ?? 0;
+            const avgStr2 = formatDelayStr(avgD);
+            message = t('suggestion_message_route_reliability', s.message, {
+                route: s.route || '', rate: String(str.delay_rate_pct ?? 0),
+                avgDelay: avgStr2, totalFlights: String(str.total_flights ?? 0),
+                todayCount: String(str.today_count ?? 0), airport: airportName,
+            });
+            break;
+        }
+        case 'airline_reliability': {
+            message = t('suggestion_message_airline_reliability', s.message, {
+                airline: s.flightNumber || '', rate: String(str.delay_rate_pct ?? 0),
+                totalFlights: String(str.total_flights ?? 0),
+                todayCount: String(str.today_count ?? 0), airport: airportName,
+            });
+            break;
+        }
+        case 'operational': {
+            const ageMin = str.age_minutes ?? 0;
+            const hh = Math.floor(ageMin / 60);
+            const mm = ageMin % 60;
+            message = t('suggestion_message_stalled', s.message, {
+                flightNumber: s.flightNumber || '', status: str.status || '',
+                hours: String(hh), minutes: String(mm),
+            });
+            break;
+        }
+        default:
+            message = s.message;
+    }
+
+    // ── Localize recommended action ──
+    let action: string;
+    switch (cat) {
+        case 'delay':
+            action = str.gate
+                ? t('suggestion_action_delay_with_gate', s.recommendedAction, { gate: str.gate })
+                : t('suggestion_action_delay_no_gate', s.recommendedAction);
+            break;
+        case 'coordination': {
+            const count = str.delayed_count ?? 0;
+            action = count >= 3
+                ? t('suggestion_action_coordination_many', s.recommendedAction)
+                : t('suggestion_action_coordination_two', s.recommendedAction);
+            break;
+        }
+        case 'congestion': {
+            const count = str.active_in_window ?? 0;
+            if (count >= 8) action = t('suggestion_action_congestion_high', s.recommendedAction);
+            else if (count >= 5) action = t('suggestion_action_congestion_medium', s.recommendedAction);
+            else action = t('suggestion_action_congestion_low', s.recommendedAction);
+            break;
+        }
+        case 'prediction':
+            action = str.gate
+                ? t('suggestion_action_prediction_with_gate', s.recommendedAction, { flightNumber: s.flightNumber || '', delay: delayStr2 })
+                : t('suggestion_action_prediction_no_gate', s.recommendedAction);
+            break;
+        case 'route_reliability':
+            action = t('suggestion_action_route_reliability', s.recommendedAction, { route: s.route || '' });
+            break;
+        case 'airline_reliability':
+            action = t('suggestion_action_airline_reliability', s.recommendedAction, { airline: s.flightNumber || '' });
+            break;
+        case 'operational':
+            action = t('suggestion_action_stalled', s.recommendedAction);
+            break;
+        default:
+            action = s.recommendedAction;
+    }
+
+    return { title, message, recommendedAction: action, priorityLabel, sourceLabel, categoryLabel };
+}
+
 export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: Date }) {
     const { selectedAirport } = useAirport();
     const { t } = useLanguage();
     const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+    const [decisions, setDecisions] = useState<Record<string, WorkflowStatus>>({});
     const [summary, setSummary] = useState<SuggestionSummary | null>(null);
     const [loading, setLoading] = useState(true);
     const [expanded, setExpanded] = useState<Set<string>>(new Set());
     const [workflowFilter, setWorkflowFilter] = useState<WorkflowFilter>('all');
-    const [decisionMap, setDecisionMap] = useState<Record<string, WorkflowStatus>>({});
     const [pendingAction, setPendingAction] = useState<Record<string, boolean>>({});
     const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null);
 
-    const fetchSuggestions = useCallback(async () => {
-        setLoading(true);
+    const dateStr = useCallback(() => {
         const year = selectedDate.getFullYear();
         const month = String(selectedDate.getMonth() + 1).padStart(2, '0');
         const day = String(selectedDate.getDate()).padStart(2, '0');
-        const dateStr = `${year}-${month}-${day}`;
-        const { data, error } = await apiGetAiSuggestions(dateStr);
-        if (!error && data) {
-            setSuggestions(data.suggestions || []);
-            setSummary(data.summary || null);
-            setLastRefreshed(new Date());
-        }
-        setLoading(false);
+        return `${year}-${month}-${day}`;
     }, [selectedDate]);
 
+    const fetchAll = useCallback(async () => {
+        setLoading(true);
+        const ds = dateStr();
+
+        // Fetch pending suggestions AND persisted decisions in parallel
+        const [sugResult, decResult] = await Promise.all([
+            apiGetAiSuggestions(ds),
+            apiGetSuggestionDecisions(ds),
+        ]);
+
+        if (!sugResult.error && sugResult.data) {
+            setSuggestions(sugResult.data.suggestions || []);
+            setSummary(sugResult.data.summary || null);
+        }
+
+        // Build decision map from persisted DB records
+        const decisionMap: Record<string, WorkflowStatus> = {};
+        if (!decResult.error && Array.isArray(decResult.data)) {
+            for (const d of decResult.data as DecisionRecord[]) {
+                decisionMap[d.suggestionKey] = d.status;
+            }
+        }
+        setDecisions(decisionMap);
+
+        setLastRefreshed(new Date());
+        setLoading(false);
+    }, [dateStr]);
+
     useEffect(() => {
-        fetchSuggestions();
-        const iv = setInterval(fetchSuggestions, 300_000);
+        fetchAll();
+        const iv = setInterval(fetchAll, 300_000);
         return () => clearInterval(iv);
-    }, [fetchSuggestions]);
+    }, [fetchAll]);
 
     const toggleExpanded = (id: string) => {
         setExpanded(prev => {
@@ -122,34 +362,41 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
         });
     };
 
-    const getWorkflowStatus = (s: Suggestion): WorkflowStatus => decisionMap[s.id] || 'suggested';
+    const getWorkflowStatus = (s: Suggestion): WorkflowStatus => {
+        return decisions[s.key] || 'suggested';
+    };
 
     const handleApprove = async (s: Suggestion, e: React.MouseEvent) => {
         e.stopPropagation();
         setPendingAction(prev => ({ ...prev, [s.id]: true }));
 
         try {
-            // 1. Register the alert in the system
             const airportIata = selectedAirport?.iata || s.airportIata || '';
-            await apiAiAlertGenerated({
-                flight_number: s.flightNumber || 'N/A',
-                brief_cause: s.message,
-                recommendation: s.recommendedAction,
-                risk_pct: s.priority === 'high' ? 85 : s.priority === 'medium' ? 55 : 25,
-                route: s.route || '',
-                delay_formatted: formatDelay(s.predictedDelay) || '0 min',
-            });
+            const loc = localizeSuggestion(s, t);
+            const payload = {
+                suggestion_key: s.key,
+                airport_iata: airportIata,
+                suggestion_type: s.category,
+                status: 'approved',
+                suggestion_payload: {
+                    title: loc.title,
+                    message: loc.message,
+                    recommendedAction: loc.recommendedAction,
+                    priority: s.priority,
+                    flightNumber: s.flightNumber,
+                    route: s.route,
+                    predictedDelay: s.predictedDelay,
+                },
+            };
 
-            // 2. Record the approval decision + ping super admins
-            await apiAiAlertAction({
-                flight_number: s.flightNumber || 'N/A',
-                action: 'approved',
-                route: s.route || '',
-                delay_formatted: formatDelay(s.predictedDelay) || '0 min',
-                recommendation: s.recommendedAction,
-            });
+            const { error } = await apiDecideSuggestion(payload);
+            if (error) {
+                console.error('Approve failed', error);
+                return;
+            }
 
-            setDecisionMap(prev => ({ ...prev, [s.id]: 'approved' }));
+            // Update local decision map with persisted status
+            setDecisions(prev => ({ ...prev, [s.key]: 'approved' }));
         } catch (err) {
             console.error('Approve failed', err);
         } finally {
@@ -157,14 +404,50 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
         }
     };
 
-    const handleReject = (s: Suggestion, e: React.MouseEvent) => {
+    const handleReject = async (s: Suggestion, e: React.MouseEvent) => {
         e.stopPropagation();
-        setDecisionMap(prev => ({ ...prev, [s.id]: 'rejected' }));
+        setPendingAction(prev => ({ ...prev, [s.id]: true }));
+
+        try {
+            const airportIata = selectedAirport?.iata || s.airportIata || '';
+            const loc = localizeSuggestion(s, t);
+            const payload = {
+                suggestion_key: s.key,
+                airport_iata: airportIata,
+                suggestion_type: s.category,
+                status: 'rejected',
+                suggestion_payload: {
+                    title: loc.title,
+                    message: loc.message,
+                    recommendedAction: loc.recommendedAction,
+                    priority: s.priority,
+                    flightNumber: s.flightNumber,
+                    route: s.route,
+                    predictedDelay: s.predictedDelay,
+                },
+            };
+
+            const { error } = await apiDecideSuggestion(payload);
+            if (error) {
+                console.error('Reject failed', error);
+                return;
+            }
+
+            setDecisions(prev => ({ ...prev, [s.key]: 'rejected' }));
+        } catch (err) {
+            console.error('Reject failed', err);
+        } finally {
+            setPendingAction(prev => ({ ...prev, [s.id]: false }));
+        }
     };
 
-    // Sort: suggested → approved → rejected, within each group high→medium→low, then delay desc
+    // Build full combined list: pending suggestions + any suggestions
+    // that have a decision but are no longer returned as pending
+    const allItems: Suggestion[] = [...suggestions];
+
+    // Sort suggested → approved → rejected, within each group high→medium→low, then delay desc
     const workflowOrder: WorkflowStatus[] = ['suggested', 'approved', 'rejected'];
-    const sortedSuggestions = [...suggestions].sort((a, b) => {
+    const sortedSuggestions = [...allItems].sort((a, b) => {
         const wA = workflowOrder.indexOf(getWorkflowStatus(a));
         const wB = workflowOrder.indexOf(getWorkflowStatus(b));
         if (wA !== wB) return wA - wB;
@@ -184,7 +467,7 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
     const highCount = suggestions.filter(s => s.priority === 'high').length;
 
     const filterTabs: { key: WorkflowFilter; labelKey: string; defaultLabel: string; count: number }[] = [
-        { key: 'all',       labelKey: 'ai_suggestions_all',      defaultLabel: 'Tous',      count: suggestions.length },
+        { key: 'all',       labelKey: 'ai_suggestions_all',      defaultLabel: 'Tous',      count: allItems.length },
         { key: 'suggested', labelKey: 'ai_suggestions_suggested',  defaultLabel: 'Suggéré',   count: countByStatus('suggested') },
         { key: 'approved',  labelKey: 'ai_suggestions_approved',   defaultLabel: 'Approuvé',  count: countByStatus('approved') },
         { key: 'rejected',  labelKey: 'ai_suggestions_rejected',   defaultLabel: 'Rejeté',    count: countByStatus('rejected') },
@@ -192,7 +475,6 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
 
     return (
         <div className="ai-alerts-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-            {/* Header */}
             <div className="ai-alerts-panel__header" style={{ flexShrink: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
                     <Zap size={15} style={{ color: '#F59E0B' }} />
@@ -205,7 +487,7 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
                     )}
                 </div>
                 <button
-                    onClick={fetchSuggestions}
+                    onClick={fetchAll}
                     style={{ background: 'none', border: 'none', color: 'var(--adm-text-sub)', cursor: 'pointer', padding: 4, borderRadius: 6 }}
                     title={t('refresh') || 'Actualiser les suggestions'}
                 >
@@ -213,7 +495,6 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
                 </button>
             </div>
 
-            {/* Workflow filter tabs */}
             <div style={{ padding: '0.5rem 0.75rem', borderBottom: '1px solid var(--adm-border)', display: 'flex', gap: 6, flexWrap: 'wrap', flexShrink: 0 }}>
                 {filterTabs.map(tab => {
                     const active = workflowFilter === tab.key;
@@ -234,7 +515,6 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
                 })}
             </div>
 
-            {/* Suggestion list */}
             <div className="ai-alerts-panel__list" style={{ flex: 1, overflowY: 'auto' }}>
                 {loading && (
                     <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--adm-text-sub)', fontSize: '0.78rem' }}>
@@ -268,6 +548,7 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
                     const wCfg = WORKFLOW_CONFIG[workflowStatus];
                     const isActing = pendingAction[s.id];
                     const isSuggested = workflowStatus === 'suggested';
+                    const loc = localizeSuggestion(s, t);
 
                     return (
                         <div key={s.id}
@@ -283,7 +564,6 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
                             }}
                             onClick={() => toggleExpanded(s.id)}>
 
-                            {/* Top row */}
                             <div className="ai-alert-card__top" style={{ gap: 8, alignItems: 'flex-start' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
                                     <Icon size={13} style={{ color: cfg.color, flexShrink: 0, marginTop: 1 }} />
@@ -292,7 +572,7 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
                                         fontSize: '0.77rem', lineHeight: 1.3,
                                         textDecoration: workflowStatus === 'rejected' ? 'line-through' : 'none',
                                     }}>
-                                        {s.title}
+                                        {loc.title}
                                     </span>
                                 </div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexShrink: 0 }}>
@@ -305,13 +585,11 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
                                             {delayStr}
                                         </span>
                                     )}
-                                    {/* Priority badge */}
                                     <span style={{
                                         fontSize: '0.6rem', fontWeight: 800, letterSpacing: '0.06em',
                                         color: cfg.color, padding: '1px 5px', borderRadius: 999,
                                         border: `1px solid ${cfg.border}`, textTransform: 'uppercase'
-                                    }}>{cfg.label}</span>
-                                    {/* Workflow status badge */}
+                                    }}>{loc.priorityLabel}</span>
                                     <span style={{
                                         fontSize: '0.6rem', fontWeight: 700,
                                         color: wCfg.color, padding: '1px 6px', borderRadius: 999,
@@ -322,7 +600,6 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
                                 </div>
                             </div>
 
-                            {/* Context tags */}
                             {(s.flightNumber || s.route) && (
                                 <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
                                     {s.flightNumber && (
@@ -338,12 +615,10 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
                                 </div>
                             )}
 
-                            {/* Situation message */}
                             <div className="ai-alert-card__issue" style={{ marginTop: 8, fontSize: '0.73rem', lineHeight: 1.5, color: 'var(--adm-text-sub)' }}>
-                                {s.message}
+                                {loc.message}
                             </div>
 
-                            {/* Expanded: recommended action + approve/reject */}
                             {isExpanded && (
                                 <div style={{ marginTop: 8 }}>
                                     <div style={{ padding: '8px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: 7, border: '1px solid rgba(255,255,255,0.06)', marginBottom: isSuggested ? 10 : 0 }}>
@@ -351,11 +626,10 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
                                             {t('ai_suggestions_action_recommended') || 'Action recommandée'}
                                         </span>
                                         <span style={{ fontSize: '0.73rem', color: 'var(--adm-text)', lineHeight: 1.55 }}>
-                                            {s.recommendedAction}
+                                            {loc.recommendedAction}
                                         </span>
                                     </div>
 
-                                    {/* Action buttons — only for suggested */}
                                     {isSuggested && (
                                         <div style={{ display: 'flex', gap: 8, marginTop: 8 }} onClick={e => e.stopPropagation()}>
                                             <button
@@ -391,7 +665,6 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
                                         </div>
                                     )}
 
-                                    {/* Approved / Rejected state message */}
                                     {workflowStatus === 'approved' && (
                                         <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px', borderRadius: 8, background: 'rgba(34,197,94,0.08)', border: '1px solid rgba(34,197,94,0.25)' }}>
                                             <CheckCircle size={13} style={{ color: '#22C55E', flexShrink: 0 }} />
@@ -411,10 +684,9 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
                                 </div>
                             )}
 
-                            {/* Footer */}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
                                 <span style={{ fontSize: '0.62rem', color: 'var(--adm-text-sub)', opacity: 0.6 }}>
-                                    {s.source} · {formatTime(s.createdAt)}
+                                    {loc.sourceLabel} · {formatTime(s.createdAt)}
                                 </span>
                                 {!isExpanded && isSuggested && (
                                     <span style={{ fontSize: '0.62rem', color: '#F59E0B', opacity: 0.8 }}>
@@ -427,7 +699,6 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
                 })}
             </div>
 
-            {/* Last refreshed footer */}
             {lastRefreshed && !loading && (
                 <div style={{ padding: '0.4rem 0.75rem', borderTop: '1px solid var(--adm-border)', fontSize: '0.62rem', color: 'var(--adm-text-sub)', flexShrink: 0 }}>
                     {t('ai_suggestions_footer_label') || 'IA Opérationnelle'} · {lastRefreshed.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}

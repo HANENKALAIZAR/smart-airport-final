@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import {
-    BrainCircuit, Layers, BarChart3, Zap, GitBranch, RefreshCw,
-    CheckCircle, AlertTriangle, Shield, TrendingUp, Database, Clock,
-    Activity, ArrowUpRight, Cpu
+    BrainCircuit, GitBranch, RefreshCw,
+    CheckCircle, AlertTriangle, TrendingUp, Activity, Cpu,
+    Shield, Globe, Heart, RotateCcw
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -50,76 +50,7 @@ interface MLModelVersion {
     is_active?: boolean | null;
 }
 
-const PIPELINE_STEPS = [
-    {
-        step: '1', title: 'Flight Data Processing',
-        desc: 'Flights are automatically loaded from our real-time provider and processed. The system calculates flight distances and encodes raw data into key signals our AI can understand.',
-    },
-    {
-        step: '2', title: 'Chronological Data Splitting',
-        desc: 'The system splits records chronologically, training the AI strictly on historical flights and testing it on recent ones. This guarantees honest evaluations and prevents future info from leaking into past predictions.',
-    },
-    {
-        step: '3', title: 'XGBoost Prediction Engine',
-        desc: 'An advanced machine learning pipeline standardizes inputs and trains an XGBoost Regressor on seven operational features including scheduled hour, route distance, airline, and terminal combinations.',
-    },
-    {
-        step: '4', title: 'Benchmark Validation & Activation',
-        desc: 'The candidate model is rigorously tested. It is only promoted to production if it beats our historical benchmark. The validated champion is then activated to power the passenger boards.',
-    },
-];
 
-const FEATURE_COLUMNS = [
-    {
-        name: 'dep_hour',
-        label: 'Scheduled Time of Day',
-        category: 'TIMING',
-        desc: 'The exact hour a flight is scheduled to depart. Captures daily peak congestion hours and morning/evening runway bottlenecks.',
-        color: '#3B82F6'
-    },
-    {
-        name: 'is_weekend',
-        label: 'Weekend vs. Weekday Traffic',
-        category: 'CALENDAR',
-        desc: 'Identifies whether a flight departs on Saturday or Sunday to account for weekend passenger demand surges and leisure traffic peaks.',
-        color: '#60A5FA'
-    },
-    {
-        name: 'distance_km',
-        label: 'Flight Route Distance',
-        category: 'ROUTE',
-        desc: 'The physical distance of the flight route. Long-haul routes have different scheduling buffers compared to quick regional flights.',
-        color: '#10B981'
-    },
-    {
-        name: 'duration_min',
-        label: 'Scheduled Flight Duration',
-        category: 'FLIGHT TIME',
-        desc: 'The total planned flying time. Longer planned durations help the AI understand flight rotation patterns and delay accumulation.',
-        color: '#34D399'
-    },
-    {
-        name: 'airline_enc',
-        label: 'Airline Operator Reliability',
-        category: 'OPERATOR',
-        desc: 'Accounts for airline-specific scheduling buffers, fleet size, and historical flight performance.',
-        color: '#A78BFA'
-    },
-    {
-        name: 'dep_airport_enc',
-        label: 'Departure Terminal Conditions',
-        category: 'ORIGIN',
-        desc: 'Captures local runway constraints, terminal gate congestion, and ground crew handling times.',
-        color: '#F59E0B'
-    },
-    {
-        name: 'arr_airport_enc',
-        label: 'Destination Terminal Conditions',
-        category: 'DESTINATION',
-        desc: 'Predicts delays caused by arriving airspace constraints, weather alerts, and destination gate availability.',
-        color: '#EF4444'
-    },
-];
 
 function Sparkline({ data, color }: { data: number[]; color: string }) {
     if (!data || data.length < 2) return null;
@@ -167,12 +98,13 @@ function SectionTitle({ icon: Icon, title, sub }: { icon: any; title: string; su
 }
 
 function DriftIndicator({ severity }: { severity?: 'none' | 'low' | 'medium' | 'high' | 'critical' | null }) {
+    const { t } = useLanguage();
     const map = {
-        none:     { label: 'STABLE',    color: '#34D399', bg: 'rgba(52,211,153,0.12)' },
-        low:      { label: 'LOW DRIFT', color: '#A78BFA', bg: 'rgba(167,139,250,0.12)' },
-        medium:   { label: 'WARNING',   color: '#FBBF24', bg: 'rgba(251,191,36,0.12)' },
-        high:     { label: 'DRIFTING',  color: '#F97316', bg: 'rgba(249,115,22,0.12)' },
-        critical: { label: 'CRITICAL',  color: '#F87171', bg: 'rgba(248,113,113,0.12)' },
+        none:     { label: t('drift_label_stable'),    color: '#34D399', bg: 'rgba(52,211,153,0.12)' },
+        low:      { label: t('drift_label_low'), color: '#A78BFA', bg: 'rgba(167,139,250,0.12)' },
+        medium:   { label: t('drift_label_warning'),   color: '#FBBF24', bg: 'rgba(251,191,36,0.12)' },
+        high:     { label: t('drift_label_drifting'),  color: '#F97316', bg: 'rgba(249,115,22,0.12)' },
+        critical: { label: t('drift_label_critical'),  color: '#F87171', bg: 'rgba(248,113,113,0.12)' },
     };
     const cfg = (severity && map[severity]) ?? map.none;
     return (
@@ -191,6 +123,8 @@ function DriftIndicator({ severity }: { severity?: 'none' | 'low' | 'medium' | '
 
 export default function AdminAIExplanations() {
     const { t } = useLanguage();
+
+
     const [dashboard, setDashboard] = useState<MLDashboard | null>(null);
     const [models, setModels] = useState<MLModelVersion[]>([]);
     const [loading, setLoading] = useState(true);
@@ -227,24 +161,24 @@ export default function AdminAIExplanations() {
             {/* Header */}
             <div className="admin-page__header">
                 <div>
-                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--adm-accent)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>AI Operations Control</span>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--adm-accent)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>{t('admin_ai_eyebrow')}</span>
                     <h1 className="admin-page__title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                         <BrainCircuit size={22} style={{ color: 'var(--adm-accent)' }} />
-                        {t('admin_ai_title') || 'AI System & Model Explanations'}
+                        {t('admin_ai_title')}
                     </h1>
                     <p className="admin-page__subtitle">
-                        Real-time health tracking and performance auditing for our active flight delay prediction champion.
+                        {t('admin_ai_subtitle')}
                     </p>
                 </div>
                 <button className="admin-btn admin-btn--outline" onClick={load}>
                     <RefreshCw size={15} style={loading ? { animation: 'spin 1s linear infinite' } : {}} />
-                    <span>Refresh Registry</span>
+                    <span>{t('admin_ai_refresh_registry')}</span>
                 </button>
             </div>
 
             {error && (
                 <div style={{ padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)', color: 'var(--adm-text)', fontSize: '0.84rem' }}>
-                    Failed to fetch registry stats: {error}
+                    {t('admin_ai_fetch_error').replace('{error}', error)}
                 </div>
             )}
 
@@ -258,31 +192,31 @@ export default function AdminAIExplanations() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 999, background: 'rgba(52,211,153,0.12)', color: '#34D399', fontSize: '0.68rem', fontWeight: 700 }}>
                                 <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#34D399', animation: 'ai-pulse 1.8s infinite' }} />
-                                PRODUCTION CHAMPION
+                                {t('admin_ai_champion_badge')}
                             </span>
                             <span style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted)' }}>
-                                Version: <strong style={{ color: 'var(--adm-accent)' }}>{dashboard?.current_model_version || 'v1.0.0'}</strong>
+                                {t('admin_ai_version_label')} <strong style={{ color: 'var(--adm-accent)' }}>{dashboard?.current_model_version || 'v1.0.0'}</strong>
                             </span>
                         </div>
-                        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--adm-text)', margin: 0 }}>XGBoost Regression Model</h2>
+                        <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--adm-text)', margin: 0 }}>{t('admin_ai_model_name')}</h2>
                         <p style={{ fontSize: '0.84rem', color: 'var(--adm-text-sub)', marginTop: 8, lineHeight: 1.6, maxWidth: 640 }}>
-                            This state-of-the-art machine learning model forecasts flight delays across Tunisian terminals in real-time. By analyzing flight distances, terminal congestion, and airline history, it translates complex operational data into actionable, accurate waiting times for passengers and crew alike.
+                            {t('admin_ai_hero_desc')}
                         </p>
 
                         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: '1.25rem', fontSize: '0.76rem', color: 'var(--adm-text-muted)' }}>
-                            <span><strong>Trained On:</strong> {dashboard?.last_training_date ? new Date(dashboard.last_training_date).toLocaleDateString() : '—'}</span>
-                            <span><strong>Train Size:</strong> {dashboard?.dataset_size_at_last_training?.toLocaleString() || '—'} records</span>
-                            <span><strong>Target Cooldown:</strong> 24h</span>
+                            <span><strong>{t('admin_ai_trained_on')}</strong> {dashboard?.last_training_date ? new Date(dashboard.last_training_date).toLocaleDateString() : '—'}</span>
+                            <span><strong>{t('admin_ai_train_size')}</strong> {dashboard?.dataset_size_at_last_training?.toLocaleString() || '—'} records</span>
+                            <span><strong>{t('admin_ai_target_cooldown')}</strong> 24h</span>
                         </div>
                     </div>
 
                     <div style={{ background: 'var(--adm-input-bg)', padding: '1.1rem 1.3rem', borderRadius: 16, border: '1px solid var(--adm-border)' }}>
-                        <div style={{ fontSize: '0.66rem', color: 'var(--adm-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4, fontWeight: 700 }}>ACCURACY CONFIDENCE</div>
+                        <div style={{ fontSize: '0.66rem', color: 'var(--adm-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4, fontWeight: 700 }}>{t('admin_ai_accuracy_confidence')}</div>
                         <div style={{ fontSize: '2.1rem', fontWeight: 800, color: 'var(--adm-accent)', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
-                            {dashboard?.r2_score ? (dashboard.r2_score * 100).toFixed(1) : '76.4'}<span style={{ fontSize: '1.1rem', color: 'var(--adm-text-sub)' }}>%</span>
+                            {dashboard?.r2_score ? dashboard.r2_score.toFixed(3) : '0.764'}
                         </div>
                         <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted)', marginTop: 6 }}>
-                            Prediction Reliability Index (R²)
+                            {t('admin_ai_reliability_index')}
                         </div>
                     </div>
                 </div>
@@ -294,13 +228,13 @@ export default function AdminAIExplanations() {
                 <div className="admin-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--adm-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>TRAINING MAE</span>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--adm-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('admin_ai_training_mae')}</span>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.74rem', color: '#34D399', fontWeight: 600 }}>
                                 <TrendingUp size={12} style={{ transform: 'rotate(180deg)' }} /> -8.4%
                             </span>
                         </div>
                         <div style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--adm-text)', marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>
-                            {dashboard?.current_mae_training || '10.8'}<span style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--adm-text-muted)', marginLeft: 3 }}>min</span>
+                            {dashboard?.current_mae_training || '10.8'}<span style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--adm-text-muted)', marginLeft: 3 }}>{t('admin_ai_minutes')}</span>
                         </div>
                     </div>
                     <div style={{ marginTop: '1rem' }}>
@@ -312,13 +246,13 @@ export default function AdminAIExplanations() {
                 <div className="admin-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--adm-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>LIVE RUN MAE</span>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--adm-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('admin_ai_live_run_mae')}</span>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.74rem', color: '#34D399', fontWeight: 600 }}>
-                                <CheckCircle size={12} /> STABLE
+                                <CheckCircle size={12} /> {t('admin_ai_status_stable')}
                             </span>
                         </div>
                         <div style={{ fontSize: '2.2rem', fontWeight: 800, color: '#34D399', marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>
-                            {dashboard?.live_mae || '11.6'}<span style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--adm-text-muted)', marginLeft: 3 }}>min</span>
+                            {dashboard?.live_mae || '11.6'}<span style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--adm-text-muted)', marginLeft: 3 }}>{t('admin_ai_minutes')}</span>
                         </div>
                     </div>
                     <div style={{ marginTop: '1rem' }}>
@@ -330,9 +264,9 @@ export default function AdminAIExplanations() {
                 <div className="admin-card" style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--adm-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>VS BASELINE</span>
+                            <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--adm-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('admin_ai_vs_baseline')}</span>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: '0.74rem', color: '#34D399', fontWeight: 600 }}>
-                                OUTPERFORMING
+                                {t('admin_ai_outperforming')}
                             </span>
                         </div>
                         <div style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--adm-accent)', marginTop: 6, fontVariantNumeric: 'tabular-nums' }}>
@@ -353,7 +287,7 @@ export default function AdminAIExplanations() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
                 <div className="admin-card" style={{ padding: '1.1rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <span style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted)', fontWeight: 600 }}>CONCEPT DRIFT</span>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted)', fontWeight: 600 }}>{t('admin_ai_concept_drift')}</span>
                         <DriftIndicator severity={dashboard?.drift_severity} />
                     </div>
                     <div style={{ height: 35 }}>
@@ -362,9 +296,9 @@ export default function AdminAIExplanations() {
                 </div>
                 <div className="admin-card" style={{ padding: '1.1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                        <span style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted)', fontWeight: 600, display: 'block' }}>MODEL AGE</span>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted)', fontWeight: 600, display: 'block' }}>{t('admin_ai_model_age')}</span>
                         <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--adm-text)', marginTop: 4, display: 'block' }}>
-                            {dashboard?.model_age_days || '3'} <span style={{ fontSize: '0.8rem', color: 'var(--adm-text-muted)' }}>days</span>
+                            {dashboard?.model_age_days || '3'} <span style={{ fontSize: '0.8rem', color: 'var(--adm-text-muted)' }}>{t('admin_ai_days')}</span>
                         </span>
                     </div>
                     <div style={{ display: 'flex', gap: 4 }}>
@@ -375,7 +309,7 @@ export default function AdminAIExplanations() {
                 </div>
                 <div className="admin-card" style={{ padding: '1.1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
-                        <span style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted)', fontWeight: 600, display: 'block' }}>TOTAL INFERENCES</span>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted)', fontWeight: 600, display: 'block' }}>{t('admin_ai_total_inferences')}</span>
                         <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--adm-text)', marginTop: 4, display: 'block' }}>
                             {dashboard?.total_predictions_logged?.toLocaleString() || '1,842'}
                         </span>
@@ -387,18 +321,18 @@ export default function AdminAIExplanations() {
             {/* Model Registry versions */}
             <div className="admin-table-wrap">
                 <div style={{ padding: '1rem', borderBottom: '1px solid var(--adm-border)' }}>
-                    <SectionTitle icon={GitBranch} title="Champion Model Registry" sub="A historical audit trail of all trained models, their validated performance, and current active status" />
+                    <SectionTitle icon={GitBranch} title={t('admin_ai_registry_title')} sub={t('admin_ai_registry_subtitle')} />
                 </div>
                 <table className="admin-table">
                     <thead>
                         <tr>
-                            <th>Model Version</th>
-                            <th>Trained</th>
-                            <th>MAE Score</th>
-                            <th>R² Score</th>
-                            <th>Train Size</th>
-                            <th>Performance Policy</th>
-                            <th>Registry Status</th>
+                            <th>{t('admin_ai_th_model_version')}</th>
+                            <th>{t('admin_ai_th_trained')}</th>
+                            <th>{t('admin_ai_th_mae_score')}</th>
+                            <th>{t('admin_ai_th_r2_score')}</th>
+                            <th>{t('admin_ai_th_train_size')}</th>
+                            <th>{t('admin_ai_th_performance_policy')}</th>
+                            <th>{t('admin_ai_th_registry_status')}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -406,26 +340,26 @@ export default function AdminAIExplanations() {
                             <tr key={m.model_version} style={{ position: 'relative' }}>
                                 <td style={{ fontWeight: 700, color: m.is_active ? 'var(--adm-accent)' : 'var(--adm-text)' }}>{m.model_version}</td>
                                 <td>{m.trained_at ? new Date(m.trained_at).toLocaleDateString() : '—'}</td>
-                                <td style={{ fontWeight: 600 }}>{m.mae != null ? `${m.mae.toFixed(2)} min` : '—'}</td>
+                                <td style={{ fontWeight: 600 }}>{m.mae != null ? `${m.mae.toFixed(2)} ${t('admin_ai_minutes')}` : '—'}</td>
                                 <td style={{ color: 'var(--adm-text)' }}>{m.r2_score != null ? m.r2_score.toFixed(4) : '—'}</td>
-                                <td style={{ color: 'var(--adm-text-muted)' }}>{m.dataset_size?.toLocaleString() || '—'} rows</td>
+                                <td style={{ color: 'var(--adm-text-muted)' }}>{m.dataset_size != null ? `${m.dataset_size.toLocaleString()} ${t('admin_ai_rows')}` : '—'}</td>
                                 <td>
                                     {m.better_than_baseline ? (
                                         <span style={{ color: '#34D399', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                            ✓ BEATS BASELINE ({m.improvement_pct != null ? `${m.improvement_pct > 0 ? '+' : ''}${m.improvement_pct.toFixed(1)}%` : '—'})
+                                            ✓ {t('admin_ai_beats_baseline')} ({m.improvement_pct != null ? `${m.improvement_pct > 0 ? '+' : ''}${m.improvement_pct.toFixed(1)}%` : '—'})
                                         </span>
                                     ) : (
-                                        <span style={{ color: '#F87171', fontWeight: 600 }}>✗ FAILED CRITERIA</span>
+                                        <span style={{ color: '#F87171', fontWeight: 600 }}>✗ {t('admin_ai_failed_criteria')}</span>
                                     )}
                                 </td>
                                 <td>
                                     {m.is_active ? (
                                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '2px 8px', borderRadius: 999, background: 'rgba(52,211,153,0.12)', color: '#34D399', fontSize: '0.7rem', fontWeight: 700 }}>
                                             <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#34D399', animation: 'ai-pulse 1.8s infinite' }} />
-                                            ACTIVE CHAMPION
+                                            {t('admin_ai_active_champion')}
                                         </span>
                                     ) : (
-                                        <span style={{ color: 'var(--adm-text-muted)', fontSize: '0.72rem' }}>Archived</span>
+                                        <span style={{ color: 'var(--adm-text-muted)', fontSize: '0.72rem' }}>{t('admin_ai_archived')}</span>
                                     )}
                                 </td>
                             </tr>
@@ -434,80 +368,122 @@ export default function AdminAIExplanations() {
                 </table>
             </div>
 
-            {/* Feature Importance panel */}
+            {/* AI System State */}
             <div className="admin-card" style={{ padding: '1.5rem' }}>
-                <SectionTitle icon={Layers} title="How the AI Makes Decisions" sub="The operational factors and scheduling details our model values most when predicting flight delays" />
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.85rem', marginTop: '1rem' }}>
-                    {FEATURE_COLUMNS.map((f, i) => {
-                        const score = 100 - i * 11;
-                        return (
-                            <div key={f.name} style={{
-                                padding: '1.1rem', borderRadius: 12,
-                                background: 'var(--adm-input-bg)', border: '1px solid var(--adm-border)',
-                                borderLeft: `4px solid ${f.color}`,
-                                display: 'flex',
-                                flexDirection: 'column',
-                                justifyContent: 'space-between',
-                                gap: '0.5rem'
-                            }}>
-                                <div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                        <span style={{
-                                            fontSize: '0.62rem',
-                                            fontWeight: 800,
-                                            padding: '2px 8px',
-                                            borderRadius: 999,
-                                            background: `${f.color}15`,
-                                            color: f.color,
-                                            letterSpacing: '0.05em'
-                                        }}>
-                                            {f.category}
-                                        </span>
-                                        <span style={{ fontSize: '0.72rem', color: 'var(--adm-text-sub)', fontWeight: 600 }}>
-                                            Decision Weight: {score}%
-                                        </span>
-                                    </div>
-                                    <h4 style={{ fontSize: '0.86rem', fontWeight: 700, color: 'var(--adm-text)', margin: '4px 0 0 0' }}>
-                                        {f.label}
-                                    </h4>
-                                    <p style={{ fontSize: '0.76rem', color: 'var(--adm-text-muted)', margin: '6px 0 0 0', lineHeight: 1.45 }}>
-                                        {f.desc}
-                                    </p>
-                                </div>
-                                
-                                <div style={{ marginTop: 8 }}>
-                                    <div style={{ height: 4, background: 'var(--adm-border)', borderRadius: 999, overflow: 'hidden' }}>
-                                        <div style={{ width: `${score}%`, height: '100%', background: f.color }} />
-                                    </div>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, fontSize: '0.62rem', color: 'var(--adm-text-muted)' }}>
-                                        <span>Influence Index</span>
-                                        <code style={{ opacity: 0.5, fontSize: '0.6rem' }}>{f.name}</code>
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
+                <SectionTitle icon={Shield} title={t('admin_ai_system_state_title')} sub={t('admin_ai_system_state_subtitle')} />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))', gap: '1rem', marginTop: '1rem' }}>
 
-            {/* Pipeline architecture */}
-            <div className="admin-card" style={{ padding: '1.5rem' }}>
-                <SectionTitle icon={Activity} title="AI Training & Quality Assurance Pipeline" sub="The automated steps our system takes to retrain, validate, and safely promote new AI versions" />
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginTop: '1.25rem' }}>
-                    {PIPELINE_STEPS.map(s => (
-                        <div key={s.step} style={{ textAlign: 'center', background: 'var(--adm-input-bg)', padding: '1.25rem 1rem', borderRadius: 12, border: '1px solid var(--adm-border)' }}>
-                            <div style={{
-                                width: 36, height: 36, borderRadius: '50%',
-                                background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.22)',
-                                color: 'var(--adm-accent)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontWeight: 700, margin: '0 auto 0.75rem', fontSize: '1rem',
-                            }}>
-                                {s.step}
-                            </div>
-                            <h4 style={{ fontWeight: 700, marginBottom: '0.25rem', fontSize: '0.82rem', color: 'var(--adm-text)' }}>{s.title}</h4>
-                            <p style={{ fontSize: '0.74rem', color: 'var(--adm-text-muted)', lineHeight: 1.5, margin: 0 }}>{s.desc}</p>
+                    {/* Réentraînement automatique */}
+                    <div style={{ padding: '1.1rem', borderRadius: 12, background: 'var(--adm-input-bg)', border: '1px solid var(--adm-border)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                            <RotateCcw size={16} style={{ color: 'var(--adm-accent)' }} />
+                            <h4 style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: 'var(--adm-text)' }}>{t('admin_ai_retraining_title')}</h4>
                         </div>
-                    ))}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem' }}>
+                                <span style={{ color: 'var(--adm-text-muted)' }}>{t('admin_ai_status_label')}</span>
+                                <span style={{ color: dashboard?.next_retraining_check ? '#34D399' : 'var(--adm-text-muted)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: dashboard?.next_retraining_check ? '#34D399' : 'var(--adm-text-muted)' }} />
+                                    {dashboard?.next_retraining_check ? t('admin_ai_retraining_enabled') : t('admin_ai_retraining_disabled')}
+                                </span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem' }}>
+                                <span style={{ color: 'var(--adm-text-muted)' }}>{t('admin_ai_retraining_last')}</span>
+                                <span style={{ color: 'var(--adm-text)', fontWeight: 600 }}>{dashboard?.last_training_date ? new Date(dashboard.last_training_date).toLocaleDateString() : '—'}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem' }}>
+                                <span style={{ color: 'var(--adm-text-muted)' }}>{t('admin_ai_retraining_next')}</span>
+                                <span style={{ color: 'var(--adm-text)', fontWeight: 600 }}>{dashboard?.next_retraining_check ? new Date(dashboard.next_retraining_check).toLocaleDateString() : '—'}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Surveillance de dérive */}
+                    <div style={{ padding: '1.1rem', borderRadius: 12, background: 'var(--adm-input-bg)', border: '1px solid var(--adm-border)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                            <Activity size={16} style={{ color: 'var(--adm-accent)' }} />
+                            <h4 style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: 'var(--adm-text)' }}>{t('admin_ai_drift_title')}</h4>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.76rem' }}>
+                                <span style={{ color: 'var(--adm-text-muted)' }}>{t('admin_ai_status_label')}</span>
+                                {(() => {
+                                    const s = !dashboard?.drift_severity || dashboard.drift_severity === 'none' ? 'stable' : dashboard.drift_severity === 'low' ? 'monitoring' : 'alert';
+                                    const c = { stable: '#34D399', monitoring: '#FBBF24', alert: '#F87171' };
+                                    const l = { stable: t('admin_ai_drift_stable'), monitoring: t('admin_ai_drift_monitoring'), alert: t('admin_ai_drift_alert') };
+                                    return (
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 6, background: `${c[s]}15`, color: c[s], fontSize: '0.72rem', fontWeight: 700, border: `1px solid ${c[s]}33` }}>
+                                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: c[s] }} />
+                                            {l[s]}
+                                        </span>
+                                    );
+                                })()}
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem' }}>
+                                <span style={{ color: 'var(--adm-text-muted)' }}>{t('admin_ai_drift_level')}</span>
+                                <span style={{ color: 'var(--adm-text)', fontWeight: 600, textTransform: 'capitalize' }}>{dashboard?.drift_severity || '—'}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.76rem' }}>
+                                <span style={{ color: 'var(--adm-text-muted)' }}>{t('admin_ai_drift_last')}</span>
+                                <span style={{ color: 'var(--adm-text)', fontWeight: 600 }}>{dashboard?.last_training_date ? new Date(dashboard.last_training_date).toLocaleDateString() : '—'}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Santé du modèle */}
+                    <div style={{ padding: '1.1rem', borderRadius: 12, background: 'var(--adm-input-bg)', border: '1px solid var(--adm-border)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                            <Heart size={16} style={{ color: 'var(--adm-accent)' }} />
+                            <h4 style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: 'var(--adm-text)' }}>{t('admin_ai_health_title')}</h4>
+                        </div>
+                        {(() => {
+                            const h = !dashboard?.drift_severity || dashboard.drift_severity === 'none' ? 'stable' : dashboard.drift_severity === 'low' ? 'attention' : 'critical';
+                            const colors = { stable: '#34D399', attention: '#FBBF24', critical: '#F87171' };
+                            const labels = { stable: t('admin_ai_health_stable'), attention: t('admin_ai_health_attention'), critical: t('admin_ai_health_critical') };
+                            const messages = { stable: t('admin_ai_health_good'), attention: t('admin_ai_health_fair'), critical: t('admin_ai_health_poor') };
+                            return (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.76rem' }}>
+                                        <span style={{ color: 'var(--adm-text-muted)' }}>{t('admin_ai_status_label')}</span>
+                                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 6, background: `${colors[h]}15`, color: colors[h], fontSize: '0.72rem', fontWeight: 700, border: `1px solid ${colors[h]}33` }}>
+                                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: colors[h] }} />
+                                            {labels[h]}
+                                        </span>
+                                    </div>
+                                    <p style={{ fontSize: '0.74rem', color: 'var(--adm-text-sub)', margin: 0, lineHeight: 1.5 }}>{messages[h]}</p>
+                                </div>
+                            );
+                        })()}
+                    </div>
+
+                    {/* Couverture opérationnelle */}
+                    <div style={{ padding: '1.1rem', borderRadius: 12, background: 'var(--adm-input-bg)', border: '1px solid var(--adm-border)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                            <Globe size={16} style={{ color: 'var(--adm-accent)' }} />
+                            <h4 style={{ margin: 0, fontSize: '0.82rem', fontWeight: 700, color: 'var(--adm-text)' }}>{t('admin_ai_coverage_title')}</h4>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem 1rem' }}>
+                            <div>
+                                <div style={{ fontSize: '0.65rem', color: 'var(--adm-text-muted)', fontWeight: 600, marginBottom: 2 }}>{t('admin_ai_coverage_flights')}</div>
+                                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--adm-text)', fontVariantNumeric: 'tabular-nums' }}>{dashboard?.current_dataset_size?.toLocaleString() || '—'}</div>
+                            </div>
+                            <div>
+                                <div style={{ fontSize: '0.65rem', color: 'var(--adm-text-muted)', fontWeight: 600, marginBottom: 2 }}>{t('admin_ai_coverage_predictions')}</div>
+                                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--adm-text)', fontVariantNumeric: 'tabular-nums' }}>{dashboard?.total_predictions_logged?.toLocaleString() || '—'}</div>
+                            </div>
+                            <div>
+                                <div style={{ fontSize: '0.65rem', color: 'var(--adm-text-muted)', fontWeight: 600, marginBottom: 2 }}>{t('admin_ai_coverage_reconciled')}</div>
+                                <div style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--adm-text)', fontVariantNumeric: 'tabular-nums' }}>{dashboard?.reconciled_predictions?.toLocaleString() || '—'}</div>
+                            </div>
+                            <div>
+                                <div style={{ fontSize: '0.65rem', color: 'var(--adm-text-muted)', fontWeight: 600, marginBottom: 2 }}>{t('admin_ai_coverage_airports')}</div>
+                                <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--adm-accent)' }}>TUN, MIR, NBE, DJE</div>
+                            </div>
+                        </div>
+                    </div>
+
+
+
                 </div>
             </div>
         </div>

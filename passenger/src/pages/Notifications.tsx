@@ -117,7 +117,7 @@ const Notifications = () => {
         ) : list.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
             <Bell className="h-8 w-8 mx-auto mb-3 opacity-40" />
-            <p className="text-sm">Aucune notification pour ce filtre.</p>
+            <p className="text-sm">{t("notif_empty", "No notifications for this filter.")}</p>
           </div>
         ) : (
           list.map((n, i) => <NotifRow key={n.id} n={n} i={i} />)

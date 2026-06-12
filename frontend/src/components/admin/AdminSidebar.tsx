@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import {
-    Plane, LayoutDashboard, Target, TrendingUp,
+    LayoutDashboard, TrendingUp,
     BrainCircuit, Settings, LogOut, Users, Globe,
     ChevronRight, ChevronLeft, MessageSquare, UserCircle,
 } from 'lucide-react';
@@ -54,7 +54,6 @@ export default function AdminSidebar({ onTabChange, onLogout, isRejected, collap
     let menuItems = [
         { to: '/dashboard', icon: LayoutDashboard, labelKey: 'dashboard', id: 'dashboard' },
         { to: '/dashboard/analytics', icon: TrendingUp, labelKey: 'analytics', id: 'analytics' },
-        { to: '/dashboard/predict', icon: Target, labelKey: 'predictDelay', id: 'predict' },
         ...(isSuperAdmin ? [
             { to: '/dashboard/ai', icon: BrainCircuit, labelKey: 'aiExplanations', id: 'ai' },
         ] : []),
@@ -89,7 +88,7 @@ export default function AdminSidebar({ onTabChange, onLogout, isRejected, collap
             >
                 <img
                     src={logo}
-                    alt="Smart Airport"
+                    alt={t('admin_brand')}
                     style={{
                         width: 36,
                         height: 36,

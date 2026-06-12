@@ -41,6 +41,13 @@ _FEAT_COLS_PATH   = (
     if (_MODEL_DIR / "feature_columns_v2.json").exists()
     else _MODEL_DIR / "feature_columns.json"  # legacy V1
 )
+# Clip from P99 of training target — replaces hardcoded 300.0
+_P99_CLIP_PATH = _MODEL_DIR / "target_clip_p99.json"
+if _P99_CLIP_PATH.exists():
+    import json
+    _P99_CLIP = json.load(open(_P99_CLIP_PATH))["target_clip_p99"]
+else:
+    _P99_CLIP = 300.0
 
 # ── Default feature columns ────────────────────────────────────────────────────
 # Used only when feature_columns_v2.json sidecar is absent.
@@ -208,7 +215,7 @@ def _rule_based(features: np.ndarray, cols: list) -> tuple[float, int, dict]:
         if not is_weekend:
             base_delay += 2.0
 
-    base_delay = max(0.0, min(300.0, base_delay))
+    base_delay = max(0.0, min(_P99_CLIP, base_delay))
     risk = min(100.0, (base_delay / 60.0) * 100.0)
     predicted_delay = int(round(base_delay))
 
@@ -339,11 +346,9 @@ def _ml_prediction(features: np.ndarray, cols: list) -> tuple[float, int, dict]:
     if isinstance(_model, SklearnPipeline):
         # Regression pipeline: predicts delay_minutes
         delay_raw    = float(_model.predict(features)[0])
-        # TODO: Load target_clip_p99.json and use stored value
-        # File: backend/app/ai/model/target_clip_p99.json
         if delay_raw is None or (isinstance(delay_raw, float) and math.isnan(delay_raw)):
             delay_raw = 0.0
-        delay_raw    = max(0.0, min(300.0, delay_raw))
+        delay_raw    = max(0.0, min(_P99_CLIP, delay_raw))
         # Map delay minutes to a 0-100 risk score:
         # 0 min → 0%, 15 min → 30%, 30 min → 55%, 60+ min → 85%+
         risk_score   = min(100.0, delay_raw / 60.0 * 85.0 + (5.0 if delay_raw > 0 else 0))

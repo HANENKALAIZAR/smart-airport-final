@@ -12,10 +12,26 @@ async function callGroq(messages, tools = []) {
     const systemMsg = messages.find(m => m.role === 'system');
     const conversationMsgs = messages
       .filter(m => m.role !== 'system')
-      .map(msg => ({
-        role: msg.role === 'user' ? 'user' : 'assistant',
-        content: msg.content
-      }));
+      .map(msg => {
+        if (msg.role === 'tool') {
+          return {
+            role: 'tool',
+            tool_call_id: msg.tool_call_id,
+            content: msg.content
+          };
+        }
+        if (msg.role === 'assistant' && msg.tool_calls) {
+          return {
+            role: 'assistant',
+            content: msg.content || null,
+            tool_calls: msg.tool_calls
+          };
+        }
+        return {
+          role: msg.role === 'user' ? 'user' : 'assistant',
+          content: msg.content
+        };
+      });
 
     const groqTools = tools.map(tool => ({
       type: 'function',
@@ -46,29 +62,40 @@ async function callGroq(messages, tools = []) {
 
     const choice = response.choices[0];
 
-    // Tool call requested by Groq
+    // Tool call requested by Groq (possibly multiple in parallel)
     if (choice.finish_reason === 'tool_calls' && choice.message.tool_calls?.length > 0) {
-      const toolCall = choice.message.tool_calls[0];
+      const toolCalls = choice.message.tool_calls.map(tc => ({
+        id: tc.id,
+        name: tc.function.name,
+        args: JSON.parse(tc.function.arguments)
+      }));
       return {
-        reply: '',
-        toolCall: {
-          name: toolCall.function.name,
-          args: JSON.parse(toolCall.function.arguments)
-        }
+        reply: choice.message.content || '',
+        toolCalls
       };
     }
 
-    return { reply: choice.message.content || '', toolCall: null };
+    return { reply: choice.message.content || '', toolCalls: null };
 
   } catch (error) {
     console.error('Groq API error:', error.message);
+    // Determine a friendly message based on error type — never expose internals
+    const errorMsg = error.message || '';
+    let friendlyMessage;
+    if (errorMsg.startsWith('429')) {
+      friendlyMessage = 'Our assistant is currently busy. Please wait a moment and try again.';
+    } else if (errorMsg.startsWith('401') || errorMsg.startsWith('403')) {
+      friendlyMessage = 'Our assistant is temporarily unavailable. Please contact support.';
+    } else {
+      friendlyMessage = 'Our assistant is temporarily unavailable. Please try again in a few moments.';
+    }
     return {
       reply: JSON.stringify({
-        message: 'Groq API unavailable. Check your GROQ_API_KEY.',
+        message: friendlyMessage,
         type: 'general',
-        actions: ['Passenger Rights', 'Alternative Flights', 'Airport Services']
+        actions: ['Flight Status', 'Airport Services', 'Passenger Rights']
       }),
-      toolCall: null
+      toolCalls: null
     };
   }
 }

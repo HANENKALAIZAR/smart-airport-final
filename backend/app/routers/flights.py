@@ -2,14 +2,14 @@
 Flights API router.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import require_approved_admin
+from app.dependencies import require_approved_admin, get_current_user_optional
 from app.models.models import User
 from app.repositories.flight_repository import (
     list_flights as repo_list_flights,
@@ -24,6 +24,8 @@ from app.schemas.schemas import (
     FlightListOut, FlightDetailOut, PredictionOut,
     FlightFeaturesOut, FlightCreate, FlightUpdate,
 )
+from app.models.ae_models import AEFlightSnapshot
+from app.services.flight_cache_service import _snapshot_to_api_dict
 
 router = APIRouter(prefix="/api/flights", tags=["Flights"])
 
@@ -102,31 +104,50 @@ def _enrich_flights_with_snapshots(flights: list, db: Session):
 @router.get("", response_model=list[dict])
 def list_flights(
     status: Optional[str] = Query(None, description="Filter by status: on_time, delayed, scheduled, cancelled"),
-    airport: Optional[str] = Query(None, description="Filter by origin/destination IATA code"),
+    airport: Optional[str] = Query(None, description="Filter by airport IATA code (airport_iata)"),
     airline: Optional[str] = Query(None, description="Filter by airline IATA code"),
     direction: Optional[str] = Query(None, description="departure or arrival"),
-    date: Optional[str] = Query(None, description="YYYY-MM-DD"),
+    date: Optional[str] = Query(None, description="YYYY-MM-DD — past, today, or future"),
     search: Optional[str] = Query(None, description="Search by flight number"),
     skip: int = Query(0, ge=0),
     limit: int = Query(500, ge=1, le=1000),
+    current_user: Optional[User] = Depends(get_current_user_optional),
     db: Session = Depends(get_db),
 ):
-    """List flights for admin dashboard directly from AEFlightSnapshot (Phase 3)."""
-    from app.models.ae_models import AEFlightSnapshot
-    from app.services.flight_cache_service import _snapshot_to_api_dict
-    from datetime import datetime, timezone
+    """List flights for admin dashboard directly from AEFlightSnapshot (Phase 3).
     
-    query_date = datetime.now(timezone.utc).date()
+    Date-based query classification:
+    - Past date:     query by snapshot_date (historical snapshots already collected)
+    - Today:         query by snapshot_date (live snapshot data)
+    - Future date:   query by flight_date (scheduled flights whose date is in the future)
+    
+    Airport admin restriction:
+    - Airport admin (role='admin'):  forced to their assigned airport
+    - Super admin:                   respects the ?airport= filter (default: all)
+    - Unauthenticated:               no airport restriction (public data)
+    """
+    today = datetime.now(timezone.utc).date()
+    query_date = today
     if date:
         try:
             query_date = datetime.strptime(date, "%Y-%m-%d").date()
         except ValueError:
             pass
 
-    query = db.query(AEFlightSnapshot).filter(AEFlightSnapshot.snapshot_date == query_date)
+    # Classify date and use the appropriate date column
+    if query_date > today:
+        date_filter = AEFlightSnapshot.flight_date == query_date
+    else:
+        date_filter = AEFlightSnapshot.snapshot_date == query_date
 
-    if airport:
-        # Match either origin or destination depending on the context, or just airport_iata
+    query = db.query(AEFlightSnapshot).filter(date_filter)
+
+    # ── Airport admin restriction ───────────────────────────────────────────
+    # Airport admins are forced to their assigned airport; super_admins
+    # respect the ?airport= query param (default all)
+    if current_user and current_user.role == "admin" and current_user.airport_iata:
+        query = query.filter(AEFlightSnapshot.airport_iata == current_user.airport_iata.upper())
+    elif airport:
         query = query.filter(AEFlightSnapshot.airport_iata == airport.upper())
     
     if direction:

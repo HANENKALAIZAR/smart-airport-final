@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { PublicNav } from "@/components/PublicNav";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,9 +20,16 @@ import {
   AlertTriangle,
   ShieldCheck,
   Globe2,
+  Info,
 } from "lucide-react";
+import {
+  getCompensationConfig,
+  type ApiCompensationConfig,
+  type ApiCompensationRegulation,
+  type ApiCompensationLimit,
+} from "@/services/api";
 
-type Region = "eu" | "us" | "ca" | "gcc";
+type Region = "eu" | "uk" | "us" | "ca" | "other";
 
 interface RegionData {
   id: Region;
@@ -39,146 +46,81 @@ interface RegionData {
 
 type IssueType = "delay" | "cancellation" | "denied" | "baggage";
 
-function evaluateClaim(input: {
-  region: Region;
-  issue: IssueType;
-  hours: number;
-  noticeDays: number;
-  controllable: boolean;
-  t: (key: string, fallback?: string) => string;
-}) {
-  const { region, issue, hours, noticeDays, controllable, t } = input;
+const EMPTY_CONFIG: ApiCompensationConfig = { regulations: [], limits: [], generated_at: "" };
 
-  if (issue === "baggage") {
-    return {
-      eligible: true,
-      title: t("rights_baggage_eligible_title", "Likely eligible — Baggage claim"),
-      detail: t("rights_baggage_eligible_detail", "File a Property Irregularity Report (PIR) at the airport within 7 days for damage, 21 days for delay. Keep receipts for essentials."),
-      amount: t("rights_baggage_eligible_amount", "Up to ~€1,800 / $3,800 (region dependent)"),
-    };
-  }
+const AIRPORT_IATA_TO_REGION: Record<string, Region> = {
+  CDG: "eu", ORY: "eu", FRA: "eu", FCO: "eu", MAD: "eu", BCN: "eu",
+  AMS: "eu", BRU: "eu", VIE: "eu", MUC: "eu", GVA: "eu", LYS: "eu",
+  NCE: "eu", MRS: "eu", MLA: "eu", TLS: "eu", BOD: "eu", LIS: "eu",
+  OPO: "eu", DUB: "eu", CPH: "eu", ARN: "eu", OSL: "eu", HEL: "eu",
+  ZRH: "eu", WAW: "eu", PRG: "eu", BUD: "eu", ATH: "eu", IST: "eu",
 
-  if (issue === "denied") {
-    return {
-      eligible: true,
-      title: t("rights_denied_eligible_title", "Likely eligible — Denied boarding"),
-      detail: t("rights_denied_eligible_detail", "Involuntary denied boarding triggers immediate compensation, rerouting or refund, and care."),
-      amount:
-        region === "us"
-          ? hours >= 2
-            ? t("rights_amount_us_denied_high", "Up to $2,150 (400% fare)")
-            : t("rights_amount_us_denied_low", "Up to $1,075 (200% fare)")
-          : region === "ca"
-            ? t("rights_amount_ca_denied", "Up to CA$2,400")
-            : region === "gcc"
-              ? t("rights_amount_gcc_denied", "SAR 1,500–4,500")
-              : t("rights_amount_eu_denied", "€250–€600"),
-    };
-  }
+  LHR: "uk", LGW: "uk", STN: "uk", LTN: "uk", SEN: "uk", LCY: "uk",
+  MAN: "uk", EDI: "uk", GLA: "uk", BHX: "uk", BRS: "uk", LPL: "uk",
+  NCL: "uk", EMA: "uk", ABZ: "uk", BFS: "uk", CWL: "uk", SOU: "uk",
+  EXT: "uk", NQY: "uk",
 
-  if (issue === "cancellation") {
-    if (noticeDays >= 14) {
-      return {
-        eligible: false,
-        title: t("rights_cancel_not_eligible_title", "Likely not eligible for compensation"),
-        detail: t("rights_cancel_not_eligible_detail", "You were notified 14+ days in advance. You're still entitled to a refund or rerouting."),
-        amount: t("rights_amount_refund_only", "Refund / rerouting only"),
-      };
-    }
-    if (!controllable) {
-      return {
-        eligible: false,
-        title: t("rights_cancel_extraordinary_title", "Compensation unlikely (extraordinary circumstances)"),
-        detail: t("rights_cancel_extraordinary_detail", "Weather, ATC, security or strikes typically exempt the airline. You're still entitled to care and a refund or rerouting."),
-        amount: t("rights_amount_refund_care", "Refund / rerouting + care"),
-      };
-    }
-    return {
-      eligible: true,
-      title: t("rights_cancel_eligible_title", "Likely eligible — Cancellation"),
-      detail: t("rights_cancel_eligible_detail", "Cancellation within 14 days and within the carrier's control. You can claim compensation in addition to refund or rerouting."),
-      amount:
-        region === "eu"
-          ? "€250–€600"
-          : region === "ca"
-            ? "CA$125–CA$1,000"
-            : region === "gcc"
-              ? "SAR 1,500–4,500"
-              : t("rights_amount_refund_policy", "Refund + airline policy"),
-    };
-  }
+  YYZ: "ca", YVR: "ca", YUL: "ca", YYC: "ca", YOW: "ca", YHZ: "ca",
+  YEG: "ca", YWG: "ca", YQB: "ca", YXE: "ca", YYJ: "ca", YTZ: "ca",
 
-  // Delay
-  if (region === "us") {
-    return {
-      eligible: hours >= 3,
-      title:
-        hours >= 3
-          ? t("rights_delay_us_eligible_title", "May be eligible — significant delay")
-          : t("rights_delay_us_not_eligible_title", "Not eligible for cash compensation"),
-      detail: t("rights_delay_us_detail", "US has no statutory cash compensation for delays, but you can refuse travel and get a full refund for significant delays. Airlines may provide meals/hotel per their policy."),
-      amount: hours >= 3 ? t("rights_amount_refund_care_us", "Refund + airline care") : "—",
-    };
-  }
+  JFK: "us", EWR: "us", LGA: "us", ORD: "us", DFW: "us", LAX: "us",
+  SFO: "us", MIA: "us", ATL: "us", BOS: "us", SEA: "us", PHX: "us",
+  DEN: "us", IAH: "us", MCO: "us", CLT: "us", PHL: "us", DCA: "us",
+  BWI: "us", SLC: "us", SAN: "us", TPA: "us", STL: "us", PDX: "us",
+};
 
-  if (!controllable) {
-    return {
-      eligible: false,
-      title: t("rights_delay_extraordinary_title", "Compensation unlikely (extraordinary circumstances)"),
-      detail: t("rights_delay_extraordinary_detail", "The disruption appears outside the airline's control. You're still entitled to care."),
-      amount: t("rights_amount_care_refund", "Care + refund if delay is long enough"),
-    };
-  }
+function resolveRegionFromAirportIata(iata: string): Region | null {
+  const code = iata.toUpperCase();
+  return AIRPORT_IATA_TO_REGION[code] ?? null;
+}
 
-  if (region === "eu") {
-    if (hours < 3)
-      return {
-        eligible: false,
-        title: t("rights_delay_eu_under3h_title", "Not yet eligible — delay under 3h"),
-        detail: t("rights_delay_eu_under3h_detail", "EU 261 compensation kicks in at 3h+ arrival delay."),
-        amount: t("rights_amount_care_only", "Care only (meals, refreshments)"),
-      };
-    return {
-      eligible: true,
-      title: t("rights_delay_eu_eligible_title", "Likely eligible — EU 261 delay"),
-      detail: t("rights_delay_eu_eligible_detail", "Arrival delay of 3h+ on a controllable disruption."),
-      amount: t("rights_amount_eu_delay", "€250 / €400 / €600 by distance"),
-    };
-  }
+const REGION_LABELS: Record<Region, string> = {
+  eu: "Union Européenne",
+  uk: "Royaume-Uni",
+  us: "États-Unis",
+  ca: "Canada",
+  other: "Autres pays",
+};
 
-  if (region === "ca") {
-    if (hours < 3)
-      return {
-        eligible: false,
-        title: t("rights_delay_ca_under3h_title", "Not yet eligible — delay under 3h"),
-        detail: t("rights_delay_ca_under3h_detail", "APPR compensation begins at 3h arrival delay."),
-        amount: t("rights_amount_treatment_only", "Standards of treatment only"),
-      };
-    return {
-      eligible: true,
-      title: t("rights_delay_ca_eligible_title", "Likely eligible — APPR delay"),
-      detail: t("rights_delay_ca_eligible_detail", "Controllable delay 3h+ on a Canadian flight."),
-      amount: "CA$400 / CA$700 / CA$1,000",
-    };
-  }
-
-  // GCC
-  if (hours < 2)
-    return {
-      eligible: false,
-      title: t("rights_delay_gcc_under2h_title", "Not yet eligible — delay under 2h"),
-      detail: t("rights_delay_gcc_under2h_detail", "GCC care obligations begin at 2h."),
-      amount: "—",
-    };
+const CFG = (() => {
+  // ── Config store: populated from API, with inline defaults as fallback ──
+  let _data: ApiCompensationConfig = EMPTY_CONFIG;
+  const _listeners: Array<() => void> = [];
   return {
-    eligible: hours >= 5,
-    title: hours >= 5 ? t("rights_delay_gcc_eligible_title", "Likely eligible — GCC delay") : t("rights_delay_gcc_care_title", "Care only at this stage"),
-    detail:
-      hours >= 5
-        ? t("rights_delay_gcc_eligible_detail", "Delay of 5h+ entitles you to compensation, refund or alternative transport.")
-        : t("rights_delay_gcc_care_detail", "You're entitled to refreshments and communication while you wait."),
-    amount: hours >= 5 ? "SAR 1,500–4,500" : t("rights_amount_care_only", "Care only"),
+    get data() { return _data; },
+    set data(d: ApiCompensationConfig) { _data = d; _listeners.forEach(fn => fn()); },
+    subscribe(fn: () => void) { _listeners.push(fn); return () => { const i = _listeners.indexOf(fn); if (i >= 0) _listeners.splice(i, 1); }; },
+    /** Look up first matching compensation regulation */
+    reg(regionUp: string, distKm: number): string | null {
+      const regs = _data.regulations.filter(r => r.region === regionUp && r.right_type === "compensation" && r.compensation_amount);
+      if (!regs.length) return null;
+      if (distKm <= 1500) return regs.find(r => r.description_en.includes("1500km") && !r.description_en.includes("3500"))?.compensation_amount ?? regs[0]?.compensation_amount ?? null;
+      if (distKm <= 3500) return regs.find(r => r.description_en.includes("3500km"))?.compensation_amount ?? regs[1]?.compensation_amount ?? null;
+      return regs[regs.length - 1]?.compensation_amount ?? null;
+    },
+    /** Look up first matching limit */
+    limit(regionUp: string, cat: string): ApiCompensationLimit | null {
+      return _data.limits.find(l => l.region === regionUp && l.category === cat) ?? null;
+    },
   };
+})();
+
+// ── Helper: build amount string from config for display ──
+function compRange(config: ApiCompensationConfig, regionUp: string): string {
+  const regs = config.regulations.filter(r => r.region === regionUp && r.right_type === "compensation" && r.compensation_amount);
+  if (!regs.length) return "";
+  const amounts = regs.map(r => r.compensation_amount!).filter(Boolean);
+  return amounts.join(" / ");
+}
+
+function caRange(config: ApiCompensationConfig): string {
+  const large3 = config.limits.find(l => l.region === "CA" && l.category === "large_carrier_3_6");
+  const large9 = config.limits.find(l => l.region === "CA" && l.category === "large_carrier_9plus");
+  const lo = large3 ? (large3.amount_cad ? `CA$${large3.amount_cad.toLocaleString()}` : large3.amount_usd ? `$${large3.amount_usd.toLocaleString()}` : null) : null;
+  const hi = large9 ? (large9.amount_cad ? `CA$${large9.amount_cad.toLocaleString()}` : large9.amount_usd ? `$${large9.amount_usd.toLocaleString()}` : null) : null;
+  if (lo && hi) return `${lo} – ${hi}`;
+  if (lo) return lo;
+  return "CA$400 / CA$700 / CA$1,000";
 }
 
 export default function PassengerRights() {
@@ -191,33 +133,71 @@ export default function PassengerRights() {
   const [flightNo, setFlightNo] = useState<string>("");
   const [submitted, setSubmitted] = useState(false);
 
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [detectedRegion, setDetectedRegion] = useState<Region | null>(null);
+  const [config, setConfig] = useState<ApiCompensationConfig>(EMPTY_CONFIG);
+
+  useEffect(() => {
+    getCompensationConfig().then(res => { if (res) { setConfig(res); CFG.data = res; } });
+  }, []);
+
+  const caBagLabel = useMemo(() => {
+    const l = config.limits.find(l => l.region === "CA" && l.category === "baggage_liability");
+    return l ? l.label_en : t("rights_baggage_ca", "Up to ~CA$2,350 (~€1,550 / ~$1,700) per passenger under Montreal Convention.");
+  }, [config, t]);
+
+  const usBagLabel = useMemo(() => {
+    const l = config.limits.find(l => l.region === "US" && l.category === "baggage_detail");
+    return l ? l.label_en : t("rights_baggage_us", "Up to $3,800 per passenger for domestic checked baggage liability.");
+  }, [config, t]);
+
+  const euCompRange = useMemo(() => compRange(config, "EU") || "€250 / €400 / €600", [config]);
+  const ukCompRange = useMemo(() => compRange(config, "UK") || "£220 / £350 / £520", [config]);
+  const caCompRangeStr = useMemo(() => caRange(config), [config]);
+
   const regions: RegionData[] = useMemo(() => [
     {
       id: "eu",
-      name: t("rights_region_eu", "European Union"),
+      name: t("rights_region_eu", "Union Européenne"),
       flag: "🇪🇺",
       law: t("rights_law_eu", "EC Regulation 261/2004"),
       summary: t("rights_summary_eu", "Applies to all flights departing from an EU airport, and to flights arriving in the EU operated by an EU carrier."),
       delay: t("rights_delay_eu", "Care (meals, refreshments, communication) from 2h. Compensation owed when arrival delay at final destination is 3h+ and the cause is within the airline's control."),
       cancellation: t("rights_cancellation_eu", "Right to a refund or rerouting + care. Compensation owed unless notified 14+ days in advance, or due to extraordinary circumstances."),
       denied: t("rights_denied_eu", "Involuntary denied boarding entitles you to immediate compensation, refund/rerouting and care."),
-      baggage: t("rights_baggage_eu", "Montreal Convention applies: up to ~1,519 SDR (~€1,800) for delayed, lost or damaged baggage."),
+      baggage: t("rights_baggage_eu", "Montreal Convention applies: terms set by applicable regulation."),
       compensation: [
-        { label: t("rights_short_flights", "Short flights (≤1,500 km)"), value: "€250" },
-        { label: t("rights_medium_flights", "Medium (1,500–3,500 km)"), value: "€400" },
-        { label: t("rights_long_flights", "Long (>3,500 km)"), value: "€600" },
+        { label: t("rights_short_flights", "Short flights (≤1,500 km)"), value: config.regulations.find(r => r.region === "EU" && r.description_en.includes("1500km") && !r.description_en.includes("3500"))?.compensation_amount ?? "€250" },
+        { label: t("rights_medium_flights", "Medium (1,500–3,500 km)"), value: config.regulations.find(r => r.region === "EU" && r.description_en.includes("3500km"))?.compensation_amount ?? "€400" },
+        { label: t("rights_long_flights", "Long (>3,500 km)"), value: config.regulations.filter(r => r.region === "EU" && r.right_type === "compensation" && r.compensation_amount).slice(-1)[0]?.compensation_amount ?? "€600" },
+      ],
+    },
+    {
+      id: "uk",
+      name: t("rights_region_uk", "Royaume-Uni"),
+      flag: "🇬🇧",
+      law: t("rights_law_uk", "UK Regulation 261/2004 (UK 261)"),
+      summary: t("rights_summary_uk", "Post-Brexit UK retained EU 261 as UK 261. Covers flights departing from UK airports, and flights arriving in the UK on UK/EU carriers."),
+      delay: t("rights_delay_uk", "Care (meals, refreshments, communication) from 2h. Compensation owed when arrival delay at final destination is 3h+ and the cause is within the airline's control."),
+      cancellation: t("rights_cancellation_uk", "Right to a refund or rerouting + care. Compensation owed unless notified 14+ days in advance, or due to extraordinary circumstances."),
+      denied: t("rights_denied_uk", "Involuntary denied boarding entitles you to immediate compensation, refund/rerouting and care."),
+      baggage: t("rights_baggage_uk", "Montreal Convention applies: terms set by applicable regulation."),
+      compensation: [
+        { label: t("rights_short_flights", "Short flights (≤1,500 km)"), value: config.regulations.find(r => r.region === "UK" && r.description_en.includes("1500km") && !r.description_en.includes("3500"))?.compensation_amount ?? "£220" },
+        { label: t("rights_medium_flights", "Medium (1,500–3,500 km)"), value: config.regulations.find(r => r.region === "UK" && r.description_en.includes("3500km"))?.compensation_amount ?? "£350" },
+        { label: t("rights_long_flights", "Long (>3,500 km)"), value: config.regulations.filter(r => r.region === "UK" && r.right_type === "compensation" && r.compensation_amount).slice(-1)[0]?.compensation_amount ?? "£520" },
       ],
     },
     {
       id: "us",
-      name: t("rights_region_us", "United States"),
+      name: t("rights_region_us", "États-Unis"),
       flag: "🇺🇸",
       law: t("rights_law_us", "DOT 14 CFR — Airline Passenger Protections"),
       summary: t("rights_summary_us", "No federal cash compensation for delays. Airlines must honor their own customer service plans (DOT dashboard)."),
       delay: t("rights_delay_us", "Refund required for 'significant' delays if you choose not to travel. Meals & hotel often provided per airline policy."),
       cancellation: t("rights_cancellation_us", "Full cash refund (not just credit) if the flight is cancelled or significantly changed and you don't accept rebooking."),
-      denied: t("rights_denied_us", "Involuntary bumping: 200% of one-way fare (max $1,075) for short delays, 400% (max $2,150) for longer delays."),
-      baggage: t("rights_baggage_us", "Up to $3,800 per passenger for domestic checked baggage liability."),
+      denied: t("rights_denied_us", "Involuntary bumping: compensation per applicable regulation (DOT 14 CFR Part 250)."),
+      baggage: usBagLabel,
       compensation: [
         { label: t("rights_us_bump_short", "Bump 0–1h late"), value: "$0" },
         { label: t("rights_us_bump_medium", "Bump 1–2h late"), value: "200% fare" },
@@ -231,37 +211,240 @@ export default function PassengerRights() {
       law: t("rights_law_ca", "Air Passenger Protection Regulations (APPR)"),
       summary: t("rights_summary_ca", "Compensation depends on airline size (large vs small) and whether the disruption is within the carrier's control."),
       delay: t("rights_delay_ca", "Standards of treatment from 2h (food, drink, communication). Compensation only for delays within carrier control and not safety-related."),
-      cancellation: t("rights_cancellation_ca", "Refund or rebooking required. Compensation up to CA$1,000 for large carriers when cause is within carrier control."),
-      denied: t("rights_denied_ca", "Up to CA$2,400 for involuntary denied boarding (9h+ delay) on large carriers."),
-      baggage: t("rights_baggage_ca", "Up to ~CA$2,350 (1,288 SDR) per passenger under Montreal Convention."),
+      cancellation: t("rights_cancellation_ca", "Refund or rebooking required. Compensation up to applicable APPR limit for large carriers when cause is within carrier control."),
+      denied: t("rights_denied_ca", "Compensation per APPR for involuntary denied boarding."),
+      baggage: caBagLabel,
       compensation: [
-        { label: t("rights_ca_delay_short", "3–6h delay (large)"), value: "CA$400" },
-        { label: t("rights_ca_delay_medium", "6–9h delay (large)"), value: "CA$700" },
-        { label: t("rights_ca_delay_long", "9h+ delay (large)"), value: "CA$1,000" },
+        { label: t("rights_ca_delay_short", "3–6h delay (large)"), value: config.limits.find(l => l.region === "CA" && l.category === "large_carrier_3_6")?.amount_cad ? `CA$${config.limits.find(l => l.region === "CA" && l.category === "large_carrier_3_6")!.amount_cad!.toLocaleString()}` : "CA$400" },
+        { label: t("rights_ca_delay_medium", "6–9h delay (large)"), value: config.limits.find(l => l.region === "CA" && l.category === "large_carrier_6_9")?.amount_cad ? `CA$${config.limits.find(l => l.region === "CA" && l.category === "large_carrier_6_9")!.amount_cad!.toLocaleString()}` : "CA$700" },
+        { label: t("rights_ca_delay_long", "9h+ delay (large)"), value: config.limits.find(l => l.region === "CA" && l.category === "large_carrier_9plus")?.amount_cad ? `CA$${config.limits.find(l => l.region === "CA" && l.category === "large_carrier_9plus")!.amount_cad!.toLocaleString()}` : "CA$1,000" },
       ],
     },
     {
-      id: "gcc",
-      name: t("rights_region_gcc", "GCC States"),
-      flag: "🇸🇦",
-      law: t("rights_law_gcc", "GCC Civil Aviation — Passenger Protection Regulation"),
-      summary: t("rights_summary_gcc", "Harmonized framework across Saudi Arabia, UAE, Kuwait, Qatar, Bahrain and Oman. Strong baggage & assistance protections."),
-      delay: t("rights_delay_gcc", "Care from 2h (refreshments, communication). Hotel & transport from 6h overnight. Refund or alternative if delay exceeds 5h."),
-      cancellation: t("rights_cancellation_gcc", "Right to refund or alternative transport, plus care. Compensation when notified less than 14 days in advance."),
-      denied: t("rights_denied_gcc", "Involuntary denied boarding entitles you to immediate compensation, alternative transport and full care."),
-      baggage: t("rights_baggage_gcc", "Compensation aligned with Montreal Convention limits (~1,519 SDR)."),
+      id: "other",
+      name: t("rights_region_other", "Autres pays"),
+      flag: "🌍",
+      law: t("rights_law_other", "Montreal Convention 1999"),
+      summary: t("rights_summary_other", "No regional passenger protection regulation. The Montreal Convention provides minimum liability coverage for international flights between signatory countries."),
+      delay: t("rights_delay_other", "No statutory cash compensation for delays. Airline care is voluntary. Montreal Convention may provide for proven damages in certain cases."),
+      cancellation: t("rights_cancellation_other", "Refund or rebooking subject to airline policy and conditions of carriage. Montreal Convention does not provide fixed cancellation compensation."),
+      denied: t("rights_denied_other", "No fixed compensation. Montreal Convention liability limits may apply depending on the route and circumstances."),
+      baggage: t("rights_baggage_other", "Montreal Convention applies: terms set by applicable regulation."),
       compensation: [
-        { label: t("rights_short_flights", "Short flights"), value: "SAR 1,500" },
-        { label: t("rights_medium_flights", "Medium flights"), value: "SAR 3,000" },
-        { label: t("rights_long_flights", "Long flights"), value: "SAR 4,500" },
+        { label: t("rights_other_montreal", "Montreal Convention"), value: t("rights_other_proven", "Proven damages") },
       ],
     },
-  ], [t]);
+  ], [t, config, caBagLabel, usBagLabel]);
 
-  const result = useMemo(
-    () => evaluateClaim({ region, issue, hours, noticeDays, controllable, t }),
-    [region, issue, hours, noticeDays, controllable, t]
-  );
+  const handleFlightNoChange = useCallback((value: string) => {
+    setFlightNo(value);
+    setValidationError(null);
+    setDetectedRegion(null);
+
+    const iata = value.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 6);
+    if (iata.length >= 4) {
+      const depRegion = resolveRegionFromAirportIata(iata);
+      if (depRegion) {
+        setDetectedRegion(depRegion);
+        setRegion(depRegion);
+      }
+    }
+  }, []);
+
+  const handleRegionChange = useCallback((value: string) => {
+    const newRegion = value as Region;
+    setRegion(newRegion);
+    if (detectedRegion && newRegion !== detectedRegion) {
+      setValidationError(
+        t("rights_region_mismatch",
+          "La région sélectionnée ne correspond pas au pays de départ du vol. Ce vol est classé dans la catégorie '{{correctRegion}}'.")
+        .replace("{{correctRegion}}", REGION_LABELS[detectedRegion])
+      );
+    } else {
+      setValidationError(null);
+    }
+  }, [detectedRegion, t]);
+
+  const handleSubmit = useCallback(() => {
+    if (validationError) {
+      return;
+    }
+    setSubmitted(true);
+  }, [validationError]);
+
+  const result = useMemo(() => {
+    const euAmt = (d: number) => {
+      const r = config.regulations.filter(r => r.region === "EU" && r.right_type === "compensation" && r.compensation_amount);
+      return d <= 1500 ? (r.find(x => x.description_en.includes("1500km") && !x.description_en.includes("3500"))?.compensation_amount ?? "€250")
+        : d <= 3500 ? (r.find(x => x.description_en.includes("3500km"))?.compensation_amount ?? "€400")
+        : (r[r.length - 1]?.compensation_amount ?? "€600");
+    };
+    const ukAmt = (d: number) => {
+      const r = config.regulations.filter(r => r.region === "UK" && r.right_type === "compensation" && r.compensation_amount);
+      return d <= 1500 ? (r.find(x => x.description_en.includes("1500km") && !x.description_en.includes("3500"))?.compensation_amount ?? "£220")
+        : d <= 3500 ? (r.find(x => x.description_en.includes("3500km"))?.compensation_amount ?? "£350")
+        : (r[r.length - 1]?.compensation_amount ?? "£520");
+    };
+    const usDeniedShort = config.limits.find(l => l.category === "denied_boarding_200")?.amount_usd;
+    const usDeniedLong = config.limits.find(l => l.category === "denied_boarding_400")?.amount_usd;
+    const caDenied = config.limits.find(l => l.region === "CA" && l.category === "denied_boarding");
+    const caCanc = config.limits.find(l => l.region === "CA" && l.category === "cancellation_comp");
+    const caSmall3 = config.limits.find(l => l.region === "CA" && l.category === "small_carrier_3_6");
+    const caLarge9 = config.limits.find(l => l.region === "CA" && l.category === "large_carrier_9plus");
+    const caSmall9 = config.limits.find(l => l.region === "CA" && l.category === "small_carrier_9plus");
+
+    const euRange = config.regulations.filter(r => r.region === "EU" && r.right_type === "compensation" && r.compensation_amount).map(r => r.compensation_amount!).filter(Boolean).join("–") || "€250–€600";
+    const ukRange = config.regulations.filter(r => r.region === "UK" && r.right_type === "compensation" && r.compensation_amount).map(r => r.compensation_amount!).filter(Boolean).join("–") || "£220–£520";
+    const caRangeDenied = caDenied?.amount_cad ? `CA$${caDenied.amount_cad.toLocaleString()}` : "CA$2,400";
+    const caRangeCancel = caCanc?.amount_cad ? `CA$${caCanc.amount_cad.toLocaleString()}` : "CA$1,000";
+
+    if (issue === "baggage") {
+      return {
+        eligible: true,
+        title: t("rights_baggage_eligible_title", "Likely eligible — Baggage claim"),
+        detail: t("rights_baggage_eligible_detail", "File a Property Irregularity Report (PIR) at the airport within 7 days for damage, 21 days for delay. Keep receipts for essentials."),
+        amount: t("rights_baggage_eligible_amount", "Varies by applicable regulation — see region details"),
+      };
+    }
+
+    if (issue === "denied") {
+      return {
+        eligible: true,
+        title: t("rights_denied_eligible_title", "Likely eligible — Denied boarding"),
+        detail: t("rights_denied_eligible_detail", "Involuntary denied boarding triggers immediate compensation, rerouting or refund, and care."),
+        amount:
+          region === "us"
+            ? hours >= 2
+              ? (usDeniedLong ? `Up to $${usDeniedLong.toLocaleString()} (400% fare)` : t("rights_amount_us_denied_high", "Up to $2,150 (400% fare)"))
+              : (usDeniedShort ? `Up to $${usDeniedShort.toLocaleString()} (200% fare)` : t("rights_amount_us_denied_low", "Up to $1,075 (200% fare)"))
+            : region === "ca"
+              ? caRangeDenied
+              : region === "uk"
+                ? ukRange
+                : region === "eu"
+                  ? euRange
+                  : t("rights_amount_other_denied", "Montreal Convention liability limits"),
+      };
+    }
+
+    if (issue === "cancellation") {
+      if (noticeDays >= 14) {
+        return {
+          eligible: false,
+          title: t("rights_cancel_not_eligible_title", "Likely not eligible for compensation"),
+          detail: t("rights_cancel_not_eligible_detail", "You were notified 14+ days in advance. You're still entitled to a refund or rerouting."),
+          amount: t("rights_amount_refund_only", "Refund / rerouting only"),
+        };
+      }
+      if (!controllable) {
+        return {
+          eligible: false,
+          title: t("rights_cancel_extraordinary_title", "Compensation unlikely (extraordinary circumstances)"),
+          detail: t("rights_cancel_extraordinary_detail", "Weather, ATC, security or strikes typically exempt the airline. You're still entitled to care and a refund or rerouting."),
+          amount: t("rights_amount_refund_care", "Refund / rerouting + care"),
+        };
+      }
+      return {
+        eligible: true,
+        title: t("rights_cancel_eligible_title", "Likely eligible — Cancellation"),
+        detail: t("rights_cancel_eligible_detail", "Cancellation within 14 days and within the carrier's control. You can claim compensation in addition to refund or rerouting."),
+        amount:
+          region === "eu"
+            ? euRange
+            : region === "uk"
+              ? ukRange
+              : region === "ca"
+                ? (caSmall3?.amount_cad && caLarge9?.amount_cad
+                  ? `CA$${caSmall3.amount_cad.toLocaleString()} – CA$${caLarge9.amount_cad.toLocaleString()}`
+                  : caRangeCancel)
+                : t("rights_amount_refund_policy", "Refund + airline policy"),
+      };
+    }
+
+    // Delay
+    if (region === "us") {
+      return {
+        eligible: hours >= 3,
+        title:
+          hours >= 3
+            ? t("rights_delay_us_eligible_title", "May be eligible — significant delay")
+            : t("rights_delay_us_not_eligible_title", "Not eligible for cash compensation"),
+        detail: t("rights_delay_us_detail", "US has no statutory cash compensation for delays, but you can refuse travel and get a full refund for significant delays. Airlines may provide meals/hotel per their policy."),
+        amount: hours >= 3 ? t("rights_amount_refund_care_us", "Refund + airline care") : "—",
+      };
+    }
+
+    if (!controllable) {
+      return {
+        eligible: false,
+        title: t("rights_delay_extraordinary_title", "Compensation unlikely (extraordinary circumstances)"),
+        detail: t("rights_delay_extraordinary_detail", "The disruption appears outside the airline's control. You're still entitled to care."),
+        amount: t("rights_amount_care_refund", "Care + refund if delay is long enough"),
+      };
+    }
+
+    if (region === "eu") {
+      if (hours < 3)
+        return {
+          eligible: false,
+          title: t("rights_delay_eu_under3h_title", "Not yet eligible — delay under 3h"),
+          detail: t("rights_delay_eu_under3h_detail", "EU 261 compensation kicks in at 3h+ arrival delay."),
+          amount: t("rights_amount_care_only", "Care only (meals, refreshments)"),
+        };
+      return {
+        eligible: true,
+        title: t("rights_delay_eu_eligible_title", "Likely eligible — EU 261 delay"),
+        detail: t("rights_delay_eu_eligible_detail", "Arrival delay of 3h+ on a controllable disruption."),
+        amount: t("rights_amount_eu_delay", "") + " " + euCompRange,
+      };
+    }
+
+    if (region === "uk") {
+      if (hours < 3)
+        return {
+          eligible: false,
+          title: t("rights_delay_uk_under3h_title", "Not yet eligible — delay under 3h"),
+          detail: t("rights_delay_uk_under3h_detail", "UK 261 compensation kicks in at 3h+ arrival delay."),
+          amount: t("rights_amount_care_only", "Care only (meals, refreshments)"),
+        };
+      return {
+        eligible: true,
+        title: t("rights_delay_uk_eligible_title", "Likely eligible — UK 261 delay"),
+        detail: t("rights_delay_uk_eligible_detail", "Arrival delay of 3h+ on a controllable disruption."),
+        amount: t("rights_amount_uk_delay", "") + " " + ukCompRange,
+      };
+    }
+
+    if (region === "ca") {
+      if (hours < 3)
+        return {
+          eligible: false,
+          title: t("rights_delay_ca_under3h_title", "Not yet eligible — delay under 3h"),
+          detail: t("rights_delay_ca_under3h_detail", "APPR compensation begins at 3h arrival delay."),
+          amount: t("rights_amount_treatment_only", "Standards of treatment only"),
+        };
+      return {
+        eligible: true,
+        title: t("rights_delay_ca_eligible_title", "Likely eligible — APPR delay"),
+        detail: t("rights_delay_ca_eligible_detail", "Controllable delay 3h+ on a Canadian flight."),
+        amount: caCompRangeStr || "CA$400 / CA$700 / CA$1,000",
+      };
+    }
+
+    if (hours < 2)
+      return {
+        eligible: false,
+        title: t("rights_delay_other_under2h_title", "Not eligible — delay under 2h"),
+        detail: t("rights_delay_other_under2h_detail", "No statutory compensation. Montreal Convention may apply for proven damages."),
+        amount: "—",
+      };
+    return {
+      eligible: false,
+      title: t("rights_delay_other_title", "No fixed compensation"),
+      detail: t("rights_delay_other_detail", "No statutory compensation scheme exists for this region. The Montreal Convention provides for proven damages in certain cases. Care may be provided voluntarily by the airline."),
+      amount: t("rights_amount_montreal", "Montreal Convention — proven damages"),
+    };
+  }, [region, issue, hours, noticeDays, controllable, t, config, euCompRange, ukCompRange, caCompRangeStr]);
 
   const active = useMemo(() => regions.find((r) => r.id === region)!, [regions, region]);
 
@@ -303,8 +486,8 @@ export default function PassengerRights() {
             </div>
           </div>
 
-          <Tabs value={region} onValueChange={(v) => setRegion(v as Region)}>
-            <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 h-auto p-1 bg-secondary">
+          <Tabs value={region} onValueChange={handleRegionChange}>
+            <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 h-auto p-1 bg-secondary">
               {regions.map((r) => (
                 <TabsTrigger
                   key={r.id}
@@ -399,13 +582,18 @@ export default function PassengerRights() {
                       name="flight_number"
                       placeholder="e.g. AF1234"
                       value={flightNo}
-                      onChange={(e) => setFlightNo(e.target.value)}
+                      onChange={(e) => handleFlightNoChange(e.target.value)}
                       className="mt-2"
                     />
+                    {detectedRegion && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {t("rights_detected_region", "Départ détecté")}: {REGION_LABELS[detectedRegion]}
+                      </p>
+                    )}
                   </div>
                   <div>
                     <Label>{t("rights_departure_region", "Region of departure")}</Label>
-                    <Select name="region" value={region} onValueChange={(v) => setRegion(v as Region)}>
+                    <Select name="region" value={region} onValueChange={handleRegionChange}>
                       <SelectTrigger className="mt-2">
                         <SelectValue />
                       </SelectTrigger>
@@ -417,6 +605,9 @@ export default function PassengerRights() {
                         ))}
                       </SelectContent>
                     </Select>
+                    {validationError && (
+                      <p className="text-xs text-destructive mt-1">{validationError}</p>
+                    )}
                   </div>
                 </div>
 
@@ -515,10 +706,16 @@ export default function PassengerRights() {
                 <Button
                   size="lg"
                   className="w-full bg-gradient-amber text-primary-foreground shadow-amber font-medium"
-                  onClick={() => setSubmitted(true)}
+                  onClick={handleSubmit}
+                  disabled={!!validationError}
                 >
                   {t("rights_check_btn", "Check eligibility")}
                 </Button>
+                {validationError && (
+                  <p className="text-xs text-destructive text-center">
+                    {t("rights_validation_blocked", "Veuillez d'abord sélectionner la région correcte pour ce vol.")}
+                  </p>
+                )}
               </div>
             </Card>
 
@@ -566,6 +763,12 @@ export default function PassengerRights() {
                     <AlertTriangle className="h-3.5 w-3.5 text-primary mt-0.5 shrink-0" />
                     <p>
                       {t("rights_disclaimer_text")}
+                    </p>
+                  </div>
+                  <div className="mt-2 flex items-start gap-2 text-xs text-muted-foreground/70">
+                    <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                    <p>
+                      {t("rights_conversion_disclaimer")}
                     </p>
                   </div>
                 </div>

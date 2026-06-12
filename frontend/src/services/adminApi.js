@@ -309,6 +309,20 @@ export async function apiGetAllAiSuggestions(airportIata = null, priority = null
   return request('GET', `/admin/ai-suggestions/all${qs ? `?${qs}` : ''}`);
 }
 
+/** Persist a decision (approve/reject) for a suggestion */
+export async function apiDecideSuggestion(payload) {
+  // payload: { suggestion_key, airport_iata, suggestion_type, status, suggestion_payload }
+  return request('POST', '/admin/ai-suggestions/decide', payload);
+}
+
+/** Fetch all persisted decisions for the admin's airport */
+export async function apiGetSuggestionDecisions(date = null) {
+  const params = new URLSearchParams();
+  if (date) params.set('date', date);
+  const qs = params.toString();
+  return request('GET', `/admin/ai-suggestions/decisions${qs ? `?${qs}` : ''}`);
+}
+
 export async function apiResubmitIdProfile(payload) {
   return request('POST', '/users/me/id-profile-resubmit', payload);
 }
@@ -374,6 +388,10 @@ export async function apiGetMessageUnreadCount() {
 
 export async function apiMarkPassengerRead(messageId) {
   return request('POST', `/admin/messages/${messageId}/read`, {});
+}
+
+export async function apiDeletePassengerMessage(messageId) {
+  return request('DELETE', `/admin/messages/${messageId}`);
 }
 
 export async function apiMarkMessagesInboxRead() {
@@ -466,36 +484,3 @@ export async function apiGetAirlinesPerformance(params = {}) {
   return request('GET', `/dashboard/airlines-performance${q ? '?' + q : ''}`);
 }
 
-
-// ── Flights ───────────────────────────────────────────────────────────────
-
-export async function apiGetFlights(params = {}) {
-  const q = new URLSearchParams(params).toString();
-  return request('GET', `/flights?${q}`);
-}
-
-export async function apiGetFlight(id) {
-  return request('GET', `/flights/${id}`);
-}
-
-export async function apiCreateFlight(payload) {
-  return request('POST', '/flights', payload);
-}
-
-export async function apiUpdateFlight(id, payload) {
-  return request('PUT', `/flights/${id}`, payload);
-}
-
-export async function apiDeleteFlight(id) {
-  return request('DELETE', `/flights/${id}`);
-}
-
-// ── Predictions ───────────────────────────────────────────────────────────
-
-export async function apiPredict(features) {
-  return request('POST', '/predictions', features);
-}
-
-export async function apiBatchPredict(flightIds) {
-  return request('POST', '/predictions/batch', flightIds);
-}

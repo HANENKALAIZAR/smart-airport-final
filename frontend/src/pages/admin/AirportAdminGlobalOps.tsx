@@ -417,19 +417,19 @@ export default function AirportAdminGlobalOps() {
                             <span style={{ position: 'absolute', display: 'inline-flex', width: '100%', height: '100%', borderRadius: '50%', background: '#34D399', animation: 'ping 1.5s cubic-bezier(0,0,0.2,1) infinite', opacity: 0.75 }} />
                             <span style={{ position: 'relative', display: 'inline-flex', width: 8, height: 8, borderRadius: '50%', background: '#34D399' }} />
                         </span>
-                        Live{lastUpdated && ` · Updated ${lastUpdated.toLocaleTimeString()}`}
+                        {t('admin_globalops_live')}{lastUpdated && ` · ${t('admin_globalops_updated_prefix')} ${lastUpdated.toLocaleTimeString()}`}
                     </div>
                     <h1 style={{ fontSize: '2.75rem', fontWeight: 600, letterSpacing: '-0.03em', color: 'var(--adm-text)', lineHeight: 1.1 }}>
-                        Airport Operations{' '}
-                        <span style={{ background: 'linear-gradient(135deg,#06b6d4,#22d3ee)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>Center</span>
+                        {t('admin_globalops_title')}{' '}
+                        <span style={{ background: 'linear-gradient(135deg,#06b6d4,#22d3ee)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>{t('admin_globalops_title_accent')}</span>
                     </h1>
                     <p style={{ marginTop: 8, maxWidth: 540, fontSize: '0.9rem', color: 'var(--adm-text-muted)' }}>
-                        Live airport operational monitoring · real-time AI delay forecasting and traffic reliability metrics.
+                        {t('admin_globalops_subtitle')}
                     </p>
                 </div>
                 <button onClick={load} className="admin-btn admin-btn--outline admin-btn--compact">
                     <RefreshCw size={14} style={{ animation: loading ? 'spin 1s linear infinite' : 'none' }} />
-                    <span>Refresh</span>
+                    <span>{t('refresh')}</span>
                 </button>
             </header>
 
@@ -437,17 +437,17 @@ export default function AirportAdminGlobalOps() {
             {error && (
                 <div style={{ marginBottom: '1.5rem', padding: '0.75rem 1rem', borderRadius: 10, background: 'rgba(248,113,113,0.10)', border: '1px solid rgba(248,113,113,0.28)', color: '#FCA5A5', fontSize: '0.84rem', display: 'flex', alignItems: 'center', gap: 8 }}>
                     <AlertTriangle size={15} />
-                    Failed to load: {error}. Ensure the backend is running and you are logged in.
+                    {t('admin_globalops_error_text')} {error}. {t('admin_globalops_error_hint')}
                 </div>
             )}
 
             {/* KPI Grid */}
             <section style={{ marginBottom: '2rem', display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '1rem' }}>
-                <KpiCard i={0} title="Airport Station" value={loading ? '…' : myAirport?.iata || '—'} icon={<MapPin size={18} />} accent="info" barPct={100} />
-                <KpiCard i={1} title="Station Flights" value={loading ? '…' : totalFlights.toLocaleString()} icon={<Plane size={18} />} accent="cyan" barPct={75} trend={{ dir: 'up', value: '1.2%' }} />
-                <KpiCard i={2} title="Station OTP" value={loading ? '…' : `${airportOTP}%`} icon={<TrendingUp size={18} />} accent="success" barPct={Number(airportOTP)} trend={{ dir: 'up', value: '0.8%' }} />
-                <KpiCard i={3} title="Average Delay" value={loading ? '…' : `${avgDelay} min`} icon={<AlertTriangle size={18} />} accent="danger" barPct={Number(avgDelay) * 2} />
-                <KpiCard i={4} title="AI Predicted (72h)" value={loading ? '…' : String(aiPredicted)} icon={<BrainCircuit size={18} />} accent="violet" barPct={aiPredicted > 0 ? 80 : 0} trend={{ dir: 'up', value: '1.1%' }} />
+                <KpiCard i={0} title={t('admin_globalops_kpi_airport_station')} value={loading ? '…' : myAirport?.iata || '—'} icon={<MapPin size={18} />} accent="info" barPct={100} />
+                <KpiCard i={1} title={t('admin_globalops_kpi_station_flights')} value={loading ? '…' : totalFlights.toLocaleString()} icon={<Plane size={18} />} accent="cyan" barPct={75} trend={{ dir: 'up', value: '1.2%' }} />
+                <KpiCard i={2} title={t('admin_globalops_kpi_station_otp')} value={loading ? '…' : `${airportOTP}%`} icon={<TrendingUp size={18} />} accent="success" barPct={Number(airportOTP)} trend={{ dir: 'up', value: '0.8%' }} />
+                <KpiCard i={3} title={t('admin_globalops_kpi_avg_delay')} value={loading ? '…' : `${avgDelay} min`} icon={<AlertTriangle size={18} />} accent="danger" barPct={Number(avgDelay) * 2} />
+                <KpiCard i={4} title={t('admin_globalops_kpi_ai_predicted')} value={loading ? '…' : String(aiPredicted)} icon={<BrainCircuit size={18} />} accent="violet" barPct={aiPredicted > 0 ? 80 : 0} trend={{ dir: 'up', value: '1.1%' }} />
             </section>
 
             {/* Main content grid */}
@@ -457,43 +457,43 @@ export default function AirportAdminGlobalOps() {
                     <div>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--adm-border)', paddingBottom: '1rem', marginBottom: '1.25rem' }}>
                             <div>
-                                <h2 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--adm-text)' }}>Station Performance Profile</h2>
-                                <p style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted)', marginTop: 2 }}>Detailed reliability indices for your assigned terminal station</p>
+                                <h2 style={{ fontSize: '1.125rem', fontWeight: 600, color: 'var(--adm-text)' }}>{t('admin_globalops_performance_profile')}</h2>
+                                <p style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted)', marginTop: 2 }}>{t('admin_globalops_performance_sub')}</p>
                             </div>
                         </div>
                         {loading ? (
-                            <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--adm-text-muted)', fontSize: '0.875rem' }}>Loading…</div>
+                            <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--adm-text-muted)', fontSize: '0.875rem' }}>{t('admin_globalops_station_loading')}</div>
                         ) : !myAirport ? (
-                            <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--adm-text-muted)', fontSize: '0.875rem' }}>No data on file for this station.</div>
+                            <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--adm-text-muted)', fontSize: '0.875rem' }}>{t('admin_globalops_no_station_data')}</div>
                         ) : (
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                     <div>
-                                        <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--adm-text-muted)', letterSpacing: '0.05em' }}>Airport Name</span>
+                                        <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--adm-text-muted)', letterSpacing: '0.05em' }}>{t('admin_globalops_airport_name')}</span>
                                         <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--adm-text)', marginTop: 4 }}>{myAirport.name}</div>
                                     </div>
                                     <div>
-                                        <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--adm-text-muted)', letterSpacing: '0.05em' }}>Reliability Score</span>
+                                        <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--adm-text-muted)', letterSpacing: '0.05em' }}>{t('admin_globalops_reliability_score')}</span>
                                         <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--adm-accent)', marginTop: 4 }}>{(myAirport.reliability_score ?? 0).toFixed(3)}</div>
                                     </div>
                                     <div>
-                                        <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--adm-text-muted)', letterSpacing: '0.05em' }}>Operational Status</span>
+                                        <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--adm-text-muted)', letterSpacing: '0.05em' }}>{t('admin_globalops_operational_status')}</span>
                                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 12px', borderRadius: 20, fontSize: '0.72rem', fontWeight: 700, marginTop: 6, ...riskInline[myAirport.risk_level] }}>
-                                            {myAirport.risk_level.toUpperCase()} RISK
+                                            {myAirport.risk_level.toUpperCase()} {t('admin_globalops_risk_suffix')}
                                         </div>
                                     </div>
                                 </div>
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                     <div>
-                                        <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--adm-text-muted)', letterSpacing: '0.05em' }}>Delay Rate</span>
+                                        <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--adm-text-muted)', letterSpacing: '0.05em' }}>{t('admin_globalops_delay_rate')}</span>
                                         <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--adm-text)', marginTop: 4 }}>
                                             {myAirport.on_time_rate != null ? `${(100 - myAirport.on_time_rate).toFixed(1)}%` : '—'}
                                         </div>
                                     </div>
                                     <div>
-                                        <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--adm-text-muted)', letterSpacing: '0.05em' }}>Timetable Status</span>
+                                        <span style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', color: 'var(--adm-text-muted)', letterSpacing: '0.05em' }}>{t('admin_globalops_timetable_status')}</span>
                                         <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--adm-text)', marginTop: 4 }}>
-                                            {myAirport.has_data ? 'Connected & Synchronized' : 'Offline'}
+                                            {myAirport.has_data ? t('admin_globalops_connected') : t('admin_globalops_offline')}
                                         </div>
                                     </div>
                                 </div>
@@ -505,14 +505,14 @@ export default function AirportAdminGlobalOps() {
                 {/* Radar chart card */}
                 <div className="glass-card" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                     <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--adm-text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '1rem' }}>
-                        Operational Signature
+                        {t('admin_globalops_radar_title')}
                     </h3>
                     {loading ? (
-                        <div style={{ height: 260, display: 'grid', placeItems: 'center', color: 'var(--adm-text-muted)' }}>Loading signature…</div>
+                        <div style={{ height: 260, display: 'grid', placeItems: 'center', color: 'var(--adm-text-muted)' }}>{t('admin_globalops_radar_loading')}</div>
                     ) : radarMetrics.length > 0 ? (
                         <RadarChart metrics={radarMetrics} />
                     ) : (
-                        <div style={{ height: 260, display: 'grid', placeItems: 'center', color: 'var(--adm-text-muted)' }}>No data available</div>
+                        <div style={{ height: 260, display: 'grid', placeItems: 'center', color: 'var(--adm-text-muted)' }}>{t('admin_globalops_radar_no_data')}</div>
                     )}
                 </div>
             </section>

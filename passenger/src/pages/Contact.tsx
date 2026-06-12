@@ -80,6 +80,7 @@ export default function Contact() {
   const { toast } = useToast();
   const [activeCode, setActiveCode] = useState<TunisianAirportCode>("TUN");
   const [submitting, setSubmitting] = useState(false);
+  const [reopenConfirm, setReopenConfirm] = useState<{ referenceId: string; message: string } | null>(null);
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -173,18 +174,20 @@ export default function Contact() {
     setSubmitting(true);
     try {
       const apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api');
+      const body = JSON.stringify({
+        fullName: form.name.trim(),
+        email: form.email.trim(),
+        airportIata: form.airport,
+        subject: form.subject,
+        message: form.message.trim(),
+        ...(reopenConfirm ? { confirm_reopen: true } : {}),
+      });
       const response = await fetch(`${apiBase}/public/contact-message`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          fullName: form.name.trim(),
-          email: form.email.trim(),
-          airportIata: form.airport,
-          subject: form.subject,
-          message: form.message.trim(),
-        }),
+        body,
       });
 
       const resText = await response.text();
@@ -204,11 +207,32 @@ export default function Contact() {
         return;
       }
 
+      if (resData.requires_confirmation) {
+        // Resolved ticket - ask passenger to confirm reopen
+        setReopenConfirm({ referenceId: resData.reference_id, message: form.message.trim() });
+        toast({
+          title: t("contact_ticket_resolved", "Ticket Already Resolved"),
+          description: resData.message || "This ticket is already resolved. Please confirm to reopen.",
+          variant: "default",
+        });
+        return;
+      }
+
+      // Clear reopen confirm state after successful resubmission
+      setReopenConfirm(null);
+
       if (resData.appended) {
         // Spam/duplicate merged warning
         toast({
           title: t("contact_duplicate_req", "Duplicate Request Detected"),
           description: `Your previous request is already being processed. Reference ID: ${resData.reference_id}`,
+          variant: "default",
+        });
+      } else if (resData.thread_appended) {
+        // Reply added to existing ticket thread
+        toast({
+          title: t("contact_reply_added", "Reply Received"),
+          description: resData.message || `Your message has been added to ticket ${resData.reference_id}.`,
           variant: "default",
         });
       } else {
@@ -517,6 +541,34 @@ export default function Contact() {
                 )}
               </Button>
 
+              {reopenConfirm && (
+                <div className="p-4 rounded-xl border border-amber-500/40 bg-amber-500/10 space-y-3">
+                  <p className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                    {t("contact_reopen_title", "This ticket is already resolved.")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("contact_reopen_desc", "Your message will be added to the existing conversation and the ticket will be reopened.")}
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      type="submit"
+                      size="sm"
+                      className="bg-amber-600 hover:bg-amber-700 text-white gap-1.5"
+                      disabled={submitting}
+                    >
+                      {t("contact_reopen_confirm", "Reopen & Send")}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setReopenConfirm(null)}
+                    >
+                      {t("contact_cancel", "Cancel")}
+                    </Button>
+                  </div>
+                </div>
+              )}
               <p className="text-[11px] text-muted-foreground text-center">
                 {t("contact_terms_note")}
               </p>

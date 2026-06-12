@@ -109,6 +109,7 @@ export interface Flight {
   durationMin: number;
   distanceKm: number;
   progress: number;
+  flightDate?: string | null;
   delayMin: number | null;
   onTimeHistory: number;
   prediction?: FlightPrediction | null;
@@ -212,6 +213,50 @@ function adaptRights(rights: ApiPassengerRight[] | null): PassengerRight[] {
     description: r.description_fr || r.description_en,
     compensation: r.compensation_amount,
   }));
+}
+
+// ── Compensation Config (backend-driven, never hardcoded) ─────
+
+export interface ApiCompensationLimit {
+  region: string;
+  category: string;
+  label_en: string;
+  label_fr?: string;
+  label_ar?: string;
+  amount_eur?: number;
+  amount_usd?: number;
+  amount_cad?: number;
+  amount_gbp?: number;
+  source_sdr?: number;
+  is_active: boolean;
+  regulation_version?: string;
+  regulation_source?: string;
+  last_updated_at?: string;
+}
+
+export interface ApiCompensationRegulation {
+  region: string;
+  regulation_name: string;
+  delay_threshold_min: number;
+  right_type: string;
+  description_en: string;
+  description_fr?: string;
+  compensation_amount?: string;
+  is_active: boolean;
+  valid_from?: string;
+  valid_to?: string;
+  regulation_version?: string;
+  last_updated_at?: string;
+}
+
+export interface ApiCompensationConfig {
+  regulations: ApiCompensationRegulation[];
+  limits: ApiCompensationLimit[];
+  generated_at: string;
+}
+
+export async function getCompensationConfig(): Promise<ApiCompensationConfig | null> {
+  return fetchApi<ApiCompensationConfig>('/api/passenger/compensation-config');
 }
 
 function adaptFlight(f: ApiFlightList | ApiFlightDetail): Flight {
@@ -358,8 +403,10 @@ export async function getFlightPrediction(id: string): Promise<FlightPrediction 
 export async function getPassengerFlights(
   airport: string,
   direction: 'departure' | 'arrival' | 'both' = 'both',
+  date?: string,
 ): Promise<Flight[]> {
-  const url = `/passenger/flights?airport=${airport}&direction=${direction}`;
+  let url = `/passenger/flights?airport=${airport}&direction=${direction}`;
+  if (date) url += `&date=${date}`;
 
   interface PassengerFlightListResponse {
     flights: AEFlight[];
@@ -404,6 +451,7 @@ export async function getPassengerAlternatives(flightNumber: string): Promise<Fl
 interface AEFlight {
   id: string;
   flight_number: string;
+  flight_date?: string;
   status: string;
   direction: 'departure' | 'arrival';
   airline_name: string;
@@ -574,6 +622,7 @@ function adaptAEFlight(f: AEFlight): Flight {
     durationMin,
     distanceKm,
     progress,
+    flightDate: f.flight_date ?? null,
     delayMin: f.delay_minutes ?? null,
     onTimeHistory: 0, // Not available from Aviation Edge
     prediction: null,

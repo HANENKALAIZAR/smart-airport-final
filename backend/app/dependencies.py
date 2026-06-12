@@ -5,6 +5,8 @@ Reusable FastAPI dependencies for JWT validation and role-based access control.
 """
 
 import logging
+from typing import Optional
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
@@ -17,6 +19,7 @@ from app.models.models import User
 logger = logging.getLogger(__name__)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 
 def get_current_user(
@@ -54,6 +57,19 @@ def get_current_user(
         )
 
     return user
+
+
+def get_current_user_optional(
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+    db: Session = Depends(get_db),
+) -> Optional[User]:
+    """Return the authenticated user or None if no/expired token."""
+    if not token:
+        return None
+    try:
+        return get_current_user(token, db)
+    except (HTTPException, JWTError):
+        return None
 
 
 def require_admin(user: User = Depends(get_current_user)) -> User:

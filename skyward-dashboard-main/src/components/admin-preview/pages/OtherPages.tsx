@@ -373,7 +373,7 @@ export function AIExplanationsPage() {
           <h1 className="admin-page__title" style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <BrainCircuit size={22} style={{ color: "var(--adm-accent)" }} /> AI Model Intelligence
           </h1>
-          <p className="admin-page__subtitle">delay_prediction_model.pkl · ae_model_versions · live MLOps telemetry</p>
+          <p className="admin-page__subtitle">AI model intelligence · live monitoring active</p>
         </div>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           <LivePulse label="MONITORING" />

@@ -130,6 +130,7 @@ function FieldShell({ label, children, fullWidth }: { label: string; children: R
 function ReadField({ label, value, icon: Icon, verified, status, fullWidth }: {
     label: string; value?: string | null; icon: any; verified?: boolean; status?: 'processing' | 'rejected'; fullWidth?: boolean;
 }) {
+    const { t } = useLanguage();
     return (
         <FieldShell label={label} fullWidth={fullWidth}>
             <div style={{
@@ -140,9 +141,9 @@ function ReadField({ label, value, icon: Icon, verified, status, fullWidth }: {
             }}>
                 <Icon size={15} style={{ color: 'var(--adm-text-muted)', flexShrink: 0 }} />
                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value || '—'}</span>
-                {verified && <span title="Verified" style={{ color: '#10B981' }}><Check size={14} /></span>}
-                {status === 'processing' && <span title="Processing" style={{ color: '#F59E0B' }}><AlertCircle size={14} /></span>}
-                {status === 'rejected' && <span title="Rejected" style={{ color: '#EF4444' }}><X size={14} /></span>}
+                {verified && <span title={t('admin_profile_verified')} style={{ color: '#10B981' }}><Check size={14} /></span>}
+                {status === 'processing' && <span title={t('admin_profile_processing')} style={{ color: '#F59E0B' }}><AlertCircle size={14} /></span>}
+                {status === 'rejected' && <span title={t('admin_profile_rejected')} style={{ color: '#EF4444' }}><X size={14} /></span>}
             </div>
         </FieldShell>
     );
@@ -152,6 +153,7 @@ function EditField({ label, value, editable, editing, error, onChange, icon: Ico
     label: string; value?: string | null; editable: boolean; editing: boolean;
     error?: string; onChange: (v: string) => void; icon: any; fullWidth?: boolean; type?: string; options?: string[];
 }) {
+    const { t } = useLanguage();
     const active = editable && editing;
     return (
         <FieldShell label={label} fullWidth={fullWidth}>
@@ -174,7 +176,7 @@ function EditField({ label, value, editable, editing, error, onChange, icon: Ico
                             cursor: 'pointer',
                         }}
                     >
-                        <option value="" disabled>Select {label.toLowerCase()}</option>
+                        <option value="" disabled>{t('admin_profile_select')} {label.toLowerCase()}</option>
                         {options.map(o => <option key={o} value={o}>{o}</option>)}
                     </select>
                 ) : (
@@ -191,7 +193,7 @@ function EditField({ label, value, editable, editing, error, onChange, icon: Ico
                     />
                 )}
                 {editable && !editing && (
-                    <span title="Editable in edit mode" style={{ color: 'var(--adm-text-muted)' }}><Pencil size={12} /></span>
+                    <span title={t('admin_profile_editable_hint')} style={{ color: 'var(--adm-text-muted)' }}><Pencil size={12} /></span>
                 )}
             </div>
             {error && <div style={{ marginTop: 4, fontSize: '0.72rem', color: '#EF4444' }}>{error}</div>}
@@ -200,6 +202,7 @@ function EditField({ label, value, editable, editing, error, onChange, icon: Ico
 }
 
 function DocumentPreview({ label, url, accent }: { label: string; url?: string | null; accent: string }) {
+    const { t } = useLanguage();
     if (!url) return (
         <div style={{
             display: 'flex', alignItems: 'center', gap: 12,
@@ -211,7 +214,7 @@ function DocumentPreview({ label, url, accent }: { label: string; url?: string |
             </div>
             <div style={{ flex: 1 }}>
                 <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--adm-text)' }}>{label}</div>
-                <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted)' }}>No document on file</div>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--adm-text-muted)' }}>{t('admin_profile_no_document')}</div>
             </div>
         </div>
     );
@@ -243,14 +246,15 @@ function DocumentPreview({ label, url, accent }: { label: string; url?: string |
 function DocumentUploadField({ label, url, accent, editing, onChange }: {
     label: string; url?: string | null; accent: string; editing: boolean; onChange: (v: string) => void;
 }) {
+    const { t } = useLanguage();
     const fileRef = useRef<HTMLInputElement>(null);
     const handlePick = () => { if (editing) fileRef.current?.click(); };
     const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
         const allowed = ['image/png', 'image/jpeg', 'image/jpg', 'application/pdf'];
-        if (!allowed.includes(file.type)) { alert('Only JPG, PNG or PDF files are accepted.'); return; }
-        if (file.size > 5 * 1024 * 1024) { alert('File must be under 5MB.'); return; }
+        if (!allowed.includes(file.type)) { alert(t('admin_profile_upload_format_error')); return; }
+        if (file.size > 5 * 1024 * 1024) { alert(t('admin_profile_upload_size_error')); return; }
         const reader = new FileReader();
         reader.onload = () => onChange(reader.result as string);
         reader.readAsDataURL(file);
@@ -272,7 +276,7 @@ function DocumentUploadField({ label, url, accent, editing, onChange }: {
                 <span style={{ flex: 1, fontSize: '0.82rem', fontWeight: 600, color: 'var(--adm-text)' }}>{label}</span>
                 {editing && (
                     <span style={{ fontSize: '0.72rem', color: accent, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Camera size={12} /> {url ? 'Replace' : 'Upload'}
+                        <Camera size={12} /> {url ? t('admin_profile_upload_replace') : t('admin_profile_upload_btn')}
                     </span>
                 )}
                 {!editing && url && (
@@ -290,7 +294,7 @@ function DocumentUploadField({ label, url, accent, editing, onChange }: {
             ) : (
                 editing ? (
                     <div style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--adm-text-muted)', fontSize: '0.8rem' }}>
-                        Click to upload a document (JPG, PNG, PDF · max 5MB)
+                        {t('admin_profile_upload_hint')}
                     </div>
                 ) : null
             )}
@@ -303,6 +307,7 @@ function PwField({ label, v, setV, show, toggle, state, hint }: {
     label: string; v: string; setV: (s: string) => void; show: boolean; toggle: () => void;
     state?: 'error' | 'ok'; hint?: string;
 }) {
+    const { t } = useLanguage();
     const borderColor = state === 'error' ? 'rgba(239,68,68,0.6)' : state === 'ok' ? 'rgba(16,185,129,0.5)' : 'var(--adm-border)';
     return (
         <div>
@@ -327,7 +332,7 @@ function PwField({ label, v, setV, show, toggle, state, hint }: {
                         letterSpacing: show ? 'normal' : '0.18em',
                     }}
                 />
-                <button type="button" onClick={toggle} aria-label={show ? 'Hide password' : 'Show password'}
+                <button type="button" onClick={toggle} aria-label={show ? t('admin_profile_pw_hide') : t('admin_profile_pw_show')}
                     style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--adm-text-muted)', display: 'flex' }}>
                     {show ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
@@ -372,13 +377,13 @@ export default function AdminProfilePage() {
 
         // Validate format
         if (!["image/png", "image/jpeg", "image/jpg"].includes(file.type)) {
-            showToast('error', 'Only JPG, PNG or JPEG files are accepted.');
+            showToast('error', t('admin_profile_photo_format_error'));
             return;
         }
 
         // Validate size (2MB)
         if (file.size > 2 * 1024 * 1024) {
-            showToast('error', 'File size must be under 2MB.');
+            showToast('error', t('admin_profile_photo_size_error'));
             return;
         }
 
@@ -397,7 +402,7 @@ export default function AdminProfilePage() {
             }
         };
         reader.onerror = () => {
-            showToast('error', 'Failed to read file.');
+            showToast('error', t('admin_profile_photo_read_error'));
         };
         reader.readAsDataURL(file);
     };
@@ -434,7 +439,7 @@ export default function AdminProfilePage() {
         const { data: me, error } = await apiGetMe();
         setLoading(false);
         if (error || !me) {
-            showToast('error', 'Failed to load profile. Please refresh.');
+            showToast('error', t('admin_profile_toast_load_failed'));
             return;
         }
         const mapped: ProfileData = {
@@ -558,7 +563,7 @@ export default function AdminProfilePage() {
     const save = async () => {
         const e = validate(draft);
         setErrors(e);
-        if (Object.keys(e).length > 0) { showToast('error', 'Please correct the highlighted fields.'); return; }
+        if (Object.keys(e).length > 0) { showToast('error', t('admin_profile_toast_correct_errors')); return; }
         setSaving(true);
         const payload: Record<string, string | null> = {};
 
@@ -598,7 +603,7 @@ export default function AdminProfilePage() {
         if (error) { showToast('error', error); return; }
         setData(draft);
         setEditing(false);
-        showToast('success', 'Profile updated successfully.');
+        showToast('success', t('admin_profile_toast_update_success'));
         window.dispatchEvent(new CustomEvent('admin-header-refresh-me'));
         await loadProfile();
     };
@@ -613,16 +618,16 @@ export default function AdminProfilePage() {
 
     /* Password change */
     const submitPassword = async () => {
-        if (!pwCurrent) { setPwMsg({ type: 'error', text: 'Enter your current password.' }); return; }
-        if (pwNext.length < 8) { setPwMsg({ type: 'error', text: 'New password must be at least 8 characters.' }); return; }
-        if (strength.score < 2) { setPwMsg({ type: 'error', text: 'Choose a stronger password.' }); return; }
-        if (pwNext !== pwConfirm) { setPwMsg({ type: 'error', text: 'Passwords do not match.' }); return; }
+        if (!pwCurrent) { setPwMsg({ type: 'error', text: t('admin_profile_pw_err_current_empty') }); return; }
+        if (pwNext.length < 8) { setPwMsg({ type: 'error', text: t('admin_profile_pw_err_too_short') }); return; }
+        if (strength.score < 2) { setPwMsg({ type: 'error', text: t('admin_profile_pw_err_weak') }); return; }
+        if (pwNext !== pwConfirm) { setPwMsg({ type: 'error', text: t('admin_profile_pw_err_mismatch') }); return; }
         setPwSaving(true);
         const { error } = await apiChangePassword(pwCurrent, pwNext);
         setPwSaving(false);
         if (error) { setPwMsg({ type: 'error', text: error }); setTimeout(() => setPwMsg(null), 3500); return; }
         setPwCurrent(''); setPwNext(''); setPwConfirm('');
-        setPwMsg({ type: 'success', text: 'Password updated successfully.' });
+        setPwMsg({ type: 'success', text: t('admin_profile_pw_updated_success') });
         setTimeout(() => setPwMsg(null), 3500);
     };
 
@@ -654,25 +659,25 @@ export default function AdminProfilePage() {
                         {t('profile') || 'Profile Settings'}
                     </h1>
                     <p className="admin-page__subtitle">
-                        Manage your identity documents and administrative contact information.
+                        {t('admin_profile_subtitle')}
                     </p>
                 </div>
                 <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={loadProfile} className="admin-btn admin-btn--outline admin-btn--compact" style={{ minWidth: 40, padding: 0 }} title="Refresh">
+                    <button onClick={loadProfile} className="admin-btn admin-btn--outline admin-btn--compact" style={{ minWidth: 40, padding: 0 }} title={t('admin_profile_refresh')}>
                         <RefreshCw size={15} className={loading ? 'su-spin' : ''} />
                     </button>
                     {data.verificationStatus !== "expired_verification" && (
                         !editing ? (
                             <button className="admin-btn admin-btn--primary" onClick={startEdit} disabled={loading}>
-                                <Pencil size={14} /> <span>Edit Profile</span>
+                                <Pencil size={14} /> <span>{t('admin_profile_edit')}</span>
                             </button>
                         ) : (
                             <>
                                 <button className="admin-btn admin-btn--outline" onClick={cancelEdit}>
-                                    <X size={14} /> <span>Cancel</span>
+                                    <X size={14} /> <span>{t('cancel')}</span>
                                 </button>
                                 <button className="admin-btn admin-btn--primary" onClick={save} disabled={saving}>
-                                    {saving ? <><Loader size={14} className="su-spin" /> Saving…</> : <><Save size={14} /> <span>Save Changes</span></>}
+                                    {saving ? <><Loader size={14} className="su-spin" /> {t('admin_profile_saving')}</> : <><Save size={14} /> <span>{t('admin_profile_save_changes')}</span></>}
                                 </button>
                             </>
                         )
@@ -692,22 +697,22 @@ export default function AdminProfilePage() {
                 }}>
                     <ShieldCheck size={18} style={{ flexShrink: 0, marginTop: 2, color: '#F59E0B' }} />
                     <div>
-                        <strong style={{ display: 'block', marginBottom: 4 }}>Temporary Edit Access Granted</strong>
+                        <strong style={{ display: 'block', marginBottom: 4 }}>{t('admin_profile_temp_edit_title')}</strong>
                         <div style={{ fontSize: '0.8rem', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                             {(data.profileUnlockIdentity || data.profileEditUnlocked) && (
-                                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(245,158,11,0.20)', border: '1px solid rgba(245,158,11,0.40)', fontWeight: 600 }}>Identity (Name, DOB, Gender, Nationality)</span>
+                                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(245,158,11,0.20)', border: '1px solid rgba(245,158,11,0.40)', fontWeight: 600 }}>{t('admin_profile_temp_edit_identity')}</span>
                             )}
                             {(data.profileUnlockPassport || data.profileEditUnlocked) && (
-                                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(245,158,11,0.20)', border: '1px solid rgba(245,158,11,0.40)', fontWeight: 600 }}>Passport (Number, Expiry, Document)</span>
+                                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(245,158,11,0.20)', border: '1px solid rgba(245,158,11,0.40)', fontWeight: 600 }}>{t('admin_profile_temp_edit_passport')}</span>
                             )}
                             {(data.profileUnlockCinDoc || data.profileEditUnlocked) && (
-                                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(245,158,11,0.20)', border: '1px solid rgba(245,158,11,0.40)', fontWeight: 600 }}>CIN (Number, Front &amp; Back Documents)</span>
+                                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(245,158,11,0.20)', border: '1px solid rgba(245,158,11,0.40)', fontWeight: 600 }}>{t('admin_profile_temp_edit_cin')}</span>
                             )}
                             {(data.profileUnlockContact || data.profileEditUnlocked) && (
-                                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(245,158,11,0.20)', border: '1px solid rgba(245,158,11,0.40)', fontWeight: 600 }}>Contact &amp; Emergency Info</span>
+                                <span style={{ padding: '2px 8px', borderRadius: 6, background: 'rgba(245,158,11,0.20)', border: '1px solid rgba(245,158,11,0.40)', fontWeight: 600 }}>{t('admin_profile_temp_edit_contact')}</span>
                             )}
                         </div>
-                        <div style={{ marginTop: 4, fontSize: '0.75rem', opacity: 0.85 }}>These sections will automatically relock once you save.</div>
+                        <div style={{ marginTop: 4, fontSize: '0.75rem', opacity: 0.85 }}>{t('admin_profile_temp_edit_autolock')}</div>
                     </div>
                 </div>
             )}
@@ -724,8 +729,8 @@ export default function AdminProfilePage() {
                 }}>
                     <AlertCircle size={18} style={{ flexShrink: 0, marginTop: 2, color: '#EF4444' }} />
                     <div>
-                        <strong style={{ display: 'block', marginBottom: 2 }}>Verification Expired</strong>
-                        Your verification request has expired due to inactivity. Please contact the Super Admin.
+                        <strong style={{ display: 'block', marginBottom: 2 }}>{t('admin_profile_verif_expired_title')}</strong>
+                        {t('admin_profile_verif_expired_msg')}
                     </div>
                 </div>
             )}
@@ -733,7 +738,7 @@ export default function AdminProfilePage() {
             {/* Loading skeleton */}
             {loading && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '2rem', color: 'var(--adm-text-muted)', fontSize: '0.9rem' }}>
-                    <Loader size={18} className="su-spin" /> Loading profile…
+                    <Loader size={18} className="su-spin" /> {t('admin_profile_loading')}
                 </div>
             )}
 
@@ -749,7 +754,7 @@ export default function AdminProfilePage() {
                                 {(editing ? draft.profilePhotoUrl : data.profilePhotoUrl) ? (
                                     <img
                                         src={editing ? draft.profilePhotoUrl! : data.profilePhotoUrl!}
-                                        alt="Profile"
+                                        alt={t('admin_profile_photo_alt')}
                                         style={{ width: 100, height: 100, borderRadius: '50%', objectFit: 'cover', border: '3px solid var(--adm-card)', boxShadow: '0 8px 24px rgba(245,158,11,0.22)' }}
                                     />
                                 ) : (
@@ -767,7 +772,7 @@ export default function AdminProfilePage() {
                                 {data.verificationStatus !== "expired_verification" && (
                                     <button 
                                         onClick={triggerFileSelect}
-                                        aria-label="Change photo" 
+                                        aria-label={t('admin_profile_photo_change')} 
                                         style={{
                                             position: 'absolute', bottom: 0, right: 2, width: 30, height: 30,
                                             borderRadius: '50%', border: '2px solid var(--adm-card)',
@@ -788,10 +793,10 @@ export default function AdminProfilePage() {
                             </div>
 
                             <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--adm-text)', marginBottom: 4 }}>
-                                {data.fullName || 'Administrator'}
+                                {data.fullName || t('admin_profile_avatar_fallback')}
                             </div>
                             <div style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--adm-accent)', letterSpacing: '0.08em', marginBottom: 4 }}>
-                                {data.role === 'super_admin' ? 'SUPER ADMIN' : 'AIRPORT ADMIN'}
+                                {data.role === 'super_admin' ? t('admin_profile_role_super_admin') : t('admin_profile_role_airport_admin')}
                             </div>
                             {data.airport && (
                                 <div style={{ fontSize: '0.78rem', color: 'var(--adm-text-muted)', marginBottom: '1rem' }}>
@@ -813,14 +818,14 @@ export default function AdminProfilePage() {
                         <div className="admin-card" style={{ padding: '1.25rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.85rem', fontWeight: 700, color: 'var(--adm-text)' }}>
-                                    <ShieldCheck size={15} style={{ color: 'var(--adm-accent)' }} /> Identity Integrity
+                                    <ShieldCheck size={15} style={{ color: 'var(--adm-accent)' }} /> {t('admin_profile_identity_title')}
                                 </div>
                                 <span style={{ color: '#10B981' }}><Check size={16} /></span>
                             </div>
                             {[
-                                { label: 'Employee ID', value: data.employeeId || '—' },
-                                { label: 'Work Email', value: data.email || '—' },
-                                { label: 'Personal Email', value: data.personalEmail || '—' },
+                                { label: t('admin_profile_identity_employee_id'), value: data.employeeId || '—' },
+                                { label: t('admin_profile_identity_work_email'), value: data.email || '—' },
+                                { label: t('admin_profile_identity_personal_email'), value: data.personalEmail || '—' },
                             ].map(r => (
                                 <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '6px 0', borderBottom: '1px solid var(--adm-border)' }}>
                                     <span style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted)' }}>{r.label}</span>
@@ -828,7 +833,7 @@ export default function AdminProfilePage() {
                                 </div>
                             ))}
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 10 }}>
-                                <span style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted)' }}>Status</span>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted)' }}>{t('admin_profile_identity_status')}</span>
                                 <span style={{
                                     fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.08em',
                                     padding: '3px 8px', borderRadius: 6,
@@ -845,11 +850,11 @@ export default function AdminProfilePage() {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
 
                         {/* Personal Information */}
-                        <Section title="Personal Information" subtitle="Identity and demographics on file.">
+                        <Section title={t('admin_profile_section_personal')} subtitle={t('admin_profile_section_personal_sub')}>
                             <Grid cols={2}>
                                 {isEditable('fullName') ? (
                                     <EditField
-                                        label="Full Name"
+                                        label={t('admin_profile_field_full_name')}
                                         value={editing ? draft.fullName : data.fullName}
                                         editable={true}
                                         editing={editing}
@@ -858,12 +863,12 @@ export default function AdminProfilePage() {
                                         icon={UserCircle}
                                     />
                                 ) : (
-                                    <ReadField label="Full Name" value={data.fullName} icon={UserCircle} />
+                                    <ReadField label={t('admin_profile_field_full_name')} value={data.fullName} icon={UserCircle} />
                                 )}
                                 
                                 {isEditable('dateOfBirth') ? (
                                     <EditField
-                                        label="Date of Birth"
+                                        label={t('admin_profile_field_dob')}
                                         value={editing ? draft.dateOfBirth : data.dateOfBirth}
                                         editable={true}
                                         editing={editing}
@@ -873,12 +878,12 @@ export default function AdminProfilePage() {
                                         type="date"
                                     />
                                 ) : (
-                                    <ReadField label="Date of Birth" value={fmtDate(data.dateOfBirth)} icon={Calendar} />
+                                    <ReadField label={t('admin_profile_field_dob')} value={fmtDate(data.dateOfBirth)} icon={Calendar} />
                                 )}
 
                                 {isEditable('gender') ? (
                                     <EditField
-                                        label="Gender"
+                                        label={t('admin_profile_field_gender')}
                                         value={editing ? draft.gender : data.gender}
                                         editable={true}
                                         editing={editing}
@@ -888,12 +893,12 @@ export default function AdminProfilePage() {
                                         options={['Male', 'Female', 'Other', 'na']}
                                     />
                                 ) : (
-                                    <ReadField label="Gender" value={data.gender} icon={UserCircle} />
+                                    <ReadField label={t('admin_profile_field_gender')} value={data.gender} icon={UserCircle} />
                                 )}
 
                                 {isEditable('nationality') ? (
                                     <EditField
-                                        label="Nationality"
+                                        label={t('admin_profile_field_nationality')}
                                         value={editing ? draft.nationality : data.nationality}
                                         editable={true}
                                         editing={editing}
@@ -902,11 +907,11 @@ export default function AdminProfilePage() {
                                         icon={Globe}
                                     />
                                 ) : (
-                                    <ReadField label="Nationality" value={data.nationality} icon={Globe} />
+                                    <ReadField label={t('admin_profile_field_nationality')} value={data.nationality} icon={Globe} />
                                 )}
 
                                 <EditField
-                                    label="Residential Address"
+                                    label={t('admin_profile_field_address')}
                                     value={editing ? draft.residentialAddress : data.residentialAddress}
                                     editable={isEditable('residentialAddress')}
                                     editing={editing}
@@ -919,11 +924,11 @@ export default function AdminProfilePage() {
                         </Section>
 
                         {/* Legal Identification */}
-                        <Section title="Legal Identification" subtitle="Sensitive document data for authority verification.">
+                        <Section title={t('admin_profile_section_legal')} subtitle={t('admin_profile_section_legal_sub')}>
                             <Grid cols={2}>
                                 {isEditable('cinNumber') ? (
                                     <EditField
-                                        label="CIN (National ID Card)"
+                                        label={t('admin_profile_field_cin')}
                                         value={editing ? draft.cinNumber : data.cinNumber}
                                         editable={true}
                                         editing={editing}
@@ -932,13 +937,13 @@ export default function AdminProfilePage() {
                                         icon={IdCard}
                                     />
                                 ) : (
-                                    <ReadField label="CIN (National ID Card)" value={data.cinNumber} icon={IdCard}
+                                    <ReadField label={t('admin_profile_field_cin')} value={data.cinNumber} icon={IdCard}
                                         verified={data.verificationStatus === 'approved' || data.verificationStatus === 'verified'} />
                                 )}
 
                                 {isEditable('passportNumber') ? (
                                     <EditField
-                                        label="Passport Number"
+                                        label={t('admin_profile_field_passport')}
                                         value={editing ? draft.passportNumber : data.passportNumber}
                                         editable={true}
                                         editing={editing}
@@ -947,13 +952,13 @@ export default function AdminProfilePage() {
                                         icon={Plane}
                                     />
                                 ) : (
-                                    <ReadField label="Passport Number" value={data.passportNumber} icon={Plane}
+                                    <ReadField label={t('admin_profile_field_passport')} value={data.passportNumber} icon={Plane}
                                         status={data.verificationStatus === 'pending_review' ? 'processing' : data.verificationStatus === 'rejected' ? 'rejected' : undefined} />
                                 )}
 
                                 {isEditable('passportExpiry') ? (
                                     <EditField
-                                        label="Passport Expiry"
+                                        label={t('admin_profile_field_passport_expiry')}
                                         value={editing ? draft.passportExpiry : data.passportExpiry}
                                         editable={true}
                                         editing={editing}
@@ -963,20 +968,20 @@ export default function AdminProfilePage() {
                                         type="date"
                                     />
                                 ) : (
-                                    <ReadField label="Passport Expiry" value={fmtDate(data.passportExpiry)} icon={Calendar} />
+                                    <ReadField label={t('admin_profile_field_passport_expiry')} value={fmtDate(data.passportExpiry)} icon={Calendar} />
                                 )}
                             </Grid>
                             {/* CIN Document Upload (shown when cin_doc section unlocked) */}
                             {(data.profileUnlockCinDoc || data.profileEditUnlocked) && (
                                 <div style={{ marginTop: '1rem' }}>
                                     <div style={{ marginBottom: 8, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.10em', color: 'var(--adm-accent)', textTransform: 'uppercase' }}>
-                                        CIN Document Upload (Unlocked)
+                                        {t('admin_profile_cin_upload_title')}
                                     </div>
                                     <Grid cols={2}>
                                         <div>
-                                            <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--adm-text-muted)', marginBottom: 6 }}>CIN Front</div>
+                                            <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--adm-text-muted)', marginBottom: 6 }}>{t('admin_profile_cin_front')}</div>
                                             <DocumentUploadField
-                                                label="CIN Front Document"
+                                                label={t('admin_profile_cin_front_doc')}
                                                 url={editing ? (draft.cinDocumentUrl || null) : data.cinDocumentUrl}
                                                 accent="#34D399"
                                                 editing={editing}
@@ -984,9 +989,9 @@ export default function AdminProfilePage() {
                                             />
                                         </div>
                                         <div>
-                                            <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--adm-text-muted)', marginBottom: 6 }}>CIN Back</div>
+                                            <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--adm-text-muted)', marginBottom: 6 }}>{t('admin_profile_cin_back')}</div>
                                             <DocumentUploadField
-                                                label="CIN Back Document"
+                                                label={t('admin_profile_cin_back_doc')}
                                                 url={editing ? (draft.cinDocumentBackUrl || null) : data.cinDocumentBackUrl}
                                                 accent="#10B981"
                                                 editing={editing}
@@ -1000,11 +1005,11 @@ export default function AdminProfilePage() {
                             {(data.profileUnlockPassport || data.profileEditUnlocked) && (
                                 <div style={{ marginTop: '1rem' }}>
                                     <div style={{ marginBottom: 8, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.10em', color: 'var(--adm-accent)', textTransform: 'uppercase' }}>
-                                        Passport Document Upload (Unlocked)
+                                        {t('admin_profile_passport_upload_title')}
                                     </div>
                                     <div style={{ maxWidth: 'calc(50% - 0.45rem)' }}>
                                         <DocumentUploadField
-                                            label="Passport Document"
+                                            label={t('admin_profile_passport_doc')}
                                             url={editing ? (draft.passportDocumentUrl || null) : data.passportDocumentUrl}
                                             accent="#FBBF24"
                                             editing={editing}
@@ -1017,23 +1022,23 @@ export default function AdminProfilePage() {
                             {!(data.profileUnlockCinDoc || data.profileUnlockPassport || data.profileEditUnlocked) && (data.cinDocumentUrl || data.cinDocumentBackUrl || data.passportDocumentUrl) && (
                                 <div style={{ marginTop: '1rem' }}>
                                     <div style={{ marginBottom: 8, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.10em', color: 'var(--adm-text-muted)', textTransform: 'uppercase' }}>
-                                        Uploaded Documents
+                                        {t('admin_profile_uploaded_docs')}
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                                         {(data.cinDocumentUrl || data.cinDocumentBackUrl) && (
                                             <div>
-                                                <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--adm-text-muted)', marginBottom: 6 }}>CIN National ID Card</div>
+                                                <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--adm-text-muted)', marginBottom: 6 }}>{t('admin_profile_cin_label')}</div>
                                                 <Grid cols={2}>
-                                                    <DocumentPreview label="CIN Front" url={data.cinDocumentUrl} accent="#34D399" />
-                                                    <DocumentPreview label="CIN Back" url={data.cinDocumentBackUrl} accent="#10B981" />
+                                                    <DocumentPreview label={t('admin_profile_cin_front_doc')} url={data.cinDocumentUrl} accent="#34D399" />
+                                                    <DocumentPreview label={t('admin_profile_cin_back_doc')} url={data.cinDocumentBackUrl} accent="#10B981" />
                                                 </Grid>
                                             </div>
                                         )}
                                         {data.passportDocumentUrl && (
                                             <div>
-                                                <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--adm-text-muted)', marginBottom: 6 }}>Passport</div>
+                                                <div style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--adm-text-muted)', marginBottom: 6 }}>{t('admin_profile_passport_label')}</div>
                                                 <div style={{ maxWidth: 'calc(50% - 0.45rem)' }}>
-                                                    <DocumentPreview label="Passport Document" url={data.passportDocumentUrl} accent="#FBBF24" />
+                                                    <DocumentPreview label={t('admin_profile_passport_doc')} url={data.passportDocumentUrl} accent="#FBBF24" />
                                                 </div>
                                             </div>
                                         )}
@@ -1043,11 +1048,11 @@ export default function AdminProfilePage() {
                         </Section>
 
                         {/* Contact Registry */}
-                        <Section title="Contact Registry" subtitle="Communication channels for official notifications.">
+                        <Section title={t('admin_profile_section_contact')} subtitle={t('admin_profile_section_contact_sub')}>
                             <Grid cols={2}>
-                                <ReadField label="Email Address" value={data.email} icon={Mail} />
+                                <ReadField label={t('admin_profile_field_email')} value={data.email} icon={Mail} />
                                 <EditField
-                                    label="Phone Number"
+                                    label={t('admin_profile_field_phone')}
                                     value={editing ? draft.phoneNumber : data.phoneNumber}
                                     editable={EDITABLE.has('phoneNumber')}
                                     editing={editing}
@@ -1056,7 +1061,7 @@ export default function AdminProfilePage() {
                                     icon={Phone}
                                 />
                                 <EditField
-                                    label="Emergency Contact Name"
+                                    label={t('admin_profile_field_emergency_name')}
                                     value={editing ? draft.emergencyContactName : data.emergencyContactName}
                                     editable={EDITABLE.has('emergencyContactName')}
                                     editing={editing}
@@ -1065,7 +1070,7 @@ export default function AdminProfilePage() {
                                     icon={UserCircle}
                                 />
                                 <EditField
-                                    label="Emergency Contact Phone"
+                                    label={t('admin_profile_field_emergency_phone')}
                                     value={editing ? draft.emergencyContactPhone : data.emergencyContactPhone}
                                     editable={EDITABLE.has('emergencyContactPhone')}
                                     editing={editing}
@@ -1074,7 +1079,7 @@ export default function AdminProfilePage() {
                                     icon={Phone}
                                 />
                                 <EditField
-                                    label="Emergency Relationship"
+                                    label={t('admin_profile_field_emergency_rel')}
                                     value={editing ? draft.emergencyContactRelationship : data.emergencyContactRelationship}
                                     editable={EDITABLE.has('emergencyContactRelationship')}
                                     editing={editing}
@@ -1088,10 +1093,10 @@ export default function AdminProfilePage() {
                         <div className="admin-card" style={{ padding: '1.5rem' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
                                 <ShieldAlert size={18} style={{ color: 'var(--adm-accent)' }} />
-                                <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--adm-text)', margin: 0 }}>Password & Security</h2>
+                                <h2 style={{ fontSize: '1.05rem', fontWeight: 700, color: 'var(--adm-text)', margin: 0 }}>{t('admin_profile_pw_section_title')}</h2>
                             </div>
                             <p style={{ fontSize: '0.82rem', color: 'var(--adm-text-muted)', marginBottom: '1.1rem', marginTop: '4px' }}>
-                                Update your password to keep your administrator account secure.
+                                {t('admin_profile_pw_section_sub')}
                             </p>
 
                             {pwMsg && (
@@ -1107,16 +1112,16 @@ export default function AdminProfilePage() {
                             )}
 
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.9rem' }}>
-                                <PwField label="Current Password" v={pwCurrent} setV={setPwCurrent}
+                                <PwField label={t('admin_profile_pw_current')} v={pwCurrent} setV={setPwCurrent}
                                     show={pwShow.c} toggle={() => setPwShow(s => ({ ...s, c: !s.c }))} />
                                 <div /> {/* spacer */}
-                                <PwField label="New Password" v={pwNext} setV={setPwNext}
+                                <PwField label={t('admin_profile_pw_new')} v={pwNext} setV={setPwNext}
                                     show={pwShow.n} toggle={() => setPwShow(s => ({ ...s, n: !s.n }))} />
                                 <PwField
-                                    label="Confirm New Password" v={pwConfirm} setV={setPwConfirm}
+                                    label={t('admin_profile_pw_confirm')} v={pwConfirm} setV={setPwConfirm}
                                     show={pwShow.r} toggle={() => setPwShow(s => ({ ...s, r: !s.r }))}
                                     state={pwMismatch ? 'error' : pwMatch ? 'ok' : undefined}
-                                    hint={pwMismatch ? "Passwords don't match" : pwMatch ? 'Passwords match' : undefined}
+                                    hint={pwMismatch ? t('admin_profile_pw_hint_mismatch') : pwMatch ? t('admin_profile_pw_hint_match') : undefined}
                                 />
                             </div>
 
@@ -1140,12 +1145,12 @@ export default function AdminProfilePage() {
                             <div style={{ marginTop: '1.1rem', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                                 <button className="admin-btn admin-btn--outline"
                                     onClick={() => { setPwCurrent(''); setPwNext(''); setPwConfirm(''); setPwMsg(null); }}>
-                                    Discard
+                                    {t('admin_profile_pw_discard')}
                                 </button>
                                 <button className="admin-btn admin-btn--primary" onClick={submitPassword} disabled={pwSaving}>
                                     {pwSaving
-                                        ? <><Loader size={14} className="su-spin" /> Updating…</>
-                                        : <><Lock size={14} /> <span>Update Password</span></>
+                                        ? <><Loader size={14} className="su-spin" /> {t('admin_profile_pw_updating')}</>
+                                        : <><Lock size={14} /> <span>{t('admin_profile_pw_update_btn')}</span></>
                                     }
                                 </button>
                             </div>

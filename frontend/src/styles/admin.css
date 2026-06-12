@@ -40,6 +40,38 @@
     --adm-sb-accent: #F59E0B;
 }
 
+:root,
+[data-theme="dark"] {
+    /* shadcn/Radix UI theme tokens (for portal-rendered Select, DropdownMenu, etc.) */
+    --popover: #1E293B;
+    --popover-foreground: #F1F5F9;
+    --accent: #F59E0B;
+    --accent-foreground: #0A1628;
+    --muted: rgba(255, 255, 255, 0.06);
+    --muted-foreground: rgba(255, 255, 255, 0.50);
+    --border: rgba(255, 255, 255, 0.08);
+    --input: rgba(255, 255, 255, 0.08);
+    --ring: #F59E0B;
+    --background: #0A1628;
+    --foreground: #F1F5F9;
+    --input-background: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="light"] {
+    --popover: #FFFFFF;
+    --popover-foreground: #0F172A;
+    --accent: #EA580C;
+    --accent-foreground: #FFFFFF;
+    --muted: #F1F5F9;
+    --muted-foreground: #64748B;
+    --border: #CBD5E1;
+    --input: #CBD5E1;
+    --ring: #EA580C;
+    --background: #F1F5F9;
+    --foreground: #020617;
+    --input-background: rgba(15, 23, 42, 0.04);
+}
+
 .admin-layout {
     display: flex;
     height: 100vh;
@@ -680,6 +712,7 @@
 .admin-table tbody tr:last-child { border-bottom: none; }
 .admin-table__muted { color: rgba(255, 255, 255, 0.35); }
 .admin-table__danger { color: #F87171; font-weight: 500; }
+.admin-table .col-delay { min-width: 150px; padding: 1rem 2.5rem 1rem 1.5rem; white-space: nowrap; }
 .admin-table__status--on-time { color: #34D399; font-weight: 500; }
 .admin-table__status--delayed { color: #F87171; font-weight: 500; }
 .admin-table__status--boarding { color: #FBBF24; font-weight: 500; }
@@ -1717,8 +1750,11 @@
     color: var(--adm-text);
 }
 .admin-layout[data-theme="light"] .glass-card {
-    background: var(--adm-card);
-    border-color: var(--adm-card-border);
+    background: var(--adm-card) !important;
+    border-color: var(--adm-card-border) !important;
+}
+.admin-layout[data-theme="light"] .glass-card[class*="bg-gradient"] {
+    background: var(--adm-card) !important;
 }
 
 .admin-layout[data-theme="light"] {
@@ -1984,6 +2020,19 @@
   background-color: rgba(245, 158, 11, 0.95) !important;
 }
 
+/* SuperAdminUsers Edit Access Modal */
+.sa-access-modal {
+    background: var(--adm-card);
+    color: var(--adm-text);
+    border-color: var(--adm-card-border);
+}
+.admin-layout[data-theme="light"] .sa-access-modal {
+    background: #FFFFFF;
+    color: #0F172A;
+    border-color: #CBD5E1;
+    box-shadow: 0 20px 60px rgba(15, 23, 42, 0.15);
+}
+
 /* --- CustomSelect Base Styles --- */
 .custom-select-wrapper { position: relative; display: block; }
 .custom-select-btn {
@@ -2010,9 +2059,45 @@
   padding: 9px 14px; font-size: 0.88rem; cursor: pointer; color: #CBD5E1; background: transparent;
   font-weight: 400; transition: background 0.1s; border-left: 2px solid transparent; display: flex; align-items: center; gap: 8px;
 }
-.custom-select-option:hover { background: rgba(255,255,255,0.06); }
+.custom-select-option:hover { background: rgba(255,255,255,0.10); color: #F1F5F9; }
 .custom-select-option.selected { color: #A5B4FC; background: rgba(99,102,241,0.18); font-weight: 600; border-left-color: #6366F1; }
 .custom-select-option-dot { width: 6px; height: 6px; border-radius: 50%; background: #6366F1; flex-shrink: 0; }
+
+/* ── Native <select> styling for admin pages ── */
+.admin-layout select:not([class*="form-select"]) {
+    appearance: none;
+    background: var(--adm-input-bg);
+    border: 1px solid var(--adm-border);
+    border-radius: 8px;
+    color: var(--adm-text);
+    font-family: inherit;
+    font-size: 0.88rem;
+    padding: 9px 12px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.15s, box-shadow 0.15s;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+}
+.admin-layout select:not([class*="form-select"]):focus {
+    border-color: var(--adm-accent);
+    box-shadow: 0 0 0 3px var(--adm-accent-light);
+}
+.admin-layout select:not([class*="form-select"]) option {
+    background: #1E293B;
+    color: #F1F5F9;
+}
+.admin-layout[data-theme="light"] select:not([class*="form-select"]) {
+    background: #FFFFFF;
+    color: #0F172A;
+    border-color: #CBD5E1;
+}
+.admin-layout[data-theme="light"] select:not([class*="form-select"]) option {
+    background: #FFFFFF;
+    color: #0F172A;
+}
 
 /* --- Light Mode Selectors & Dropdowns (Theme Requirements) --- */
 .admin-layout[data-theme="light"] .admin-filter-pill,
@@ -2194,6 +2279,41 @@
     background: #F1F5F9 !important;
     color: #DC2626 !important;
     border-color: #DC2626 !important;
+}
+
+/* Common Tailwind utility overrides for Light Mode across admin pages */
+.admin-layout[data-theme="light"] [class*="text-white\/"] {
+    color: var(--adm-text-sub) !important;
+}
+.admin-layout[data-theme="light"] [class*="text-white"]:not([class*="text-white\/"]):not(.admin-btn):not(button) {
+    color: var(--adm-text) !important;
+}
+.admin-layout[data-theme="light"] [class*="bg-navy-mid"] {
+    background: var(--adm-card) !important;
+}
+.admin-layout[data-theme="light"] [class*="bg-navy-deep"]:not(input):not(textarea) {
+    background: var(--adm-bg) !important;
+}
+.admin-layout[data-theme="light"] [class*="border-white\/"] {
+    border-color: var(--adm-border) !important;
+}
+
+/* SuperAdminUsers remaining Tailwind utility overrides for Light Mode */
+.admin-layout[data-theme="light"] input[class*="bg-navy-deep"],
+.admin-layout[data-theme="light"] input[class*="bg-navy-mid"] {
+    background: #FFFFFF !important;
+    border-color: #CBD5E1 !important;
+    color: #0F172A !important;
+}
+.admin-layout[data-theme="light"] input[class*="bg-navy-deep"]::placeholder,
+.admin-layout[data-theme="light"] input[class*="bg-navy-mid"]::placeholder {
+    color: #94A3B8 !important;
+}
+.admin-layout[data-theme="light"] [class*="text-slate-300"] {
+    color: #475569 !important;
+}
+.admin-layout[data-theme="light"] [class*="border-slate-700"] {
+    border-color: #CBD5E1 !important;
 }
 
 /* SuperAdminUsers FieldCards for Light Mode */

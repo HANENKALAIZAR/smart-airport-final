@@ -1,10 +1,12 @@
 import React, { useMemo, useState, useEffect, useCallback } from "react";
 import {
   Inbox, Send as SendIcon, CheckCircle2, Archive, Search, Reply, Trash2,
-  AlertCircle, ShieldCheck, RefreshCw, PenSquare, X, Lock, Shield, Mail, RefreshCw as LoopIcon
+  AlertCircle, ShieldCheck, RefreshCw, X, Lock, Shield, Mail, RefreshCw as LoopIcon,
+  User
 } from "lucide-react";
 import { cn } from "../../components/admin/ui/utils";
 import { useAirport } from "../../context/AirportContext";
+import { useLanguage } from "../../context/LanguageContext";
 import {
   apiListMessages,
   apiReplyToMessage,
@@ -21,12 +23,13 @@ import {
   apiAddPassengerInternalNote,
   apiRetryPassengerEmail,
   apiResolvePassengerMessage,
-  apiMarkPassengerRead
+  apiMarkPassengerRead,
+  apiDeletePassengerMessage
 } from "../../services/adminApi";
 
 /* ─────────────── Types ─────────────── */
 type Priority = "high" | "medium" | "low";
-type Folder = "inbox" | "sent" | "resolved" | "archived";
+type Folder = "inbox" | "assigned" | "sent" | "resolved" | "archived";
 
 interface ReplyMsg {
   id: number;
@@ -72,11 +75,18 @@ const PRIORITY_COLOR: Record<Priority, string> = {
   low: "#34D399",
 };
 
-const FOLDERS: { key: Folder; label: string; icon: typeof Inbox }[] = [
-  { key: "inbox", label: "Inbox", icon: Inbox },
-  { key: "sent", label: "Sent", icon: SendIcon },
-  { key: "resolved", label: "Resolved", icon: CheckCircle2 },
-  { key: "archived", label: "Archived", icon: Archive },
+const PASSENGER_FOLDERS: { key: Folder; labelKey: string; icon: typeof Inbox }[] = [
+  { key: "inbox", labelKey: "msg_inbox", icon: Inbox },
+  { key: "assigned", labelKey: "msg_passenger_assigned", icon: User },
+  { key: "sent", labelKey: "msg_passenger_sent", icon: SendIcon },
+  { key: "resolved", labelKey: "msg_passenger_resolved", icon: CheckCircle2 },
+  { key: "archived", labelKey: "msg_passenger_archived", icon: Archive },
+];
+
+const ADMIN_FOLDERS: { key: Folder; labelKey: string; icon: typeof Inbox }[] = [
+  { key: "inbox", labelKey: "msg_inbox", icon: Inbox },
+  { key: "sent", labelKey: "msg_sent", icon: SendIcon },
+  { key: "resolved", labelKey: "msg_resolved", icon: CheckCircle2 },
 ];
 
 function getInitials(name?: string) {
@@ -95,7 +105,7 @@ function fmtTime(iso?: string) {
   }
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  if (date.toDateString() === yesterday.toDateString()) return "Yesterday";
+  if (date.toDateString() === yesterday.toDateString()) return "Yesterday"; // localized in caller via t('msg_yesterday') if needed
   return date.toLocaleDateString("en-US", { day: "numeric", month: "short" });
 }
 
@@ -108,11 +118,11 @@ function getPriorityFromCategory(category: string): Priority {
 /* ─────────────── Component ─────────────── */
 
 export default function AirportAdminMessages() {
+  const { t } = useLanguage();
   const [tab, setTab] = useState<"passenger" | "superadmin">("passenger");
   const [folder, setFolder] = useState<Folder>("inbox");
   const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null);
   const [search, setSearch] = useState("");
-  const [customFilter, setCustomFilter] = useState<"all" | "unread" | "assigned" | "unresolved">("all");
   
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [inboxMessages, setInboxMessages] = useState<Message[]>([]);
@@ -190,7 +200,7 @@ export default function AirportAdminMessages() {
         setSentMessages(sentRes.data || []);
       }
     } catch (err: any) {
-      setError(err?.message || "Failed to load messages from backend.");
+      setError(err?.message || 'Failed to load messages from backend.');
     } finally {
       setLoading(false);
     }
@@ -206,6 +216,7 @@ export default function AirportAdminMessages() {
       return passengerMessages.map(m => {
         let f: Folder = "inbox";
         if (m.status === "resolved") f = "resolved";
+        else if (m.assigned_admin_id === currentUser?.id) f = "assigned";
         
         let p: Priority = "low";
         if (m.priority === "HIGH" || m.priority === "high") p = "high";
@@ -230,7 +241,7 @@ export default function AirportAdminMessages() {
     });
     
     return mapped.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [tab, passengerMessages, inboxMessages, sentMessages]);
+  }, [tab, passengerMessages, inboxMessages, sentMessages, currentUser]);
 
   const list = useMemo(() => {
     if (tab === "passenger") return allMessages;
@@ -238,7 +249,7 @@ export default function AirportAdminMessages() {
   }, [allMessages, tab]);
 
   const counts = useMemo(() => {
-    const c: Record<Folder, number> = { inbox: 0, sent: 0, resolved: 0, archived: 0 };
+    const c: Record<Folder, number> = { inbox: 0, assigned: 0, sent: 0, resolved: 0, archived: 0 };
     list.forEach(m => { if (c[m._folder] !== undefined) c[m._folder]++; });
     return c;
   }, [list]);
@@ -247,11 +258,6 @@ export default function AirportAdminMessages() {
     return list.filter(m => {
       if (m._folder !== folder) return false;
       if (priorityFilter && m._priority !== priorityFilter) return false;
-      
-      // Apply Custom Refined Filters
-      if (customFilter === "unread" && m.is_read) return false;
-      if (customFilter === "assigned" && m.assigned_admin_id !== currentUser?.id) return false;
-      if (customFilter === "unresolved" && m.status === "resolved") return false;
 
       if (search.trim()) {
         const q = search.trim().toLowerCase();
@@ -261,7 +267,7 @@ export default function AirportAdminMessages() {
       }
       return true;
     });
-  }, [list, folder, priorityFilter, search, customFilter, currentUser]);
+  }, [list, folder, priorityFilter, search]);
 
   const selected = filtered.find(m => m.id === selectedId) ?? filtered[0] ?? null;
 
@@ -354,8 +360,11 @@ export default function AirportAdminMessages() {
 
   const deleteSelected = async () => {
     if (!selected) return;
-    if (!window.confirm("Are you sure you want to delete this message?")) return;
-    const { error: err } = await apiDeleteMessage(selected.id);
+    if (!window.confirm(t('msg_confirm_delete'))) return;
+    const isPassenger = tab === "passenger";
+    const { error: err } = isPassenger
+      ? await apiDeletePassengerMessage(selected.id)
+      : await apiDeleteMessage(selected.id);
     if (err) setError(err);
     else {
       setSelectedId(null);
@@ -433,14 +442,14 @@ export default function AirportAdminMessages() {
   const getSenderDetails = (m: Message) => {
     if (m.sender_type === "passenger") {
       return {
-        name: m.passenger_name || "Unknown Passenger",
-        role: `Passenger Helpdesk · ${m.airport_code || "Unknown"}`,
+        name: m.passenger_name || t('msg_unknown_passenger'),
+        role: t('msg_passenger_helpdesk') + ' · ' + (m.airport_code || '—'),
         initials: getInitials(m.passenger_name || "P"),
       };
     }
     const isFromSuper = m.direction === "to_admin";
-    const name = m.from_user_name || (isFromSuper ? "Super Admin" : "Me");
-    const role = isFromSuper ? "Super Admin · HQ" : `Admin · ${m.from_user_airport || "Unknown"}`;
+    const name = m.from_user_name || (isFromSuper ? t('msg_role_super_admin') : t('msg_role_me'));
+    const role = isFromSuper ? t('msg_role_hq') : t('msg_role_admin') + ' · ' + (m.from_user_airport || '—');
     return { name, role, initials: getInitials(name) };
   };
 
@@ -458,8 +467,8 @@ export default function AirportAdminMessages() {
       {/* Header + role tabs */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
         <div>
-          <h1 className="admin-page__title">Passenger Message Center</h1>
-          <p className="admin-page__subtitle">Operations Customer Assistance Desk & Ticket Tracking.</p>
+          <h1 className="admin-page__title">{t(tab === 'superadmin' ? 'msg_internal_page_title' : 'msg_page_title')}</h1>
+          <p className="admin-page__subtitle">{t(tab === 'superadmin' ? 'msg_internal_page_subtitle' : 'msg_page_subtitle')}</p>
         </div>
         <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
           {tab === "superadmin" && (
@@ -467,7 +476,7 @@ export default function AirportAdminMessages() {
               onClick={() => setComposing(true)}
               className="inline-flex h-9 items-center gap-2 rounded-lg bg-gradient-cyan px-4 text-xs font-semibold text-primary-foreground shadow-glow border-none cursor-pointer"
             >
-              <PenSquare size={14} /> Compose to HQ
+              <Mail size={14} /> {t('msg_compose_hq')}
             </button>
           )}
           
@@ -478,15 +487,15 @@ export default function AirportAdminMessages() {
             borderRadius: 12,
           }}>
             {([
-              { k: "passenger", l: "Passenger Desk", icon: Inbox },
-              { k: "superadmin", l: "HQ Messages", icon: ShieldCheck },
-            ] as const).map(t => {
-              const active = tab === t.k;
-              const Icon = t.icon;
+              { k: "passenger", lk: "msg_passenger_desk", icon: Inbox },
+              { k: "superadmin", lk: "msg_hq_messages", icon: ShieldCheck },
+            ] as const).map((tabItem) => {
+              const active = tab === tabItem.k;
+              const Icon = tabItem.icon;
               return (
                 <button
-                  key={t.k}
-                  onClick={() => { setTab(t.k); setFolder("inbox"); setPriorityFilter(null); setSelectedId(null); }}
+                  key={tabItem.k}
+                  onClick={() => { setTab(tabItem.k); setFolder("inbox"); setPriorityFilter(null); setSelectedId(null); }}
                   style={{
                     display: "inline-flex", alignItems: "center", gap: 8,
                     padding: "0.55rem 0.95rem", borderRadius: 9, border: "none", cursor: "pointer",
@@ -498,7 +507,7 @@ export default function AirportAdminMessages() {
                   }}
                 >
                   <Icon size={15} />
-                  {t.l}
+                  {t(tabItem.lk)}
                 </button>
               );
             })}
@@ -518,9 +527,11 @@ export default function AirportAdminMessages() {
           height: "fit-content",
         }}>
           <div>
-            <div style={{ fontSize: "0.66rem", fontWeight: 700, letterSpacing: "0.12em", color: "var(--adm-text-muted)", padding: "0.4rem 0.6rem 0.6rem" }}>TICKET FOLDERS</div>
+            <div style={{ fontSize: "0.66rem", fontWeight: 700, letterSpacing: "0.12em", color: "var(--adm-text-muted)", padding: "0.4rem 0.6rem 0.6rem" }}>
+              {tab === "passenger" ? t('msg_ticket_folders') : t('msg_internal_folders')}
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {FOLDERS.map(f => {
+              {(tab === "passenger" ? PASSENGER_FOLDERS : ADMIN_FOLDERS).map(f => {
                 const Icon = f.icon;
                 const active = folder === f.key;
                 return (
@@ -537,7 +548,7 @@ export default function AirportAdminMessages() {
                   >
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
                       <Icon size={16} />
-                      {f.label}
+                      {t(f.labelKey)}
                     </span>
                     <span style={{
                       minWidth: 22, padding: "0 6px", height: 20, borderRadius: 10,
@@ -553,7 +564,7 @@ export default function AirportAdminMessages() {
           </div>
 
           <div>
-            <div style={{ fontSize: "0.66rem", fontWeight: 700, letterSpacing: "0.12em", color: "var(--adm-text-muted)", padding: "0.4rem 0.6rem 0.6rem" }}>PRIORITY</div>
+            <div style={{ fontSize: "0.66rem", fontWeight: 700, letterSpacing: "0.12em", color: "var(--adm-text-muted)", padding: "0.4rem 0.6rem 0.6rem" }}>{t('msg_priority')}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {(["high", "medium", "low"] as Priority[]).map(p => {
                 const active = priorityFilter === p;
@@ -571,7 +582,7 @@ export default function AirportAdminMessages() {
                     }}
                   >
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: PRIORITY_COLOR[p], boxShadow: `0 0 6px ${PRIORITY_COLOR[p]}80` }} />
-                    {p}
+                    {t('msg_priority_' + p)}
                   </button>
                 );
               })}
@@ -597,44 +608,20 @@ export default function AirportAdminMessages() {
               <Search size={15} style={{ color: "var(--adm-text-muted)" }} />
               <input
                 value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search reference, name, email…"
+                placeholder={t('msg_search_reference')}
                 style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--adm-text)", fontSize: "0.82rem" }}
               />
             </div>
-            
-            {tab === "passenger" && (
-              <div className="pt-1">
-                <select
-                  value={customFilter}
-                  onChange={(e) => setCustomFilter(e.target.value as any)}
-                  style={{
-                    width: "100%",
-                    background: "rgba(0,0,0,0.3)",
-                    border: "1px solid var(--adm-border)",
-                    borderRadius: 10,
-                    color: "var(--adm-text)",
-                    fontSize: "0.78rem",
-                    padding: "0.45rem 0.6rem",
-                    outline: "none"
-                  }}
-                >
-                  <option value="all">🔍 Show All Tickets</option>
-                  <option value="unread">📬 Unread Only</option>
-                  <option value="assigned">👤 Assigned to Me</option>
-                  <option value="unresolved">⚠️ Unresolved</option>
-                </select>
-              </div>
-            )}
           </div>
           <div style={{ flex: 1, overflowY: "auto" }}>
             {loading ? (
               <div style={{ padding: "3rem 1rem", textAlign: "center", color: "var(--adm-text-muted)", fontSize: "0.85rem", display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <RefreshCw size={20} className="mb-2 animate-spin opacity-50" />
-                Loading tickets...
+                {t('msg_loading')}
               </div>
             ) : filtered.length === 0 ? (
               <div style={{ padding: "3rem 1rem", textAlign: "center", color: "var(--adm-text-muted)", fontSize: "0.85rem" }}>
-                No active tickets in this folder.
+                {t('msg_no_tickets')}
               </div>
             ) : (
               filtered.map(m => {
@@ -726,7 +713,7 @@ export default function AirportAdminMessages() {
                   </div>
                 </div>
                 <div style={{ display: "inline-flex", gap: 6, flexShrink: 0 }}>
-                  {selected.status !== "resolved" && <ToolbarBtn icon={CheckCircle2} label="Resolve" tone="success" onClick={resolveSelected} />}
+                  {selected.status !== "resolved" && <ToolbarBtn icon={CheckCircle2} label={t('msg_resolve_btn')} tone="success" onClick={resolveSelected} />}
                   <ToolbarBtn icon={Trash2} label="" tone="danger" onClick={deleteSelected} />
                 </div>
               </div>
@@ -739,7 +726,7 @@ export default function AirportAdminMessages() {
                     {getSenderDetails(selected).name}
                     {selected.sender_type === "passenger" && (
                       <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[9px] font-semibold tracking-wide">
-                        {selected.assigned_admin_name ? `Assigned to: ${selected.assigned_admin_name}` : "Unassigned shared ticket"}
+                        {selected.assigned_admin_name ? t('msg_assigned_to').replace('{name}', selected.assigned_admin_name) : t('msg_unassigned_shared')}
                       </span>
                     )}
                   </div>
@@ -792,7 +779,7 @@ export default function AirportAdminMessages() {
                                 {r.author_name}
                               </span>
                               <span style={{ color: "var(--adm-text-muted)", marginLeft: 6 }}>
-                                {isInternal ? "Internal Note" : "Operations Office"}
+                                {isInternal ? t('msg_internal_note') : t('msg_role_operations')}
                               </span>
                             </div>
                             <span style={{ color: "var(--adm-text-muted)" }}>{fmtTime(r.created_at)}</span>
@@ -807,23 +794,23 @@ export default function AirportAdminMessages() {
                             <div className="mt-2 flex items-center justify-between text-[11px] font-semibold border-t border-white/5 pt-2 flex-wrap gap-2">
                               {r.email_status === "sent" ? (
                                 <span className="text-emerald-400 inline-flex items-center gap-1">
-                                  <Mail size={12} /> Email dispatched successfully
+                                  <Mail size={12} /> {t('msg_email_dispatched')}
                                 </span>
                               ) : r.email_status === "PERMANENT_FAILURE" ? (
                                 <span className="text-red-500 inline-flex items-center gap-1">
-                                  ❌ Permanent Delivery Failure (Max Retries)
+                                  {t('msg_email_failure_permanent')}
                                 </span>
                               ) : (
                                 <>
                                   <span className="text-red-400 inline-flex items-center gap-1">
-                                    ⚠️ Email delivery failed ({r.retry_count || 0}/3)
+                                    {t('msg_email_failure').replace('{count}', String(r.retry_count || 0))}
                                   </span>
                                   <button
                                     onClick={() => retryEmailSend(r.id)}
                                     disabled={sendingReply}
                                     className="px-2 py-0.5 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30 text-[10px] font-bold cursor-pointer transition-colors"
                                   >
-                                    Retry Send
+                                    {t('msg_retry_send')}
                                   </button>
                                 </>
                               )}
@@ -843,20 +830,20 @@ export default function AirportAdminMessages() {
                   {(!selected.assigned_admin_id) ? (
                     <div style={{ padding: "1.25rem", textAlign: "center", background: "rgba(245,158,11,0.03)" }} className="space-y-3">
                       <div className="text-xs text-amber-500 flex items-center justify-center gap-1.5 font-semibold">
-                        <Shield size={14} /> Shared Ticket is Unclaimed. Take ownership to reply or take notes.
+                        <Shield size={14} /> {t('msg_ticket_unclaimed')}
                       </div>
                       <button
                         onClick={claimSelected}
                         className="inline-flex h-9 items-center gap-2 rounded-lg bg-gradient-amber px-6 text-xs font-bold text-primary-foreground shadow-glow border-none cursor-pointer"
                       >
-                        <ShieldCheck size={14} /> Take Ownership & Claim Ticket
+                        <ShieldCheck size={14} /> {t('msg_take_ownership')}
                       </button>
                     </div>
                   ) : selected.assigned_admin_id !== currentUser?.id ? (
                     /* Claimed by someone else */
                     <div style={{ padding: "1rem", textAlign: "center", background: "rgba(255,255,255,0.02)" }}>
                       <span className="text-xs text-muted-foreground flex items-center justify-center gap-1.5 font-medium">
-                        <Lock size={12} /> Claimed by {selected.assigned_admin_name}. Only the ticket owner can respond.
+                        <Lock size={12} /> {t('msg_claimed_by_other').replace('{name}', selected.assigned_admin_name || '')}
                       </span>
                     </div>
                   ) : (
@@ -872,9 +859,9 @@ export default function AirportAdminMessages() {
                       }}>
                         <span className="text-[11px] font-semibold text-amber-500 flex items-center gap-1">
                           {activeNoteType === "reply" ? (
-                            <>⚠️ Warning: Passenger replies are not monitored. This goes to email.</>
+                            <>{t('msg_warning_passenger')}</>
                           ) : (
-                            <>🔒 Internal note: Visible only to ops admins. Will never email.</>
+                            <>{t('msg_internal_note_info')}</>
                           )}
                         </span>
                         
@@ -888,7 +875,7 @@ export default function AirportAdminMessages() {
                                 : "bg-transparent text-muted-foreground border-white/10 hover:text-white"
                             )}
                           >
-                            Email Reply
+                              {t('msg_email_reply')}
                           </button>
                           <button
                             onClick={() => setActiveNoteType("note")}
@@ -899,7 +886,7 @@ export default function AirportAdminMessages() {
                                 : "bg-transparent text-muted-foreground border-white/10 hover:text-white"
                             )}
                           >
-                            Internal Note
+                              {t('msg_internal_note')}
                           </button>
                         </div>
                       </div>
@@ -911,7 +898,7 @@ export default function AirportAdminMessages() {
                             value={reply} onChange={e => setReply(e.target.value)}
                             onKeyDown={e => { if (e.key === "Enter") sendReply(); }}
                             disabled={sendingReply}
-                            placeholder={activeNoteType === "reply" ? "Type your email response to the passenger..." : "Add an internal note for coordination..."}
+                            placeholder={activeNoteType === "reply" ? t('msg_reply_placeholder_email') : t('msg_reply_placeholder_note')}
                             style={{
                               width: "100%", padding: "0.6rem 0.85rem",
                               background: "rgba(255,255,255,0.04)",
@@ -921,7 +908,7 @@ export default function AirportAdminMessages() {
                           />
                           {draftSavedAlert && (
                             <span className="text-[10px] text-emerald-400 font-mono self-start ml-1 animate-pulse">
-                              ✓ Draft autosaved to desk
+                              {t('msg_draft_autosaved')}
                             </span>
                           )}
                         </div>
@@ -940,7 +927,7 @@ export default function AirportAdminMessages() {
                             height: 38
                           }}
                         >
-                          <SendIcon size={14} /> Send
+                          <SendIcon size={14} /> {t('msg_send')}
                         </button>
                       </div>
                     </div>
@@ -951,7 +938,7 @@ export default function AirportAdminMessages() {
           ) : (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--adm-text-muted)", padding: "2rem" }}>
               <Inbox size={36} style={{ opacity: 0.4, marginBottom: 12 }} />
-              <div style={{ fontSize: "0.9rem" }}>Select a ticket from the inbox to manage.</div>
+              <div style={{ fontSize: "0.9rem" }}>{t('msg_select_ticket')}</div>
             </div>
           )}
         </div>
@@ -977,7 +964,7 @@ export default function AirportAdminMessages() {
                   <ShieldCheck size={22} />
                 </div>
                 <div>
-                  <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--adm-text)", margin: "0 0 4px 0" }}>New message to Super Admin</h2>
+                  <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--adm-text)", margin: "0 0 4px 0" }}>{t('msg_new_to_hq')}</h2>
                   <div style={{ fontSize: "0.8rem", color: "var(--adm-text-muted)" }}>From: Current Admin · {useAirport().selectedAirport.iata}</div>
                 </div>
               </div>
@@ -989,7 +976,7 @@ export default function AirportAdminMessages() {
             {/* Modal Body */}
             <form onSubmit={handleCompose} style={{ padding: "1.5rem" }}>
               <div style={{ marginBottom: "1.25rem" }}>
-                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--adm-text-muted)", marginBottom: "0.5rem" }}>SUBJECT</label>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--adm-text-muted)", marginBottom: "0.5rem" }}>{t('msg_subject_label')}</label>
                 <input
                   required
                   type="text"
@@ -1000,12 +987,12 @@ export default function AirportAdminMessages() {
                     border: "1px solid var(--adm-border)", borderRadius: 10, color: "var(--adm-text)",
                     fontSize: "0.9rem", outline: "none"
                   }}
-                  placeholder="e.g. Request approval for shift change"
+                  placeholder={t('msg_compose_subject_placeholder')}
                 />
               </div>
 
               <div style={{ marginBottom: "2rem" }}>
-                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--adm-text-muted)", marginBottom: "0.5rem" }}>MESSAGE</label>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--adm-text-muted)", marginBottom: "0.5rem" }}>{t('msg_message_label')}</label>
                 <textarea
                   required
                   rows={6}
@@ -1016,7 +1003,7 @@ export default function AirportAdminMessages() {
                     border: "1px solid var(--adm-border)", borderRadius: 10, color: "var(--adm-text)",
                     fontSize: "0.9rem", outline: "none", resize: "none"
                   }}
-                  placeholder="Write your message to the Super Admin..."
+                  placeholder={t('msg_compose_body_placeholder')}
                 />
               </div>
 
@@ -1030,7 +1017,7 @@ export default function AirportAdminMessages() {
                     borderRadius: 10, color: "var(--adm-text)", fontSize: "0.85rem", fontWeight: 600, cursor: "pointer"
                   }}
                 >
-                  Cancel
+                  {t('msg_cancel')}
                 </button>
                 <button
                   type="submit"
@@ -1042,7 +1029,7 @@ export default function AirportAdminMessages() {
                     cursor: "pointer", opacity: sendingMessage ? 0.7 : 1
                   }}
                 >
-                  <SendIcon size={16} /> {sendingMessage ? "Sending..." : "Send to Super Admin"}
+                  <SendIcon size={16} /> {sendingMessage ? t('msg_sending') : t('msg_send_to_hq')}
                 </button>
               </div>
             </form>

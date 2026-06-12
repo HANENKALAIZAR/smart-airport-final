@@ -172,6 +172,40 @@ class PassengerRightOut(BaseModel):
     description_en: str
     description_fr: Optional[str] = None
     compensation_amount: Optional[str] = None
+    is_active: bool = True
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+    regulation_version: Optional[str] = None
+    last_updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CompensationLimitOut(BaseModel):
+    region: str
+    category: str
+    label_en: str
+    label_fr: Optional[str] = None
+    label_ar: Optional[str] = None
+    amount_eur: Optional[float] = None
+    amount_usd: Optional[float] = None
+    amount_cad: Optional[float] = None
+    amount_gbp: Optional[float] = None
+    source_sdr: Optional[float] = None
+    is_active: bool = True
+    regulation_version: Optional[str] = None
+    regulation_source: Optional[str] = None
+    last_updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CompensationConfigOut(BaseModel):
+    regulations: list[PassengerRightOut]
+    limits: list[CompensationLimitOut]
+    generated_at: datetime
 
     class Config:
         from_attributes = True
@@ -400,6 +434,29 @@ class AiAlertActionBody(BaseModel):
     airport_iata: Optional[str] = None  # Required when called by super_admin
     route: Optional[str] = None
     delay_formatted: Optional[str] = None
+
+
+class DecideSuggestionBody(BaseModel):
+    suggestion_key: str
+    airport_iata: str
+    suggestion_type: str
+    status: Literal["approved", "rejected"]
+    suggestion_payload: Optional[dict] = None
+
+
+class SuggestionDecisionOut(BaseModel):
+    id: int
+    suggestion_key: str
+    airport_iata: str
+    suggestion_type: str
+    status: str
+    admin_user_id: Optional[int] = None
+    admin_name: Optional[str] = None
+    timestamp: str
+    suggestion_payload: Optional[dict] = None
+
+    class Config:
+        from_attributes = True
 
 
 class ForgotPasswordRequest(BaseModel):

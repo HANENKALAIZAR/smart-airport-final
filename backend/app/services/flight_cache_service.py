@@ -208,20 +208,37 @@ def _snapshot_to_api_dict(r: AEFlightSnapshot) -> dict:
 
 
 def get_cached_flights(airport_iata: str, db: Session, target_date: Optional[str] = None) -> list[dict]:
-    """Return flight snapshots from DB as normalised dicts for a specific date."""
+    """Return flight snapshots from DB as normalised dicts for a specific date.
+    
+    Date classification:
+    - Past / Today: query by snapshot_date (when data was collected)
+    - Future date:  query by flight_date (scheduled date of the flight)
+    
+    Future dates rely on timetable data already stored in the snapshot table
+    (the Aviation Edge timetable endpoint returns scheduled flights which are
+    stored with snapshot_date=today but flight_date=tomorrow/later).
+    """
+    today = datetime.now(timezone.utc).date()
     if target_date:
         try:
             query_date = datetime.strptime(target_date, "%Y-%m-%d").date()
         except ValueError:
-            query_date = datetime.now(timezone.utc).date()
+            query_date = today
     else:
-        query_date = datetime.now(timezone.utc).date()
+        query_date = today
+
+    # For future dates, match against the flight's scheduled date (flight_date)
+    # rather than the collection date (snapshot_date)
+    if query_date > today:
+        date_col = AEFlightSnapshot.flight_date
+    else:
+        date_col = AEFlightSnapshot.snapshot_date
         
     rows = (
         db.query(AEFlightSnapshot)
         .filter(
             AEFlightSnapshot.airport_iata == airport_iata,
-            AEFlightSnapshot.snapshot_date == query_date,
+            date_col == query_date,
         )
         .order_by(AEFlightSnapshot.dep_scheduled, AEFlightSnapshot.arr_scheduled)
         .all()

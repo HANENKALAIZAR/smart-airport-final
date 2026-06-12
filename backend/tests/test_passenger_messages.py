@@ -446,3 +446,369 @@ def test_super_admin_blocks_and_unread_states(client, db, admin_token, super_adm
     resp_count_super_after = client.get("/api/admin/messages/unread-count", headers=headers_super)
     assert resp_count_super_after.json()["passengerUnread"] == 0
 
+
+# ── Ticket Threading Tests ─────────────────────────────────────────────────
+
+
+def test_reference_in_message_appends_to_existing_ticket(client, db):
+    """Submitting with a reference ID in the message body appends to the existing ticket."""
+    # 1. Create first ticket
+    resp1 = client.post("/api/public/contact-message", json={
+        "fullName": "Thread Passenger",
+        "email": "thread.pax@gmail.com",
+        "airportIata": "DJE",
+        "subject": "Lost iPhone",
+        "message": "I lost my iPhone at the airport."
+    })
+    assert resp1.status_code == 201
+    ref_id = resp1.json()["reference_id"]
+
+    # 2. Second submission with the reference in the message
+    resp2 = client.post("/api/public/contact-message", json={
+        "fullName": "Thread Passenger",
+        "email": "thread.pax@gmail.com",
+        "airportIata": "DJE",
+        "subject": "Thank you",
+        "message": f"Thank you for your assistance. Reference: {ref_id}"
+    })
+    assert resp2.status_code == 201
+    data2 = resp2.json()
+    assert data2["reference_id"] == ref_id
+    assert data2.get("thread_appended") is True
+    assert "Your message has been added to ticket" in data2["message"]
+
+    # 3. Verify only one ticket exists, with two thread entries (original + reply)
+    tickets = db.query(PassengerMessage).filter(
+        PassengerMessage.sender_email == "thread.pax@gmail.com"
+    ).all()
+    assert len(tickets) == 1
+    assert len(tickets[0].replies) == 3  # confirm_email thread + system timeline + passenger reply
+
+
+def test_reference_in_subject_appends_to_existing_ticket(client, db):
+    """Submitting with a reference ID in the subject line appends to the existing ticket."""
+    # 1. Create first ticket
+    resp1 = client.post("/api/public/contact-message", json={
+        "fullName": "Subject Pax",
+        "email": "subject.pax@gmail.com",
+        "airportIata": "MIR",
+        "subject": "Baggage delay at MIR",
+        "message": "My luggage did not arrive."
+    })
+    assert resp1.status_code == 201
+    ref_id = resp1.json()["reference_id"]
+
+    # 2. Reply with reference in subject
+    resp2 = client.post("/api/public/contact-message", json={
+        "fullName": "Subject Pax",
+        "email": "subject.pax@gmail.com",
+        "airportIata": "MIR",
+        "subject": f"Re: {ref_id}",
+        "message": "Any updates on my luggage?"
+    })
+    assert resp2.status_code == 201
+    data2 = resp2.json()
+    assert data2["reference_id"] == ref_id
+    assert data2.get("thread_appended") is True
+
+    tickets = db.query(PassengerMessage).filter(
+        PassengerMessage.sender_email == "subject.pax@gmail.com"
+    ).all()
+    assert len(tickets) == 1
+
+
+def test_no_reference_creates_new_ticket(client, db):
+    """Submitting without a reference ID creates a new ticket."""
+    resp1 = client.post("/api/public/contact-message", json={
+        "fullName": "New Pax",
+        "email": "new.pax@gmail.com",
+        "airportIata": "TUN",
+        "subject": "First issue",
+        "message": "This is my first message."
+    })
+    assert resp1.status_code == 201
+    ref1 = resp1.json()["reference_id"]
+
+    resp2 = client.post("/api/public/contact-message", json={
+        "fullName": "New Pax",
+        "email": "new.pax@gmail.com",
+        "airportIata": "TUN",
+        "subject": "Second issue",
+        "message": "This is a completely different issue."
+    })
+    assert resp2.status_code == 201
+    ref2 = resp2.json()["reference_id"]
+    assert ref2 != ref1
+
+    tickets = db.query(PassengerMessage).filter(
+        PassengerMessage.sender_email == "new.pax@gmail.com"
+    ).all()
+    assert len(tickets) == 2
+
+
+def test_nonexistent_reference_creates_new_ticket(client, db):
+    """Submitting with a reference ID that does not exist creates a new ticket."""
+    resp = client.post("/api/public/contact-message", json={
+        "fullName": "Ghost Pax",
+        "email": "ghost.pax@gmail.com",
+        "airportIata": "NBE",
+        "subject": "Hello",
+        "message": "Regarding DJE-20250601-9999, I need help."
+    })
+    assert resp.status_code == 201
+    data = resp.json()
+    assert data["reference_id"] != "DJE-20250601-9999"
+    assert data.get("thread_appended") is None
+
+
+def test_reply_preserves_new_status(client, db):
+    """A reply to a NEW ticket keeps it as NEW."""
+    resp = client.post("/api/public/contact-message", json={
+        "fullName": "Status Pax",
+        "email": "status.pax@gmail.com",
+        "airportIata": "TUN",
+        "subject": "Status test",
+        "message": "Initial message."
+    })
+    ref_id = resp.json()["reference_id"]
+    ticket = db.query(PassengerMessage).filter(PassengerMessage.reference_id == ref_id).first()
+    assert ticket.status == "NEW"
+
+    # Reply
+    client.post("/api/public/contact-message", json={
+        "fullName": "Status Pax",
+        "email": "status.pax@gmail.com",
+        "airportIata": "TUN",
+        "subject": "Follow-up",
+        "message": f"More info: {ref_id}"
+    })
+    db.expire_all()
+    ticket = db.query(PassengerMessage).filter(PassengerMessage.reference_id == ref_id).first()
+    assert ticket.status == "NEW"
+
+
+def test_reply_to_replied_ticket_returns_to_assigned(client, db, admin_token):
+    """A reply to a REPLIED ticket sets status back to ASSIGNED."""
+    from datetime import datetime, timezone, timedelta
+
+    # 1. Create ticket
+    resp = client.post("/api/public/contact-message", json={
+        "fullName": "Cycle Pax",
+        "email": "cycle.pax@gmail.com",
+        "airportIata": "TUN",
+        "subject": "Cycle test",
+        "message": "Initial inquiry."
+    })
+    ref_id = resp.json()["reference_id"]
+    ticket = db.query(PassengerMessage).filter(PassengerMessage.reference_id == ref_id).first()
+
+    # 2. Admin claims and replies
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    client.post(f"/api/admin/messages/{ticket.id}/claim", headers=headers)
+    client.post(f"/api/admin/messages/{ticket.id}/reply", json={"body": "We are looking into it."}, headers=headers)
+
+    db.expire_all()
+    ticket = db.query(PassengerMessage).filter(PassengerMessage.reference_id == ref_id).first()
+    assert ticket.status == "REPLIED"
+
+    # Set claim expiry to future so ticket stays ASSIGNED-visible
+    ticket.claim_expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+    db.commit()
+
+    # 3. Passenger replies with reference
+    client.post("/api/public/contact-message", json={
+        "fullName": "Cycle Pax",
+        "email": "cycle.pax@gmail.com",
+        "airportIata": "TUN",
+        "subject": "Thanks",
+        "message": f"Thank you for the update. {ref_id}"
+    })
+
+    db.expire_all()
+    ticket = db.query(PassengerMessage).filter(PassengerMessage.reference_id == ref_id).first()
+    assert ticket.status == "ASSIGNED"
+
+
+def test_resolved_ticket_requires_confirmation(client, db):
+    """A reply to a RESOLVED ticket without confirm_reopen asks for confirmation."""
+    resp = client.post("/api/public/contact-message", json={
+        "fullName": "Resolved Pax",
+        "email": "resolved.pax@gmail.com",
+        "airportIata": "TUN",
+        "subject": "Resolved test",
+        "message": "My issue is now solved."
+    })
+    ref_id = resp.json()["reference_id"]
+    ticket = db.query(PassengerMessage).filter(PassengerMessage.reference_id == ref_id).first()
+
+    # Manually resolve
+    ticket.status = "RESOLVED"
+    ticket.resolved_at = datetime.now(timezone.utc)
+    db.commit()
+
+    # Reply without confirm_reopen
+    resp2 = client.post("/api/public/contact-message", json={
+        "fullName": "Resolved Pax",
+        "email": "resolved.pax@gmail.com",
+        "airportIata": "TUN",
+        "subject": "Reopen",
+        "message": f"I still need help. {ref_id}"
+    })
+    assert resp2.status_code == 200
+    data2 = resp2.json()
+    assert data2.get("requires_confirmation") is True
+
+
+def test_resolved_ticket_with_confirmation_reopens(client, db):
+    """A reply to a RESOLVED ticket with confirm_reopen=True reopens and appends."""
+    resp = client.post("/api/public/contact-message", json={
+        "fullName": "Reopen Pax",
+        "email": "reopen.pax@gmail.com",
+        "airportIata": "TUN",
+        "subject": "Reopen test",
+        "message": "Need help with this."
+    })
+    ref_id = resp.json()["reference_id"]
+    ticket = db.query(PassengerMessage).filter(PassengerMessage.reference_id == ref_id).first()
+
+    # Manually resolve
+    ticket.status = "RESOLVED"
+    ticket.resolved_at = datetime.now(timezone.utc)
+    db.commit()
+
+    # Reply with confirm_reopen=True
+    resp2 = client.post("/api/public/contact-message", json={
+        "fullName": "Reopen Pax",
+        "email": "reopen.pax@gmail.com",
+        "airportIata": "TUN",
+        "subject": "Reopen",
+        "message": f"Still need assistance. {ref_id}",
+        "confirm_reopen": True
+    })
+    assert resp2.status_code == 201
+    data2 = resp2.json()
+    assert data2["reference_id"] == ref_id
+    assert data2.get("thread_appended") is True
+
+    db.expire_all()
+    ticket = db.query(PassengerMessage).filter(PassengerMessage.reference_id == ref_id).first()
+    assert ticket.status != "RESOLVED"
+    assert ticket.resolved_at is None
+
+
+# ── Delete ownership validation ──────────────────────────────────────────────
+
+
+def test_admin_deletes_own_assigned_ticket(client, db, admin_token, mir_admin_user):
+    """Admin can delete a ticket assigned to them."""
+    client.post("/api/public/contact-message", json={
+        "fullName": "Own Ticket Pax",
+        "email": "own.ticket@gmail.com",
+        "airportIata": "TUN",
+        "subject": "Claim this",
+        "message": "Please assign this to me."
+    })
+    ticket_id = db.query(PassengerMessage).order_by(PassengerMessage.id.desc()).first().id
+
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    client.post(f"/api/admin/messages/{ticket_id}/claim", headers=headers)
+
+    db.expire_all()
+    ticket = db.query(PassengerMessage).filter(PassengerMessage.id == ticket_id).first()
+    assert ticket.assigned_admin_id is not None
+
+    resp = client.delete(f"/api/admin/messages/{ticket_id}", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+
+    db.expire_all()
+    assert db.query(PassengerMessage).filter(PassengerMessage.id == ticket_id).first() is None
+
+
+def test_admin_deletes_unassigned_ticket(client, db, admin_token):
+    """Admin is blocked from deleting an unassigned ticket."""
+    client.post("/api/public/contact-message", json={
+        "fullName": "Unassigned Pax",
+        "email": "unassigned.pax@gmail.com",
+        "airportIata": "TUN",
+        "subject": "No owner",
+        "message": "This ticket has no owner."
+    })
+    ticket_id = db.query(PassengerMessage).order_by(PassengerMessage.id.desc()).first().id
+
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    resp = client.delete(f"/api/admin/messages/{ticket_id}", headers=headers)
+    assert resp.status_code == 403
+    assert "You can only delete tickets assigned to you." in resp.json()["error"]
+
+
+def test_admin_deletes_other_admins_ticket(client, db, admin_token, mir_admin_user):
+    """Admin is blocked from deleting a ticket assigned to another admin."""
+    # Create TUN ticket
+    client.post("/api/public/contact-message", json={
+        "fullName": "Other Admin Pax",
+        "email": "other.admin.pax@gmail.com",
+        "airportIata": "TUN",
+        "subject": "Other's ticket",
+        "message": "Belongs to someone else."
+    })
+    ticket_id = db.query(PassengerMessage).order_by(PassengerMessage.id.desc()).first().id
+
+    # MIR admin claims it (but TUN ticket — MIR can't claim TUN tickets, so assign via DB)
+    ticket = db.query(PassengerMessage).filter(PassengerMessage.id == ticket_id).first()
+    ticket.assigned_admin_id = mir_admin_user.id
+    ticket.status = "ASSIGNED"
+    db.commit()
+
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    resp = client.delete(f"/api/admin/messages/{ticket_id}", headers=headers)
+    assert resp.status_code == 403
+    assert "You can only delete tickets assigned to you." in resp.json()["error"]
+
+
+def test_super_admin_deletes_assigned_ticket(client, db, admin_token, super_admin_token):
+    """Super Admin can delete a ticket even when it is assigned to an admin."""
+    client.post("/api/public/contact-message", json={
+        "fullName": "Super Own Pax",
+        "email": "super.own.pax@gmail.com",
+        "airportIata": "TUN",
+        "subject": "Super delete",
+        "message": "Super admin will delete this."
+    })
+    ticket_id = db.query(PassengerMessage).order_by(PassengerMessage.id.desc()).first().id
+
+    headers_admin = {"Authorization": f"Bearer {admin_token}"}
+    client.post(f"/api/admin/messages/{ticket_id}/claim", headers=headers_admin)
+
+    db.expire_all()
+    ticket = db.query(PassengerMessage).filter(PassengerMessage.id == ticket_id).first()
+    assert ticket.assigned_admin_id is not None
+
+    headers_super = {"Authorization": f"Bearer {super_admin_token}"}
+    resp = client.delete(f"/api/admin/messages/{ticket_id}", headers=headers_super)
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+
+    db.expire_all()
+    assert db.query(PassengerMessage).filter(PassengerMessage.id == ticket_id).first() is None
+
+
+def test_super_admin_deletes_unassigned_ticket(client, db, super_admin_token):
+    """Super Admin can delete an unassigned ticket."""
+    client.post("/api/public/contact-message", json={
+        "fullName": "Super Unassigned Pax",
+        "email": "super.unassigned.pax@gmail.com",
+        "airportIata": "TUN",
+        "subject": "Super unassigned",
+        "message": "Super admin deletes unowned ticket."
+    })
+    ticket_id = db.query(PassengerMessage).order_by(PassengerMessage.id.desc()).first().id
+
+    headers_super = {"Authorization": f"Bearer {super_admin_token}"}
+    resp = client.delete(f"/api/admin/messages/{ticket_id}", headers=headers_super)
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+
+    db.expire_all()
+    assert db.query(PassengerMessage).filter(PassengerMessage.id == ticket_id).first() is None
+

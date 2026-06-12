@@ -19,6 +19,7 @@ export function useAdminTheme(): [AdminTheme, (t: AdminTheme) => void] {
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
+    document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('admin_theme', theme);
   }, [theme]);
 

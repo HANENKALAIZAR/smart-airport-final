@@ -30,6 +30,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["Passenger Helpdesk"])
 
 SUPPORTED_AIRPORTS = ["TUN", "MIR", "DJE", "NBE"]
+TICKET_REF_PATTERN = re.compile(r"(DJE|TUN|MIR|NBE)-\d{8}-\d{4}")
 
 HIGH_KEYWORDS = [
     "passport", "police", "sécurité", "securite", "medical", "accident",
@@ -49,6 +50,7 @@ class ContactMessageCreate(BaseModel):
     airportIata: str
     subject: str
     message: str
+    confirm_reopen: bool = False
 
     @field_validator("email")
     @classmethod
@@ -157,6 +159,78 @@ def calculate_sla_overdue(created_at: datetime, priority: str) -> bool:
     else:
         return elapsed > timedelta(minutes=180)
 
+def handle_existing_ticket_reply(
+    db: Session,
+    ticket: PassengerMessage,
+    clean_name: str,
+    clean_email: str,
+    clean_message: str,
+    confirm_reopen: bool
+):
+    """Appends a passenger message to an existing ticket thread instead of creating a new ticket."""
+    now = datetime.now(timezone.utc)
+
+    # Handle resolved ticket reopen flow
+    if ticket.status == "RESOLVED":
+        if not confirm_reopen:
+            return JSONResponse(
+                status_code=status.HTTP_200_OK,
+                content={
+                    "success": True,
+                    "reference_id": ticket.reference_id,
+                    "requires_confirmation": True,
+                    "message": f"This ticket is already resolved. Would you like to reopen it?"
+                }
+            )
+        # Reopen the ticket
+        ticket.status = "ASSIGNED" if ticket.assigned_admin_id else "NEW"
+        ticket.resolved_at = None
+        ticket.resolved_by_admin_id = None
+
+    # Status transitions
+    elif ticket.status == "REPLIED":
+        ticket.status = "ASSIGNED"
+
+    # NEW and ASSIGNED stay as-is
+
+    # Append passenger message as a thread entry
+    thread_entry = PassengerMessageThread(
+        message_id=ticket.id,
+        sender_type="passenger",
+        sender_name=clean_name,
+        sender_email=clean_email,
+        body=clean_message
+    )
+    db.add(thread_entry)
+
+    # Add system timeline entry
+    timeline_entry = PassengerMessageThread(
+        message_id=ticket.id,
+        sender_type="system",
+        sender_name="System",
+        body="Passenger replied to existing ticket."
+    )
+    db.add(timeline_entry)
+
+    # Clear read state for the assigned admin so ticket appears unread
+    if ticket.assigned_admin_id:
+        db.query(PassengerMessageReadState).filter(
+            PassengerMessageReadState.message_id == ticket.id,
+            PassengerMessageReadState.admin_id == ticket.assigned_admin_id
+        ).delete()
+
+    # Update last activity timestamp
+    ticket.updated_at = now
+    db.commit()
+
+    return {
+        "success": True,
+        "reference_id": ticket.reference_id,
+        "thread_appended": True,
+        "message": f"Your message has been added to ticket {ticket.reference_id}."
+    }
+
+
 def serialize_ticket(msg: PassengerMessage, current_user_id: int, db: Session = None) -> dict:
     """Serializes PassengerMessage ORM record to unified JSON response."""
     now = datetime.now(timezone.utc)
@@ -230,7 +304,8 @@ def submit_contact_message(
 ):
     """
     Submits a contact request from a passenger. Includes rate-limiting,
-    HTML XSS sanitization, duplicate spam merges, and auto-confirm emails.
+    HTML XSS sanitization, ticket reference threading, duplicate spam merges,
+    and auto-confirm emails.
     """
     now = datetime.now(timezone.utc)
     client_ip = request.client.host if request.client else "unknown"
@@ -261,6 +336,20 @@ def submit_contact_message(
             status_code=429,
             detail="Rate limit exceeded. Please wait a few minutes before submitting another request."
         )
+
+    # 4. Check for existing ticket reference in message body or subject
+    ref_match = TICKET_REF_PATTERN.search(clean_message) or TICKET_REF_PATTERN.search(clean_subject)
+    if ref_match:
+        existing_ref = ref_match.group(0)
+        existing_ticket = db.query(PassengerMessage).filter(
+            PassengerMessage.reference_id == existing_ref
+        ).first()
+
+        if existing_ticket:
+            return handle_existing_ticket_reply(
+                db, existing_ticket, clean_name, clean_email, clean_message,
+                payload.confirm_reopen
+            )
 
     # 3. Duplicate Protection: Check 10 minutes matching email/airport
     ten_min_ago = now - timedelta(minutes=10)
@@ -297,15 +386,15 @@ def submit_contact_message(
                 "appended": True
             }
 
-    # 4. Resolve priority & Category
+    # 5. Resolve priority & Category
     priority, category = resolve_priority_and_category(clean_subject, clean_message)
 
-    # 5. Generate Reference ID
+    # 6. Generate Reference ID
     date_str = now.strftime("%Y%m%d")
     rand_digits = "".join(random.choices("0123456789", k=4))
     reference_id = f"{clean_airport}-{date_str}-{rand_digits}"
 
-    # 6. Save new ticket
+    # 7. Save new ticket
     ticket = PassengerMessage(
         reference_id=reference_id,
         airport_iata=clean_airport,
@@ -323,7 +412,7 @@ def submit_contact_message(
     db.commit()
     db.refresh(ticket)
 
-    # 7. Auto-acknowledgment passenger confirmation email
+    # 8. Auto-acknowledgment passenger confirmation email
     msg_id_hdr = f"<confirm-{reference_id}-{int(now.timestamp())}@smartairport.tn>"
     
     # Save the system confirmation in thread
@@ -946,6 +1035,43 @@ def resolve_passenger_ticket(
     db.commit()
 
     return {"success": True, "data": serialize_ticket(ticket, current_user.id, db)}
+
+
+@router.delete("/admin/messages/{messageId}", status_code=status.HTTP_200_OK)
+def delete_passenger_ticket(
+    messageId: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_approved_admin)
+):
+    """
+    Permanently deletes a passenger ticket and all related data.
+    - Super Admin: may delete any ticket regardless of assignment.
+    - Airport Admin: may only delete tickets currently assigned to them.
+    """
+
+    ticket = db.query(PassengerMessage).filter(PassengerMessage.id == messageId).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found.")
+
+    if current_user.role == "super_admin":
+        # Super Admin has full deletion rights over any ticket.
+        db.delete(ticket)
+        db.commit()
+        return {"success": True, "message": "Ticket deleted successfully."}
+
+    # Airport admin: ownership check
+    if ticket.assigned_admin_id != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only delete tickets assigned to you."
+        )
+
+    # Hard delete — SQLAlchemy cascade removes PassengerMessageThread records;
+    # PassengerMessageReadState uses ON DELETE CASCADE at the DB level.
+    db.delete(ticket)
+    db.commit()
+
+    return {"success": True, "message": "Ticket deleted successfully."}
 
 
 # ── Super Admin Controls ──────────────────────────────────────────────────────

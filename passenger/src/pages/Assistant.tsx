@@ -23,6 +23,7 @@ export default function Assistant() {
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  const [sessionId, setSessionId] = useState(() => crypto.randomUUID());
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const lastUserMsg = [...messages].reverse().find(m => m.role === 'user')?.content || '';
@@ -37,14 +38,14 @@ export default function Assistant() {
   ];
 
   const clearChat = async () => {
+    const oldId = sessionId;
+    // Generate new sessionId immediately so new messages use it
+    const newId = crypto.randomUUID();
+    setSessionId(newId);
     setMessages([]);
-    try {
-      await fetch(`${AI_URL}/api/chat/passenger-session`, {
-        method: "DELETE",
-      });
-    } catch (err) {
-      console.error("Failed to clear backend session:", err);
-    }
+    // Clear the old session on the backend (fire-and-forget is OK since we already rotated)
+    fetch(`${AI_URL}/api/chat/${oldId}`, { method: "DELETE" })
+      .catch((err) => console.error("Failed to clear backend session:", err));
   };
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -81,7 +82,7 @@ export default function Assistant() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: trimmed,
-          conversationId: "passenger-session",
+          conversationId: sessionId,
         }),
       });
 

@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { cn } from "../../components/admin/ui/utils";
 import { useAirport } from "../../context/AirportContext";
+import { useLanguage } from "../../context/LanguageContext";
 import CustomSelect from "../../components/admin/ui/CustomSelect";
 import {
   apiListMessages,
@@ -61,11 +62,11 @@ const PRIORITY_COLOR: Record<Priority, string> = {
   low: "#34D399",
 };
 
-const FOLDERS: { key: Folder; label: string; icon: typeof Inbox }[] = [
-  { key: "inbox", label: "Inbox", icon: Inbox },
-  { key: "sent", label: "Sent", icon: SendIcon },
-  { key: "resolved", label: "Resolved", icon: CheckCircle2 },
-  { key: "archived", label: "Archived", icon: Archive },
+const FOLDERS: { key: Folder; labelKey: string; icon: typeof Inbox }[] = [
+  { key: "inbox", labelKey: "msg_inbox", icon: Inbox },
+  { key: "sent", labelKey: "msg_sent", icon: SendIcon },
+  { key: "resolved", labelKey: "msg_resolved", icon: CheckCircle2 },
+  { key: "archived", labelKey: "msg_archived", icon: Archive },
 ];
 
 function getInitials(name?: string) {
@@ -97,6 +98,7 @@ function getPriorityFromCategory(category: string): Priority {
 /* ─────────────── Component ─────────────── */
 
 export default function SuperAdminMessages() {
+  const { t } = useLanguage();
   const [folder, setFolder] = useState<Folder>("inbox");
   const [priorityFilter, setPriorityFilter] = useState<Priority | null>(null);
   const [search, setSearch] = useState("");
@@ -145,7 +147,7 @@ export default function SuperAdminMessages() {
       setInboxMessages(inboxRes.data || []);
       setSentMessages(sentRes.data || []);
     } catch (err: any) {
-      setError(err?.message || "Failed to load HQ messages.");
+      setError(err?.message || 'Failed to load HQ messages.');
     } finally {
       setLoading(false);
     }
@@ -234,7 +236,7 @@ export default function SuperAdminMessages() {
 
   const deleteSelected = async () => {
     if (!selected) return;
-    if (!window.confirm("Are you sure you want to delete this message?")) return;
+    if (!window.confirm(t('msg_confirm_delete'))) return;
     const { error: err } = await apiDeleteMessage(selected.id);
     if (err) setError(err);
     else {
@@ -289,8 +291,8 @@ export default function SuperAdminMessages() {
   // ── Render Helpers ──
   const getSenderDetails = (m: Message) => {
     const isFromSuper = m.direction === "to_admin";
-    const name = m.from_user_name || (isFromSuper ? "Super Admin" : "Me");
-    const roleLabel = isFromSuper ? "Super Admin · HQ" : `Admin · ${m.from_user_airport || "Unknown"}`;
+    const name = m.from_user_name || (isFromSuper ? t('msg_role_super_admin') : t('msg_role_me'));
+    const roleLabel = isFromSuper ? t('msg_role_hq') : t('msg_role_admin') + ' · ' + (m.from_user_airport || '—');
     return { name, role: roleLabel, initials: getInitials(name) };
   };
 
@@ -308,22 +310,22 @@ export default function SuperAdminMessages() {
       {/* Header + Actions */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
         <div>
-          <h1 className="admin-page__title">HQ Communications Hub</h1>
-          <p className="admin-page__subtitle">Internal coordination with airport administration teams.</p>
+          <h1 className="admin-page__title">{t('msg_internal_page_title')}</h1>
+          <p className="admin-page__subtitle">{t('msg_internal_page_subtitle')}</p>
         </div>
         <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
           <button
             onClick={loadMessages}
             className="group relative inline-flex h-9 items-center gap-2 overflow-hidden rounded-xl border border-white/10 bg-white/5 px-4 text-xs font-semibold text-foreground backdrop-blur-md transition-all hover:bg-white/10 hover:shadow-lg active:scale-95 cursor-pointer"
           >
-            <RefreshCw size={14} className="group-hover:rotate-180 transition-transform duration-500" /> Refresh
+            <RefreshCw size={14} className="group-hover:rotate-180 transition-transform duration-500" /> {t('msg_refresh')}
           </button>
           
           <button
             onClick={() => setComposing(true)}
             className="inline-flex h-9 items-center gap-2 rounded-lg bg-gradient-cyan px-4 text-xs font-semibold text-primary-foreground shadow-glow border-none cursor-pointer"
           >
-            <Plus size={14} /> New HQ Message
+            <Plus size={14} /> {t('msg_new_hq_message')}
           </button>
         </div>
       </div>
@@ -340,7 +342,7 @@ export default function SuperAdminMessages() {
           height: "fit-content",
         }}>
           <div>
-            <div style={{ fontSize: "0.66rem", fontWeight: 700, letterSpacing: "0.12em", color: "var(--adm-text-muted)", padding: "0.4rem 0.6rem 0.6rem" }}>HQ CHANNELS</div>
+            <div style={{ fontSize: "0.66rem", fontWeight: 700, letterSpacing: "0.12em", color: "var(--adm-text-muted)", padding: "0.4rem 0.6rem 0.6rem" }}>{t('msg_hq_channels')}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {FOLDERS.map(f => {
                 const Icon = f.icon;
@@ -360,7 +362,7 @@ export default function SuperAdminMessages() {
                   >
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
                       <Icon size={16} />
-                      {f.label}
+                      {t(f.labelKey)}
                     </span>
                     <span style={{
                       minWidth: 22, padding: "0 6px", height: 20, borderRadius: 10,
@@ -376,7 +378,7 @@ export default function SuperAdminMessages() {
           </div>
 
           <div>
-            <div style={{ fontSize: "0.66rem", fontWeight: 700, letterSpacing: "0.12em", color: "var(--adm-text-muted)", padding: "0.4rem 0.6rem 0.6rem" }}>PRIORITY</div>
+            <div style={{ fontSize: "0.66rem", fontWeight: 700, letterSpacing: "0.12em", color: "var(--adm-text-muted)", padding: "0.4rem 0.6rem 0.6rem" }}>{t('msg_priority')}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
               {(["high", "medium", "low"] as Priority[]).map(p => {
                 const active = priorityFilter === p;
@@ -394,7 +396,7 @@ export default function SuperAdminMessages() {
                     }}
                   >
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: PRIORITY_COLOR[p], boxShadow: `0 0 6px ${PRIORITY_COLOR[p]}80` }} />
-                    {p}
+                    {t('msg_priority_' + p)}
                   </button>
                 );
               })}
@@ -420,7 +422,7 @@ export default function SuperAdminMessages() {
               <Search size={15} style={{ color: "var(--adm-text-muted)" }} />
               <input
                 value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="Search sender, subject…"
+                placeholder={t('msg_search_sender')}
                 style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "var(--adm-text)", fontSize: "0.82rem" }}
               />
             </div>
@@ -440,9 +442,9 @@ export default function SuperAdminMessages() {
                   outline: "none"
                 }}
               >
-                <option value="all">🔍 Show All Messages</option>
-                <option value="unread">📬 Unread Only</option>
-                <option value="resolved">✅ Resolved Only</option>
+                <option value="all">{t('msg_show_all')}</option>
+                <option value="unread">{t('msg_unread_only')}</option>
+                <option value="resolved">{t('msg_resolved')}</option>
               </select>
             </div>
           </div>
@@ -450,13 +452,13 @@ export default function SuperAdminMessages() {
             {loading ? (
               <div style={{ padding: "3rem 1rem", textAlign: "center", color: "var(--adm-text-muted)", fontSize: "0.85rem", display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                 <RefreshCw size={20} className="mb-2 animate-spin opacity-50" />
-                Loading messages...
+                {t('msg_loading_messages')}
               </div>
             ) : filtered.length === 0 ? (
               <div style={{ padding: "3rem 1rem", textAlign: "center", color: "var(--adm-text-muted)", fontSize: "0.85rem" }}>
                 <Inbox size={32} className="opacity-30 mb-2 block mx-auto text-center" />
-                No HQ messages yet.<br />
-                <span style={{ fontSize: "0.75rem", opacity: 0.7 }}>Start an internal coordination message with an airport team.</span>
+                {t('msg_no_hq_messages')}<br />
+                <span style={{ fontSize: "0.75rem", opacity: 0.7 }}>{t('msg_no_hq_messages_hint')}</span>
               </div>
             ) : (
               filtered.map(m => {
@@ -536,7 +538,7 @@ export default function SuperAdminMessages() {
                   </div>
                 </div>
                 <div style={{ display: "inline-flex", gap: 6, flexShrink: 0 }}>
-                  {selected.status !== "resolved" && <ToolbarBtn icon={CheckCircle2} label="Resolve" tone="success" onClick={resolveSelected} />}
+                  {selected.status !== "resolved" && <ToolbarBtn icon={CheckCircle2} label={t('msg_resolve_btn')} tone="success" onClick={resolveSelected} />}
                   <ToolbarBtn icon={Trash2} label="" tone="danger" onClick={deleteSelected} />
                 </div>
               </div>
@@ -580,7 +582,7 @@ export default function SuperAdminMessages() {
                                 {r.author_name}
                               </span>
                               <span style={{ color: "var(--adm-text-muted)", marginLeft: 6 }}>
-                                {r.author_role === "super_admin" ? "Super Admin" : "Operations Office"}
+                                {r.author_role === "super_admin" ? t('msg_role_super_admin') : t('msg_role_operations')}
                               </span>
                             </div>
                             <span style={{ color: "var(--adm-text-muted)" }}>{fmtTime(r.created_at)}</span>
@@ -600,22 +602,12 @@ export default function SuperAdminMessages() {
               {selected.status !== "resolved" && (
                 <div style={{ borderTop: "1px solid var(--adm-border)" }}>
                   <div style={{ display: "flex", flexDirection: "column" }}>
-                    <div style={{
-                      padding: "0.5rem 1rem",
-                      background: "rgba(245,158,11,0.02)",
-                      borderBottom: "1px solid var(--adm-border)",
-                    }}>
-                      <span className="text-[11px] font-semibold text-amber-500 flex items-center gap-1">
-                        🔒 Internal coordination channel: Secure admin-to-admin message
-                      </span>
-                    </div>
-
                     <div style={{ padding: "0.85rem 1rem", display: "flex", gap: 8, alignItems: "flex-end" }}>
                       <input
                         value={reply} onChange={e => setReply(e.target.value)}
                         onKeyDown={e => { if (e.key === "Enter") sendReply(); }}
                         disabled={sendingReply}
-                        placeholder="Type your secure message response..."
+                        placeholder={t('msg_reply_placeholder')}
                         style={{
                           flex: 1, padding: "0.6rem 0.85rem",
                           background: "rgba(255,255,255,0.04)",
@@ -638,8 +630,8 @@ export default function SuperAdminMessages() {
                           height: 38
                         }}
                       >
-                        <SendIcon size={14} /> Send
-                      </button>
+                          <SendIcon size={14} /> {t('msg_send')}
+                        </button>
                     </div>
                   </div>
                 </div>
@@ -648,7 +640,7 @@ export default function SuperAdminMessages() {
           ) : (
             <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "var(--adm-text-muted)", padding: "2rem" }}>
               <Inbox size={36} style={{ opacity: 0.4, marginBottom: 12 }} />
-              <div style={{ fontSize: "0.9rem" }}>Select a conversation from the list to view.</div>
+              <div style={{ fontSize: "0.9rem" }}>{t('msg_select_conversation')}</div>
             </div>
           )}
         </div>
@@ -674,8 +666,8 @@ export default function SuperAdminMessages() {
                   <ShieldCheck size={22} />
                 </div>
                 <div>
-                  <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--adm-text)", margin: "0 0 4px 0" }}>New Message to Airport Admin</h2>
-                  <div style={{ fontSize: "0.8rem", color: "var(--adm-text-muted)" }}>Send secure internal communication from HQ.</div>
+                  <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--adm-text)", margin: "0 0 4px 0" }}>{t('msg_new_to_airport_admin')}</h2>
+                  <div style={{ fontSize: "0.8rem", color: "var(--adm-text-muted)" }}>{t('msg_compose_desc')}</div>
                 </div>
               </div>
               <button onClick={() => setComposing(false)} style={{ background: "transparent", border: "none", color: "var(--adm-text-muted)", cursor: "pointer", padding: 4 }}>
@@ -686,19 +678,19 @@ export default function SuperAdminMessages() {
             {/* Modal Body */}
             <form onSubmit={handleCompose} style={{ padding: "1.5rem" }}>
               <div style={{ marginBottom: "1.25rem" }}>
-                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--adm-text-muted)", marginBottom: "0.5rem" }}>RECIPIENT AIRPORT ADMIN</label>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--adm-text-muted)", marginBottom: "0.5rem" }}>{t('msg_recipient_label')}</label>
                 <CustomSelect
                   options={adminList.map((a) => ({ value: String(a.id), label: `${a.full_name} · ${a.airport_iata}` }))}
                   value={composeForm.to_user_id ? String(composeForm.to_user_id) : null}
                   onChange={(val: any) => setComposeForm(f => ({ ...f, to_user_id: val }))}
-                  placeholder="Select an airport admin..."
+                  placeholder={t('msg_select_admin')}
                 />
               </div>
 
 
 
               <div style={{ marginBottom: "1.25rem" }}>
-                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--adm-text-muted)", marginBottom: "0.5rem" }}>SUBJECT</label>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--adm-text-muted)", marginBottom: "0.5rem" }}>{t('msg_subject_label')}</label>
                 <input
                   required
                   type="text"
@@ -709,12 +701,12 @@ export default function SuperAdminMessages() {
                     border: "1px solid var(--adm-border)", borderRadius: 10, color: "var(--adm-text)",
                     fontSize: "0.9rem", outline: "none"
                   }}
-                  placeholder="e.g. Schedule review or equipment request"
+                  placeholder={t('msg_compose_placeholder_subject')}
                 />
               </div>
 
               <div style={{ marginBottom: "2rem" }}>
-                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--adm-text-muted)", marginBottom: "0.5rem" }}>MESSAGE BODY</label>
+                <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, letterSpacing: "0.05em", color: "var(--adm-text-muted)", marginBottom: "0.5rem" }}>{t('msg_message_body_label')}</label>
                 <textarea
                   required
                   rows={5}
@@ -725,7 +717,7 @@ export default function SuperAdminMessages() {
                     border: "1px solid var(--adm-border)", borderRadius: 10, color: "var(--adm-text)",
                     fontSize: "0.9rem", outline: "none", resize: "none"
                   }}
-                  placeholder="Write your secure HQ message..."
+                  placeholder={t('msg_compose_placeholder_body')}
                 />
               </div>
 
@@ -739,7 +731,7 @@ export default function SuperAdminMessages() {
                     borderRadius: 10, color: "var(--adm-text)", fontSize: "0.85rem", fontWeight: 600, cursor: "pointer"
                   }}
                 >
-                  Cancel
+                  {t('msg_cancel')}
                 </button>
                 <button
                   type="submit"
@@ -751,7 +743,7 @@ export default function SuperAdminMessages() {
                     cursor: "pointer", opacity: (sendingMessage || !composeForm.to_user_id) ? 0.7 : 1
                   }}
                 >
-                  <SendIcon size={16} /> {sendingMessage ? "Sending..." : "Send HQ Message"}
+                  <SendIcon size={16} /> {sendingMessage ? t('msg_sending') : t('msg_send_hq_message')}
                 </button>
               </div>
             </form>

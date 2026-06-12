@@ -15,6 +15,53 @@ export const LANGUAGES = [
     { code: 'ar', label: 'العربية', flag: '🇸🇦', dir: 'rtl' },
 ];
 
+function humanizeKey(key) {
+    if (!key || typeof key !== 'string') return '';
+    
+    const ignoreWords = new Set([
+        'admin', 'super', 'profile', 'dash', 'settings', 'users', 'nav', 'field'
+    ]);
+    
+    const wordMappings = {
+        pw: 'Password',
+        pass: 'Password',
+        rel: 'Relationship',
+        dob: 'Date of Birth',
+        cin: 'National ID (CIN)',
+        ops: 'Operations',
+        otp: 'On-Time Performance',
+        mae: 'Mean Absolute Error',
+        kpi: 'KPI',
+        avg: 'Average',
+        min: 'Minutes',
+        hr: 'Hour',
+        verif: 'Verification',
+        info: 'Information',
+        config: 'Configuration',
+        add: 'Add',
+        del: 'Delete',
+        edit: 'Edit',
+        save: 'Save',
+        saving: 'Saving',
+        cancel: 'Cancel',
+        discard: 'Discard'
+    };
+    
+    const parts = key.split(/[-_]/);
+    const filteredParts = parts.filter(p => p && !ignoreWords.has(p.toLowerCase()));
+    const partsToUse = filteredParts.length > 0 ? filteredParts : parts.filter(p => p);
+    
+    const words = partsToUse.map(p => {
+        const lower = p.toLowerCase();
+        if (wordMappings[lower]) {
+            return wordMappings[lower];
+        }
+        return p.charAt(0).toUpperCase() + p.slice(1);
+    });
+    
+    return words.join(' ');
+}
+
 export function LanguageProvider({ children }) {
     const [language, setLanguageState] = useState(() => {
         try {
@@ -31,10 +78,17 @@ export function LanguageProvider({ children }) {
         } catch { /* noop */ }
     }, []);
 
-    // Translate function — returns the translation or the key itself
-    const t = useCallback((key) => {
+    // Translate function — returns the translation, fallback string, or the key itself.
+    // Supports {placeholder} interpolation via optional third parameter.
+    const t = useCallback((key, fallback, vars) => {
         const dict = TRANSLATIONS[language] || TRANSLATIONS.en;
-        return dict[key] || TRANSLATIONS.en[key] || key;
+        let val = dict[key] || TRANSLATIONS.en[key] || fallback || humanizeKey(key);
+        if (vars && typeof val === 'string') {
+            for (const [k, v] of Object.entries(vars)) {
+                val = val.replace(new RegExp(`\\{${k}\\}`, 'g'), v ?? '');
+            }
+        }
+        return val;
     }, [language]);
 
     // Current language meta

@@ -91,6 +91,7 @@ function ToggleRow({ l, sub, on = true }: { l: string; sub: string; on?: boolean
 
 /* ── Profile Section (CONNECTED to apiGetMe + apiPatchSettings) ── */
 function ProfileSection() {
+    const { t } = useLanguage();
     const { role } = useAirport();
     const isSuperAdmin = role === 'super_admin';
     const [profile, setProfile] = useState<Profile>({});
@@ -126,13 +127,13 @@ function ProfileSection() {
 
         // Validate format
         if (!["image/png", "image/jpeg", "image/jpg"].includes(file.type)) {
-            setMsg({ type: 'error', text: 'Only JPG, PNG or JPEG files are accepted.' });
+            setMsg({ type: 'error', text: t('admin_settings_photo_format_error') });
             return;
         }
 
         // Validate size (2MB)
         if (file.size > 2 * 1024 * 1024) {
-            setMsg({ type: 'error', text: 'File size must be under 2MB.' });
+            setMsg({ type: 'error', text: t('admin_settings_photo_size_error') });
             return;
         }
 
@@ -142,7 +143,7 @@ function ProfileSection() {
             setPhotoUrl(result);
         };
         reader.onerror = () => {
-            setMsg({ type: 'error', text: 'Failed to read file.' });
+            setMsg({ type: 'error', text: t('admin_settings_photo_read_error') });
         };
         reader.readAsDataURL(file);
     };
@@ -159,7 +160,7 @@ function ProfileSection() {
         if (error) { 
             setMsg({ type: 'error', text: error }); 
         } else { 
-            setMsg({ type: 'success', text: 'Profile updated successfully.' }); 
+            setMsg({ type: 'success', text: t('admin_settings_profile_updated') }); 
             setProfile(p => ({ ...p, full_name: fullName, phone_number: phone, profile_photo_url: photoUrl })); 
             window.dispatchEvent(new CustomEvent('admin-header-refresh-me'));
         }
@@ -168,7 +169,7 @@ function ProfileSection() {
 
     return (
         <>
-            <SectionHeader title="Profile information" sub="How you appear to other operators." />
+            <SectionHeader title={t('admin_settings_profile_title')} sub={t('admin_settings_profile_subtitle')} />
             {msg && (
                 <div style={{ marginBottom: '1rem', padding: '0.6rem 0.85rem', borderRadius: 8, fontSize: '0.82rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, background: msg.type === 'success' ? 'rgba(52,211,153,0.1)' : 'rgba(248,113,113,0.1)', color: msg.type === 'success' ? '#10B981' : '#DC2626', border: `1px solid ${msg.type === 'success' ? 'rgba(52,211,153,0.35)' : 'rgba(248,113,113,0.35)'}` }}>
                     {msg.type === 'success' ? <Check size={14} /> : <AlertCircle size={14} />} {msg.text}
@@ -176,14 +177,14 @@ function ProfileSection() {
             )}
             <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: '1.5rem' }}>
                 {photoUrl ? (
-                    <img src={photoUrl} alt="Preview" style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--adm-accent)', flexShrink: 0 }} />
+                    <img src={photoUrl} alt={t('admin_settings_photo_alt')} style={{ width: 64, height: 64, borderRadius: '50%', objectFit: 'cover', border: '2px solid var(--adm-accent)', flexShrink: 0 }} />
                 ) : (
                     <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'linear-gradient(135deg, #F59E0B, #FBBF24)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', fontWeight: 700, color: '#0A1628', flexShrink: 0 }}>
                         {getInitials()}
                     </div>
                 )}
                 <div>
-                    <button onClick={triggerFileSelect} className="admin-btn admin-btn--outline admin-btn--compact" style={{ cursor: 'pointer' }}>Change photo</button>
+                    <button onClick={triggerFileSelect} className="admin-btn admin-btn--outline admin-btn--compact" style={{ cursor: 'pointer' }}>{t('admin_settings_change_photo')}</button>
                     <input
                         type="file"
                         ref={fileInputRef}
@@ -191,24 +192,24 @@ function ProfileSection() {
                         accept="image/png, image/jpeg, image/jpg"
                         style={{ display: 'none' }}
                     />
-                    <p style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted)', marginTop: 6, marginBottom: 0 }}>JPG or PNG, max 2 MB.</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--adm-text-muted)', marginTop: 6, marginBottom: 0 }}>{t('admin_settings_photo_hint')}</p>
                 </div>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <Field l="Full name" v={fullName} onChange={setFullName} />
-                <Field l="Email" v={profile.email} readOnly />
-                <Field l="Phone" v={phone} onChange={setPhone} />
-                <Field l="Role" v={profile.role === 'super_admin' ? 'Super Admin' : 'Airport Admin'} readOnly />
+                <Field l={t('admin_settings_field_full_name')} v={fullName} onChange={setFullName} />
+                <Field l={t('admin_settings_field_email')} v={profile.email} readOnly />
+                <Field l={t('admin_settings_field_phone')} v={phone} onChange={setPhone} />
+                <Field l={t('admin_settings_field_role')} v={profile.role === 'super_admin' ? t('admin_settings_role_super_admin') : t('admin_settings_role_airport_admin')} readOnly />
                 {!isSuperAdmin && (
                     <>
-                        <Field l="Airport" v={profile.airport_iata || 'HQ'} readOnly />
-                        <Field l="Employee ID" v={profile.employee_id || '—'} readOnly />
+                        <Field l={t('admin_settings_field_airport')} v={profile.airport_iata ? t(`airport_${profile.airport_iata}_name`, profile.airport_iata) : t('not_assigned', 'Not assigned')} readOnly />
+                        <Field l={t('admin_settings_field_employee_id')} v={profile.employee_id || '—'} readOnly />
                     </>
                 )}
             </div>
             <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: 8, borderTop: '1px solid var(--adm-border)', paddingTop: '1rem' }}>
                 <button className="admin-btn admin-btn--primary" onClick={save} disabled={saving} style={{ cursor: 'pointer' }}>
-                    {saving ? <><Loader size={14} className="su-spin" /> Saving…</> : <><Save size={15} /><span>Save changes</span></>}
+                    {saving ? <><Loader size={14} className="su-spin" /> {t('saving')}</> : <><Save size={15} /><span>{t('save')}</span></>}
                 </button>
             </div>
         </>
@@ -217,6 +218,7 @@ function ProfileSection() {
 
 /* ── Security Section (CONNECTED to apiChangePassword) ── */
 function SecuritySection() {
+    const { t } = useLanguage();
     const [current, setCurrent] = useState('');
     const [next, setNext] = useState('');
     const [confirm, setConfirm] = useState('');
@@ -229,15 +231,15 @@ function SecuritySection() {
     const pwMismatch = confirm.length > 0 && confirm !== next;
 
     const submit = async () => {
-        if (!current) return setMsg({ type: 'error', text: 'Enter your current password.' });
-        if (next.length < 8) return setMsg({ type: 'error', text: 'New password must be ≥ 8 characters.' });
-        if (strength.score < 2) return setMsg({ type: 'error', text: 'Choose a stronger password.' });
-        if (next !== confirm) return setMsg({ type: 'error', text: 'Passwords do not match.' });
+        if (!current) return setMsg({ type: 'error', text: t('admin_settings_pass_current_required') });
+        if (next.length < 8) return setMsg({ type: 'error', text: t('admin_settings_pass_length_error') });
+        if (strength.score < 2) return setMsg({ type: 'error', text: t('admin_settings_pass_strength_error') });
+        if (next !== confirm) return setMsg({ type: 'error', text: t('admin_settings_pass_match_error') });
         setSaving(true);
         const { error } = await apiChangePassword(current, next);
         setSaving(false);
         if (error) { setMsg({ type: 'error', text: error }); }
-        else { setCurrent(''); setNext(''); setConfirm(''); setMsg({ type: 'success', text: 'Password updated successfully.' }); }
+        else { setCurrent(''); setNext(''); setConfirm(''); setMsg({ type: 'success', text: t('admin_settings_pass_updated') }); }
         setTimeout(() => setMsg(null), 3500);
     };
 
@@ -248,7 +250,7 @@ function SecuritySection() {
                 <label style={{ display: 'block', fontSize: '0.74rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--adm-text-muted)', marginBottom: 6 }}>{label}</label>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.5rem 0.85rem', borderRadius: 8, background: 'rgba(255,255,255,0.05)', border: `1px solid ${borderColor}`, transition: 'all 180ms' }}>
                     <Lock size={14} style={{ color: 'var(--adm-text-muted)', flexShrink: 0 }} />
-                    <input type={show ? 'text' : 'password'} value={v} onChange={e => setV(e.target.value)} placeholder="••••••••"
+                    <input type={show ? 'text' : 'password'} value={v} onChange={e => setV(e.target.value)} placeholder={t('admin_settings_pass_placeholder')}
                         style={{ flex: 1, background: 'transparent', border: 'none', outline: 'none', color: 'var(--adm-text)', fontSize: '0.88rem', letterSpacing: show ? 'normal' : '0.18em' }} />
                     <button type="button" onClick={toggle} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--adm-text-muted)', display: 'flex' }}>
                         {show ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -261,19 +263,19 @@ function SecuritySection() {
 
     return (
         <>
-            <SectionHeader title="Security" sub="Protect your account and active sessions." />
+            <SectionHeader title={t('admin_settings_section_security')} sub={t('admin_settings_security_subtitle')} />
             {msg && (
                 <div style={{ marginBottom: '1rem', padding: '0.6rem 0.85rem', borderRadius: 8, fontSize: '0.82rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8, background: msg.type === 'success' ? 'rgba(52,211,153,0.1)' : 'rgba(248,113,113,0.1)', color: msg.type === 'success' ? '#10B981' : '#DC2626', border: `1px solid ${msg.type === 'success' ? 'rgba(52,211,153,0.35)' : 'rgba(248,113,113,0.35)'}` }}>
                     {msg.type === 'success' ? <Check size={14} /> : <AlertCircle size={14} />} {msg.text}
                 </div>
             )}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                <PwField label="Current password" v={current} setV={setCurrent} show={showC} toggle={() => setShowC(s => !s)} />
+                <PwField label={t('admin_settings_field_current_pass')} v={current} setV={setCurrent} show={showC} toggle={() => setShowC(s => !s)} />
                 <div />
-                <PwField label="New password" v={next} setV={setNext} show={showN} toggle={() => setShowN(s => !s)} />
-                <PwField label="Confirm new password" v={confirm} setV={setConfirm} show={false}
+                <PwField label={t('admin_settings_field_new_pass')} v={next} setV={setNext} show={showN} toggle={() => setShowN(s => !s)} />
+                <PwField label={t('admin_settings_field_confirm_pass')} v={confirm} setV={setConfirm} show={false}
                     toggle={() => {}} state={pwMismatch ? 'error' : pwMatch ? 'ok' : undefined}
-                    hint={pwMismatch ? "Passwords don't match" : pwMatch ? 'Passwords match' : undefined}
+                    hint={pwMismatch ? t('admin_settings_passwords_mismatch') : pwMatch ? t('admin_settings_passwords_match') : undefined}
                 />
             </div>
             {next && (
@@ -286,13 +288,13 @@ function SecuritySection() {
                     <div style={{ marginTop: 5, fontSize: '0.72rem', color: strength.color, fontWeight: 700, letterSpacing: '0.04em' }}>{strength.label}</div>
                 </div>
             )}
-            <ToggleRow l="Two-factor authentication" sub="Require a TOTP code on every login." />
-            <ToggleRow l="Trusted devices" sub="Skip 2FA on devices you've marked as trusted." />
-            <ToggleRow l="Session timeout (15 min)" sub="Sign out automatically after inactivity." />
+            <ToggleRow l={t('admin_settings_2fa')} sub={t('admin_settings_2fa_sub')} />
+            <ToggleRow l={t('admin_settings_trusted_devices')} sub={t('admin_settings_trusted_devices_sub')} />
+            <ToggleRow l={t('admin_settings_session_timeout')} sub={t('admin_settings_session_timeout_sub')} />
             <div style={{ marginTop: '1.5rem', display: 'flex', justifyContent: 'flex-end', gap: 8, borderTop: '1px solid var(--adm-border)', paddingTop: '1rem' }}>
-                <button className="admin-btn admin-btn--outline" onClick={() => { setCurrent(''); setNext(''); setConfirm(''); setMsg(null); }}>Discard</button>
+                <button className="admin-btn admin-btn--outline" onClick={() => { setCurrent(''); setNext(''); setConfirm(''); setMsg(null); }}>{t('admin_settings_discard')}</button>
                 <button className="admin-btn admin-btn--primary" onClick={submit} disabled={saving}>
-                    {saving ? <><Loader size={14} className="su-spin" /> Updating…</> : <><Lock size={14} /><span>Update password</span></>}
+                    {saving ? <><Loader size={14} className="su-spin" /> {t('admin_settings_updating')}</> : <><Lock size={14} /><span>{t('admin_settings_update_password')}</span></>}
                 </button>
             </div>
         </>
@@ -303,14 +305,15 @@ function SecuritySection() {
 // TODO: Backend endpoint needed: GET/PATCH /api/users/notification-preferences
 // Expected response: { high_risk_alerts: bool, weather_advisories: bool, cancellations: bool, daily_digest: bool, marketing: bool }
 function NotificationsSection() {
+    const { t } = useLanguage();
     return (
         <>
-            <SectionHeader title="Notifications" sub="Choose which alerts you want to receive." />
-            <ToggleRow l="High-risk delay predictions" sub="Push + email when a flight is flagged HIGH risk." />
-            <ToggleRow l="Weather advisories" sub="METAR severity above moderate." />
-            <ToggleRow l="Cancellations" sub="Any flight cancelled at TUN or partner airports." />
-            <ToggleRow l="Daily digest" sub="Morning summary at 06:00 local time." on={false} />
-            <ToggleRow l="Marketing & product updates" sub="Occasional release notes." on={false} />
+            <SectionHeader title={t('admin_settings_section_notifications')} sub={t('admin_settings_notifications_subtitle')} />
+            <ToggleRow l={t('admin_settings_notif_high_risk')} sub={t('admin_settings_notif_high_risk_sub')} />
+            <ToggleRow l={t('admin_settings_notif_weather')} sub={t('admin_settings_notif_weatherSub')} />
+            <ToggleRow l={t('admin_settings_notif_cancellations')} sub={t('admin_settings_notif_cancellationsSub')} />
+            <ToggleRow l={t('admin_settings_notif_digest')} sub={t('admin_settings_notif_digestSub')} on={false} />
+            <ToggleRow l={t('admin_settings_notif_marketing')} sub={t('admin_settings_notif_marketingSub')} on={false} />
         </>
     );
 }
@@ -319,16 +322,17 @@ function NotificationsSection() {
 // TODO: Backend endpoint needed: GET/PATCH /api/settings/integrations
 // Expected response: { flightaware: bool, oag: bool, openweather: bool, slack: bool, pagerduty: bool }
 function IntegrationsSection() {
+    const { t } = useLanguage();
     const items = [
-        { l: 'FlightAware', s: 'Live ADS-B feed', on: true },
-        { l: 'OAG Schedules', s: 'Global schedules + IATA codes', on: true },
-        { l: 'OpenWeather', s: 'METAR / TAF data', on: true },
-        { l: 'Slack', s: 'Push alerts to #ops-tun', on: false },
-        { l: 'PagerDuty', s: 'On-call escalations', on: false },
+        { l: t('admin_settings_integration_flightaware'), s: t('admin_settings_integration_flightawareSub'), on: true },
+        { l: t('admin_settings_integration_oag'), s: t('admin_settings_integration_oagSub'), on: true },
+        { l: t('admin_settings_integration_openweather'), s: t('admin_settings_integration_openweather_sub'), on: true },
+        { l: t('admin_settings_integration_slack'), s: t('admin_settings_integration_slack_sub'), on: false },
+        { l: t('admin_settings_integration_pagerduty'), s: t('admin_settings_integration_pagerduty_sub'), on: false },
     ];
     return (
         <>
-            <SectionHeader title="Integrations" sub="Third-party services connected to this airport." />
+            <SectionHeader title={t('admin_settings_section_integrations')} sub={t('admin_settings_integrations_subtitle')} />
             {items.map(i => <ToggleRow key={i.l} l={i.l} sub={i.s} on={i.on} />)}
         </>
     );
@@ -337,25 +341,26 @@ function IntegrationsSection() {
 /* ── Appearance Section (TODO: no backend endpoint yet) ── */
 // TODO: Backend endpoint needed: GET/PATCH /api/settings/appearance
 function AppearanceSection() {
+    const { t } = useLanguage();
     const [theme, setTheme] = useState('Aviation Navy');
     const themes = [
-        { l: 'Aviation Navy', g: 'linear-gradient(135deg,#0A1628,#132544)' },
-        { l: 'Midnight', g: 'linear-gradient(135deg,#0a0a1a,#1e1e5a)' },
-        { l: 'Carbon', g: 'linear-gradient(135deg,#1a1a1a,#2d2d2d)' },
+        { l: t('admin_settings_theme_aviation_navy'), v: 'Aviation Navy', g: 'linear-gradient(135deg,#0A1628,#132544)' },
+        { l: t('admin_settings_theme_midnight'), v: 'Midnight', g: 'linear-gradient(135deg,#0a0a1a,#1e1e5a)' },
+        { l: t('admin_settings_theme_carbon'), v: 'Carbon', g: 'linear-gradient(135deg,#1a1a1a,#2d2d2d)' },
     ];
     return (
         <>
-            <SectionHeader title="Appearance" sub="Theme, density, and accent." />
+            <SectionHeader title={t('admin_settings_section_appearance')} sub={t('admin_settings_appearance_subtitle')} />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: '1.25rem' }}>
                 {themes.map(t => (
-                    <div key={t.l} onClick={() => setTheme(t.l)} style={{ padding: 12, borderRadius: 12, border: theme === t.l ? '2px solid var(--adm-accent)' : '1px solid var(--adm-border)', background: 'rgba(255,255,255,0.02)', cursor: 'pointer' }}>
+                    <div key={t.v} onClick={() => setTheme(t.v)} style={{ padding: 12, borderRadius: 12, border: theme === t.v ? '2px solid var(--adm-accent)' : '1px solid var(--adm-border)', background: 'rgba(255,255,255,0.02)', cursor: 'pointer' }}>
                         <div style={{ height: 64, borderRadius: 8, background: t.g, marginBottom: 8 }} />
                         <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--adm-text)' }}>{t.l}</div>
                     </div>
                 ))}
             </div>
-            <ToggleRow l="Compact density" sub="Reduce padding in tables and cards." on={false} />
-            <ToggleRow l="High-contrast mode" sub="Stronger borders for low-light cockpits." on={false} />
+            <ToggleRow l={t('admin_settings_compact_density')} sub={t('admin_settings_compact_density_sub')} on={false} />
+            <ToggleRow l={t('admin_settings_high_contrast')} sub={t('admin_settings_high_contrast_sub')} on={false} />
         </>
     );
 }
@@ -364,16 +369,17 @@ function AppearanceSection() {
 // TODO: Backend endpoint needed: GET/PATCH /api/settings/locale
 // Expected response: { language: string, region: string, timezone: string, date_format: string, time_format: string, distance_units: string }
 function LanguageSection() {
+    const { t } = useLanguage();
     return (
         <>
-            <SectionHeader title="Language & Region" sub="Localization, timezone, and units." />
+            <SectionHeader title={t('admin_settings_section_language_region')} sub={t('admin_settings_language_subtitle')} />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <Field l="Language" v="English" />
-                <Field l="Region" v="Tunisia (TN)" />
-                <Field l="Timezone" v="Africa/Tunis (UTC+1)" />
-                <Field l="Date format" v="DD MMM YYYY" />
-                <Field l="Time format" v="24-hour" />
-                <Field l="Distance units" v="Nautical miles" />
+                <Field l={t('admin_settings_field_language')} v={t('admin_settings_lang_english')} />
+                <Field l={t('admin_settings_field_region')} v={t('admin_settings_region_tunisia')} />
+                <Field l={t('admin_settings_field_timezone')} v={t('admin_settings_timezone_value')} />
+                <Field l={t('admin_settings_field_date_format')} v={t('admin_settings_date_format_value')} />
+                <Field l={t('admin_settings_field_time_format')} v={t('admin_settings_time_format_value')} />
+                <Field l={t('admin_settings_field_distance_units')} v={t('admin_settings_distance_units_value')} />
             </div>
         </>
     );
@@ -382,15 +388,16 @@ function LanguageSection() {
 /* ── Data & Privacy (TODO: no backend endpoint) ── */
 // TODO: Backend endpoint needed: GET/PATCH /api/settings/privacy
 function DataSection() {
+    const { t } = useLanguage();
     return (
         <>
-            <SectionHeader title="Data & Privacy" sub="Control how your data is stored and shared." />
-            <ToggleRow l="Anonymous usage analytics" sub="Help us improve the console." />
-            <ToggleRow l="Share crash reports" sub="Auto-send stack traces on errors." />
-            <ToggleRow l="Retain logs for 90 days" sub="After 90 days, audit logs are purged." />
+            <SectionHeader title={t('admin_settings_section_data_privacy')} sub={t('admin_settings_data_subtitle')} />
+            <ToggleRow l={t('admin_settings_data_analytics')} sub={t('admin_settings_data_analyticsSub')} />
+            <ToggleRow l={t('admin_settings_data_crash_reports')} sub={t('admin_settings_data_crash_reportsSub')} />
+            <ToggleRow l={t('admin_settings_data_retain_logs')} sub={t('admin_settings_data_retain_logsSub')} />
             <div style={{ marginTop: '1rem', display: 'flex', gap: 8 }}>
-                <button className="admin-btn admin-btn--outline">Export my data</button>
-                <button className="admin-btn admin-btn--outline" style={{ color: '#F87171' }}>Delete account</button>
+                <button className="admin-btn admin-btn--outline">{t('admin_settings_export_data')}</button>
+                <button className="admin-btn admin-btn--outline" style={{ color: '#F87171' }}>{t('admin_settings_delete_account')}</button>
             </div>
         </>
     );
@@ -399,12 +406,13 @@ function DataSection() {
 /* ── API & Tokens (TODO: no backend endpoint yet) ── */
 // TODO: Backend endpoint needed: GET /api/settings/tokens, POST /api/settings/tokens, DELETE /api/settings/tokens/:id
 function ApiSection() {
+    const { t } = useLanguage();
     return (
         <>
-            <SectionHeader title="API & Tokens" sub="Personal access tokens for programmatic access." />
+            <SectionHeader title={t('admin_settings_section_api_tokens')} sub={t('admin_settings_api_subtitle')} />
             <div className="admin-table-wrap">
                 <table className="admin-table">
-                    <thead><tr><th>Name</th><th>Scope</th><th>Created</th><th>Last used</th></tr></thead>
+                    <thead><tr><th>{t('admin_settings_api_name')}</th><th>{t('admin_settings_api_scope')}</th><th>{t('admin_settings_api_created')}</th><th>{t('admin_settings_api_last_used')}</th></tr></thead>
                     <tbody>
                         <tr><td style={{ fontWeight: 600 }}>Ops Bot</td><td className="admin-table__muted">read:flights</td><td>Mar 12, 2026</td><td>2 min ago</td></tr>
                         <tr><td style={{ fontWeight: 600 }}>Reporting</td><td className="admin-table__muted">read:analytics</td><td>Jan 04, 2026</td><td>1 day ago</td></tr>
@@ -413,7 +421,7 @@ function ApiSection() {
                 </table>
             </div>
             <div style={{ marginTop: '1rem' }}>
-                <button className="admin-btn admin-btn--primary"><KeyRound size={15} /> Create new token</button>
+                <button className="admin-btn admin-btn--primary"><KeyRound size={15} /> {t('admin_settings_create_token')}</button>
             </div>
         </>
     );
@@ -423,14 +431,14 @@ function ApiSection() {
    MAIN SETTINGS PAGE
    ═══════════════════════════════════════ */
 const SECTIONS = [
-    { k: 'profile', l: 'Profile', icon: User },
-    { k: 'notifications', l: 'Notifications', icon: Bell },
-    { k: 'security', l: 'Security', icon: ShieldCheck },
-    { k: 'integrations', l: 'Integrations', icon: Plug },
-    { k: 'appearance', l: 'Appearance', icon: Palette },
-    { k: 'language', l: 'Language & Region', icon: Globe2 },
-    { k: 'data', l: 'Data & Privacy', icon: Database },
-    { k: 'api', l: 'API & Tokens', icon: KeyRound },
+    { k: 'profile', l: 'admin_settings_section_profile', icon: User },
+    { k: 'notifications', l: 'admin_settings_section_notifications', icon: Bell },
+    { k: 'security', l: 'admin_settings_section_security', icon: ShieldCheck },
+    { k: 'integrations', l: 'admin_settings_section_integrations', icon: Plug },
+    { k: 'appearance', l: 'admin_settings_section_appearance', icon: Palette },
+    { k: 'language', l: 'admin_settings_section_language_region', icon: Globe2 },
+    { k: 'data', l: 'admin_settings_section_data_privacy', icon: Database },
+    { k: 'api', l: 'admin_settings_section_api_tokens', icon: KeyRound },
 ];
 
 function renderSection(k: string) {
@@ -456,7 +464,7 @@ export default function AdminSettings() {
     const sections = useMemo(() => {
         if (isSuperAdmin) {
             return [
-                { k: 'profile', l: 'Profile', icon: User },
+                { k: 'profile', l: 'admin_settings_section_profile', icon: User },
             ];
         }
         return SECTIONS;
@@ -471,9 +479,9 @@ export default function AdminSettings() {
             <div className="admin-page__header">
                 <div>
                     <h1 className="admin-page__title" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <SettingsIcon size={22} style={{ color: 'var(--adm-accent)' }} /> {t('settings') || 'Settings'}
+                        <SettingsIcon size={22} style={{ color: 'var(--adm-accent)' }} /> {t('settings')}
                     </h1>
-                    <p className="admin-page__subtitle">Manage your account, alerts, and integrations.</p>
+                    <p className="admin-page__subtitle">{t('admin_settings_subtitle_page')}</p>
                 </div>
             </div>
 
@@ -501,7 +509,7 @@ export default function AdminSettings() {
                                     onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
                                     onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
                                 >
-                                    <Ic size={15} /> {s.l}
+                                    <Ic size={15} /> {t(s.l)}
                                 </button>
                             );
                         })}
@@ -513,8 +521,8 @@ export default function AdminSettings() {
                         {/* Save/Cancel footer only for non-self-saving sections */}
                         {!isProfileOrSecurity && section !== 'data' && section !== 'api' && (
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, paddingTop: '1rem', marginTop: '1.25rem', borderTop: '1px solid var(--adm-border)' }}>
-                                <button className="admin-btn admin-btn--outline">Cancel</button>
-                                <button className="admin-btn admin-btn--primary"><Save size={15} /><span>Save changes</span></button>
+                                <button className="admin-btn admin-btn--outline">{t('cancel')}</button>
+                                <button className="admin-btn admin-btn--primary"><Save size={15} /><span>{t('save')}</span></button>
                             </div>
                         )}
                     </div>

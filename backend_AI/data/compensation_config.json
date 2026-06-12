@@ -1,0 +1,257 @@
+{
+  "generated_at": "2026-06-08T00:00:00Z",
+  "regulations": [
+    {
+      "region": "EU",
+      "regulation_name": "EU 261/2004",
+      "delay_threshold_min": 0,
+      "right_type": "refreshment",
+      "description_en": "Meals and refreshments during wait",
+      "description_fr": "Repas et rafraîchissements pendant l'attente",
+      "compensation_amount": null
+    },
+    {
+      "region": "EU",
+      "regulation_name": "EU 261/2004",
+      "delay_threshold_min": 120,
+      "right_type": "compensation",
+      "description_en": "€250 for flights ≤1500km",
+      "description_fr": "250 € pour vols ≤1500km",
+      "compensation_amount": "€250"
+    },
+    {
+      "region": "EU",
+      "regulation_name": "EU 261/2004",
+      "delay_threshold_min": 120,
+      "right_type": "compensation",
+      "description_en": "€400 for intra-EU flights >1500km or other flights 1500–3500km",
+      "description_fr": "400 € pour vols intra-UE >1500km ou autres vols 1500–3500km",
+      "compensation_amount": "€400"
+    },
+    {
+      "region": "EU",
+      "regulation_name": "EU 261/2004",
+      "delay_threshold_min": 120,
+      "right_type": "compensation",
+      "description_en": "€600 for non-intra-EU flights >3500km",
+      "description_fr": "600 € pour vols hors UE >3500km",
+      "compensation_amount": "€600"
+    },
+    {
+      "region": "UK",
+      "regulation_name": "UK 261",
+      "delay_threshold_min": 120,
+      "right_type": "compensation",
+      "description_en": "£220 for flights ≤1500km",
+      "description_fr": "220 £ pour vols ≤1500km",
+      "compensation_amount": "£220"
+    },
+    {
+      "region": "UK",
+      "regulation_name": "UK 261",
+      "delay_threshold_min": 120,
+      "right_type": "compensation",
+      "description_en": "£350 for intra-UK flights >1500km or other flights 1500–3500km",
+      "description_fr": "350 £ pour vols intra-UK >1500km ou autres vols 1500–3500km",
+      "compensation_amount": "£350"
+    },
+    {
+      "region": "UK",
+      "regulation_name": "UK 261",
+      "delay_threshold_min": 120,
+      "right_type": "compensation",
+      "description_en": "£520 for non-intra-UK flights >3500km",
+      "description_fr": "520 £ pour vols hors UK >3500km",
+      "compensation_amount": "£520"
+    }
+  ],
+  "limits": [
+    {
+      "region": "US",
+      "category": "baggage_liability",
+      "label_en": "Up to $3,800 per passenger for domestic checked baggage",
+      "amount_eur": 3500,
+      "amount_usd": 3800,
+      "amount_cad": null,
+      "amount_gbp": null,
+      "source_sdr": null,
+      "regulation_source": "DOT 14 CFR Part 254"
+    },
+    {
+      "region": "US",
+      "category": "denied_boarding_200",
+      "label_en": "200% of one-way fare (max $1,075) for short delays",
+      "amount_eur": 1000,
+      "amount_usd": 1075,
+      "amount_cad": null,
+      "amount_gbp": null,
+      "source_sdr": null,
+      "regulation_source": "DOT 14 CFR Part 250"
+    },
+    {
+      "region": "US",
+      "category": "denied_boarding_400",
+      "label_en": "400% of one-way fare (max $2,150) for longer delays",
+      "amount_eur": 2000,
+      "amount_usd": 2150,
+      "amount_cad": null,
+      "amount_gbp": null,
+      "source_sdr": null,
+      "regulation_source": "DOT 14 CFR Part 250"
+    },
+    {
+      "region": "US",
+      "category": "bumped_detail",
+      "label_en": "Up to $1,550 for involuntary denied boarding",
+      "amount_eur": 1430,
+      "amount_usd": 1550,
+      "amount_cad": null,
+      "amount_gbp": null,
+      "source_sdr": null,
+      "regulation_source": "DOT 14 CFR Part 250"
+    },
+    {
+      "region": "CA",
+      "category": "baggage_liability",
+      "label_en": "Up to ~CA$2,350 per passenger under Montreal Convention",
+      "amount_eur": 1550,
+      "amount_usd": 1700,
+      "amount_cad": 2350,
+      "amount_gbp": null,
+      "source_sdr": 1288,
+      "regulation_source": "Montreal Convention Art. 22"
+    },
+    {
+      "region": "CA",
+      "category": "denied_boarding",
+      "label_en": "Up to CA$2,400 for involuntary denied boarding (9h+ delay)",
+      "amount_eur": 1600,
+      "amount_usd": 1760,
+      "amount_cad": 2400,
+      "amount_gbp": null,
+      "source_sdr": null,
+      "regulation_source": "APPR — CTA"
+    },
+    {
+      "region": "CA",
+      "category": "large_carrier_3_6",
+      "label_en": "CA$400 for 3-6h delay (large carriers)",
+      "amount_eur": 270,
+      "amount_usd": 300,
+      "amount_cad": 400,
+      "amount_gbp": null,
+      "source_sdr": null,
+      "regulation_source": "APPR — CTA"
+    },
+    {
+      "region": "CA",
+      "category": "large_carrier_6_9",
+      "label_en": "CA$700 for 6-9h delay (large carriers)",
+      "amount_eur": 470,
+      "amount_usd": 520,
+      "amount_cad": 700,
+      "amount_gbp": null,
+      "source_sdr": null,
+      "regulation_source": "APPR — CTA"
+    },
+    {
+      "region": "CA",
+      "category": "large_carrier_9plus",
+      "label_en": "CA$1,000 for 9h+ delay (large carriers)",
+      "amount_eur": 670,
+      "amount_usd": 740,
+      "amount_cad": 1000,
+      "amount_gbp": null,
+      "source_sdr": null,
+      "regulation_source": "APPR — CTA"
+    },
+    {
+      "region": "CA",
+      "category": "small_carrier_3_6",
+      "label_en": "CA$125 for 3-6h delay (small carriers)",
+      "amount_eur": 84,
+      "amount_usd": 92,
+      "amount_cad": 125,
+      "amount_gbp": null,
+      "source_sdr": null,
+      "regulation_source": "APPR — CTA"
+    },
+    {
+      "region": "CA",
+      "category": "small_carrier_6_9",
+      "label_en": "CA$250 for 6-9h delay (small carriers)",
+      "amount_eur": 168,
+      "amount_usd": 185,
+      "amount_cad": 250,
+      "amount_gbp": null,
+      "source_sdr": null,
+      "regulation_source": "APPR — CTA"
+    },
+    {
+      "region": "CA",
+      "category": "small_carrier_9plus",
+      "label_en": "CA$500 for 9h+ delay (small carriers)",
+      "amount_eur": 335,
+      "amount_usd": 370,
+      "amount_cad": 500,
+      "amount_gbp": null,
+      "source_sdr": null,
+      "regulation_source": "APPR — CTA"
+    },
+    {
+      "region": "CA",
+      "category": "cancellation_comp",
+      "label_en": "Up to CA$1,000 for large carriers when cause is within carrier control",
+      "amount_eur": 670,
+      "amount_usd": 740,
+      "amount_cad": 1000,
+      "amount_gbp": null,
+      "source_sdr": null,
+      "regulation_source": "APPR — CTA"
+    },
+    {
+      "region": "MONTREAL",
+      "category": "baggage_liability",
+      "label_en": "Up to ~€1,820 / ~$2,000 for delayed, lost or damaged baggage",
+      "amount_eur": 1820,
+      "amount_usd": 2000,
+      "amount_cad": null,
+      "amount_gbp": null,
+      "source_sdr": 1519,
+      "regulation_source": "Montreal Convention Art. 22(2)"
+    },
+    {
+      "region": "MONTREAL",
+      "category": "damages_delay",
+      "label_en": "Airlines liable for proven damages up to ~€6,400 / ~$7,100 for delay",
+      "amount_eur": 6400,
+      "amount_usd": 7100,
+      "amount_cad": null,
+      "amount_gbp": null,
+      "source_sdr": 5346,
+      "regulation_source": "Montreal Convention Art. 22(1)"
+    },
+    {
+      "region": "MONTREAL",
+      "category": "liability_strict",
+      "label_en": "Two-tier liability: strict up to ~€154,600 / ~$170,000, fault-based above",
+      "amount_eur": 154600,
+      "amount_usd": 170000,
+      "amount_cad": null,
+      "amount_gbp": null,
+      "source_sdr": 128821,
+      "regulation_source": "Montreal Convention Art. 21"
+    },
+    {
+      "region": "US",
+      "category": "baggage_detail",
+      "label_en": "Up to $3,800 per passenger for domestic checked baggage liability.",
+      "amount_eur": 3500,
+      "amount_usd": 3800,
+      "amount_cad": null,
+      "amount_gbp": null,
+      "source_sdr": null,
+      "regulation_source": "DOT 14 CFR Part 254"
+    }
+  ]
+}

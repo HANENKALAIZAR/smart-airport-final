@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { apiGetAiAlerts } from '../../services/adminApi';
 import { useAdminTheme } from '../../hooks/useAdminPrefs';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface AIAlert {
     flight_number: string;
@@ -67,6 +68,7 @@ function formatDateTime(iso: string | null) {
 }
 
 export default function SuperAdminAIAlerts({ selectedDate }: { selectedDate: Date }) {
+    const { t } = useLanguage();
     const [theme] = useAdminTheme();
     const isLight = theme === 'light';
 
@@ -121,7 +123,7 @@ export default function SuperAdminAIAlerts({ selectedDate }: { selectedDate: Dat
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
                     <Zap size={15} style={{ color: 'var(--adm-accent)' }} />
                     <span style={{ fontWeight: 700, fontSize: '0.82rem', color: 'var(--adm-text)' }}>
-                        Approved AI Recommendations
+                        {t('super_admin_title') || 'Approved AI Recommendations'}
                     </span>
                     {alerts.length > 0 && (
                         <span style={{
@@ -133,13 +135,13 @@ export default function SuperAdminAIAlerts({ selectedDate }: { selectedDate: Dat
                             padding: '1px 6px',
                             border: '1px solid var(--adm-accent-light)'
                         }}>
-                            {alerts.length} Approved
+                            {t('super_admin_count', '{count} Approved', { count: String(alerts.length) })}
                         </span>
                     )}
                 </div>
                 <button onClick={fetchAlerts}
                     style={{ background: 'none', border: 'none', color: 'var(--adm-text-sub)', cursor: 'pointer', padding: 4, borderRadius: 6 }}
-                    title="Refresh Feed">
+                    title={t('super_admin_refresh_title') || 'Refresh Feed'}>
                     <RefreshCw size={13} style={{ opacity: loading ? 0.4 : 1 }} className={loading ? 'animate-spin' : ''} />
                 </button>
             </div>
@@ -187,10 +189,10 @@ export default function SuperAdminAIAlerts({ selectedDate }: { selectedDate: Dat
 
             {/* Recommendations Feed List */}
             <div className="ai-alerts-panel__list" style={{ flex: 1, overflowY: 'auto', padding: '0.75rem' }}>
-                {loading && alerts.length === 0 && (
+                    {loading && alerts.length === 0 && (
                     <div style={{ padding: '2rem 1.5rem', textAlign: 'center', color: 'var(--adm-text-sub)', fontSize: '0.76rem' }}>
                         <RefreshCw size={18} style={{ opacity: 0.5, marginBottom: 8 }} className="animate-spin" /><br />
-                        Loading approved recommendations...
+                        {t('super_admin_loading') || 'Loading approved recommendations...'}
                     </div>
                 )}
 
@@ -198,12 +200,12 @@ export default function SuperAdminAIAlerts({ selectedDate }: { selectedDate: Dat
                     <div className="ai-alerts-panel__empty" style={{ padding: '2rem 1rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
                         <CheckCircle size={24} style={{ color: '#22C55E', opacity: 0.8 }} />
                         <p style={{ fontWeight: 600, fontSize: '0.78rem', marginTop: 8, marginBottom: 4, color: 'var(--adm-text)' }}>
-                            No approved recommendations found
+                            {t('super_admin_empty_title') || 'No approved recommendations found'}
                         </p>
                         <p style={{ fontSize: '0.7rem', color: 'var(--adm-text-sub)', margin: 0, textAlign: 'center' }}>
                             {activeFilter === 'ALL'
-                                ? 'Operational recommendations approved by airport admins will appear here.'
-                                : `No approvals have been recorded for ${activeFilter} yet.`}
+                                ? (t('super_admin_empty_desc_all') || 'Operational recommendations approved by airport admins will appear here.')
+                                : (t('super_admin_empty_desc_filter', 'No approvals have been recorded for {airport} yet.', { airport: activeFilter }))}
                         </p>
                     </div>
                 )}
@@ -217,7 +219,7 @@ export default function SuperAdminAIAlerts({ selectedDate }: { selectedDate: Dat
                     const riskColor = riskKey === 'high' ? '#EF4444' : riskKey === 'medium' ? 'var(--adm-accent)' : '#22C55E';
                     const riskBg = riskKey === 'high' ? 'rgba(239, 68, 68, 0.08)' : riskKey === 'medium' ? 'var(--adm-accent-light)' : 'rgba(34, 197, 94, 0.06)';
                     const riskBorder = riskKey === 'high' ? 'rgba(239, 68, 68, 0.25)' : riskKey === 'medium' ? 'rgba(234, 88, 12, 0.25)' : 'rgba(34, 197, 94, 0.25)';
-                    const riskLabel = riskKey === 'high' ? 'HIGH RISK' : riskKey === 'medium' ? 'MODERATE' : 'LOW RISK';
+                    const riskLabel = riskKey === 'high' ? (t('super_admin_risk_high') || 'HIGH RISK') : riskKey === 'medium' ? (t('super_admin_risk_medium') || 'MODERATE') : (t('super_admin_risk_low') || 'LOW RISK');
 
                     const apTheme = AIRPORT_THEMES[a.airport_iata] || AIRPORT_THEMES.default;
                     const apColor = isLight ? apTheme.light : apTheme.dark;
@@ -252,7 +254,7 @@ export default function SuperAdminAIAlerts({ selectedDate }: { selectedDate: Dat
                                         borderRadius: 4,
                                         letterSpacing: '0.02em'
                                     }}>
-                                        {a.airport_iata}
+                                        {t(`airport_${a.airport_iata}_name`, a.airport_iata)}
                                     </span>
                                     {/* Flight Badge */}
                                     <span style={{
@@ -317,7 +319,7 @@ export default function SuperAdminAIAlerts({ selectedDate }: { selectedDate: Dat
                             {/* Situation Context */}
                             {a.cause && (
                                 <div style={{ marginTop: 8, fontSize: '0.72rem', color: 'var(--adm-text-sub)', lineHeight: 1.45 }}>
-                                    <span style={{ fontWeight: 600, color: 'var(--adm-text-muted)' }}>Situation: </span>
+                                    <span style={{ fontWeight: 600, color: 'var(--adm-text-muted)' }}>{t('super_admin_situation_label') || 'Situation:'} </span>
                                     {a.cause}
                                 </div>
                             )}
@@ -332,7 +334,7 @@ export default function SuperAdminAIAlerts({ selectedDate }: { selectedDate: Dat
                             }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
                                     <span style={{ fontSize: '0.58rem', fontWeight: 800, color: 'var(--adm-accent)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                                        Approved Action Plan
+                                        {t('super_admin_action_plan_label') || 'Approved Action Plan'}
                                     </span>
                                 </div>
                                 <p style={{
@@ -378,7 +380,7 @@ export default function SuperAdminAIAlerts({ selectedDate }: { selectedDate: Dat
             {/* Footer with last scanned date */}
             {lastRefreshed && (
                 <div style={{ padding: '0.4rem 0.75rem', borderTop: '1px solid var(--adm-border)', fontSize: '0.62rem', color: 'var(--adm-text-muted)', flexShrink: 0, background: 'rgba(0,0,0,0.02)' }}>
-                    Feed Active · Updated {lastRefreshed.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                    {t('super_admin_footer_label') || 'Feed Active'} &middot; {t('super_admin_footer_updated', 'Updated {time}', { time: lastRefreshed.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) })}
                 </div>
             )}
         </div>

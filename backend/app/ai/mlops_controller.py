@@ -43,6 +43,9 @@ logger = logging.getLogger(__name__)
 
 MODEL_DIR   = Path(__file__).resolve().parent / "model"
 MODEL_PATH  = MODEL_DIR / "delay_prediction_model.pkl"
+CANDIDATE_PATH = MODEL_DIR / "candidate_model.pkl"
+EXPLAINER_PATH = MODEL_DIR / "shap_explainer.pkl"
+CANDIDATE_EXPLAINER_PATH = MODEL_DIR / "candidate_shap_explainer.pkl"
 ARCHIVE_DIR = MODEL_DIR / "archive"
 REPORT_PATH = MODEL_DIR / "ae_evaluation_report.json"
 
@@ -187,41 +190,68 @@ def promote_model(db, candidate_version: str, *, force: bool = False) -> dict:
             }
 
     # ── All gates passed — promote ────────────────────────────────────────────
+    # Disk promotion and DB commit are coupled: if either fails, the other is
+    # rolled back so disk and DB never diverge.
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
-    if champion:
-        champion.is_active  = False
-        champion.retired_at = now
-        logger.info(f"[MLOps] Retired champion: {champion.model_version}")
+    if not CANDIDATE_PATH.exists():
+        logger.error(f"[MLOps] Candidate model not found at {CANDIDATE_PATH} — cannot promote")
+        return {
+            "promoted":           False,
+            "reason":             "Candidate model file missing on disk",
+            "champion_version":   champion.model_version if champion else None,
+            "challenger_version": candidate_version,
+        }
 
-    candidate.is_active        = True
-    candidate.promoted_at      = now
-    candidate.promotion_reason = (
-        f"MAE improved from {champion.mae:.2f} to {candidate.mae:.2f}"
-        if champion and champion.mae
-        else "First model — auto-promoted"
-    )
-    db.commit()
+    try:
+        # Step 1 — promote on disk (archives old champion, copies candidate)
+        _promote_candidate_on_disk(candidate_version)
 
-    # Safe-overwrite guarantee: copy versioned model to active champion path
-    if candidate.model_path and os.path.exists(candidate.model_path):
+        # Step 2 — promote in DB
+        if champion:
+            champion.is_active  = False
+            champion.retired_at = now
+            logger.info(f"[MLOps] Retired champion: {champion.model_version}")
+
+        candidate.is_active        = True
+        candidate.promoted_at      = now
+        candidate.promotion_reason = (
+            f"MAE improved from {champion.mae:.2f} to {candidate.mae:.2f}"
+            if champion and champion.mae
+            else "First model — auto-promoted"
+        )
+        db.commit()
+
+        logger.info(f"[MLOps] Promoted: {candidate_version} — {candidate.promotion_reason}")
+        return {
+            "promoted":           True,
+            "reason":             candidate.promotion_reason,
+            "champion_version":   candidate_version,
+            "challenger_version": candidate_version,
+            "mae_improvement":    round((champion.mae or 0) - (candidate.mae or 0), 2) if champion else None,
+        }
+
+    except Exception as e:
+        logger.error(f"[MLOps] Promotion failed mid-flight: {e}. Attempting rollback.")
+        # Rollback DB
         try:
-            shutil.copy2(candidate.model_path, str(MODEL_PATH))
-            logger.info(f"[MLOps] Copied promoted model {candidate_version} to champion path {MODEL_PATH}")
-        except Exception as e:
-            logger.error(f"[MLOps] Failed to copy promoted model file: {e}")
-            raise
-    else:
-        logger.warning(f"[MLOps] Candidate model file not found at {candidate.model_path}")
-
-    logger.info(f"[MLOps] Promoted: {candidate_version} — {candidate.promotion_reason}")
-    return {
-        "promoted":           True,
-        "reason":             candidate.promotion_reason,
-        "champion_version":   candidate_version,
-        "challenger_version": candidate_version,
-        "mae_improvement":    round((champion.mae or 0) - (candidate.mae or 0), 2) if champion else None,
-    }
+            db.rollback()
+        except Exception:
+            pass
+        # Restore champion on disk from archive
+        latest = _get_latest_archive()
+        if latest and latest.exists():
+            try:
+                shutil.copy2(str(latest), str(MODEL_PATH))
+                logger.info(f"[MLOps] Rolled back champion on disk to {latest.name}")
+            except Exception as restore_err:
+                logger.critical(f"[MLOps] Failed to restore champion from archive: {restore_err}")
+        else:
+            logger.critical(
+                "[MLOps] No archive available for rollback. "
+                "Manual intervention required — champion model may be corrupt."
+            )
+        raise
 
 
 def _check_leakage_from_report() -> bool:
@@ -235,8 +265,48 @@ def _check_leakage_from_report() -> bool:
 
 
 def _archive_candidate(version: str) -> None:
-    """Non-destructive archive logging (candidate was already saved versioned during training)."""
-    logger.info(f"[MLOps] Rejected candidate model '{version}' remains archived in its versioned path")
+    """Remove rejected candidate files from disk. Champion is untouched."""
+    for p in [CANDIDATE_PATH, CANDIDATE_EXPLAINER_PATH]:
+        try:
+            if p.exists():
+                p.unlink()
+                logger.info(f"[MLOps] Removed rejected candidate file: {p.name}")
+        except Exception as e:
+            logger.warning(f"[MLOps] Failed to remove candidate file {p.name}: {e}")
+    logger.info(f"[MLOps] Rejected candidate model '{version}' — champion unchanged on disk")
+
+
+def _get_latest_archive() -> Path | None:
+    """Return the most recently archived model .pkl by mtime, or None."""
+    if not ARCHIVE_DIR.is_dir():
+        return None
+    archived = sorted(ARCHIVE_DIR.glob("delay_prediction_model_*.pkl"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return archived[0] if archived else None
+
+
+def _promote_candidate_on_disk(candidate_version: str) -> None:
+    """Atomically promote candidate model + explainer to champion paths.
+    Archives the current champion first for rollback safety.
+    Raises on failure — caller handles rollback."""
+    # Archive current champion
+    if MODEL_PATH.exists():
+        ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        shutil.copy2(str(MODEL_PATH), str(ARCHIVE_DIR / f"delay_prediction_model_{stamp}.pkl"))
+        logger.info(f"[MLOps] Archived previous champion")
+    # Promote model
+    tmp = MODEL_PATH.with_suffix(".promoting")
+    shutil.copy2(str(CANDIDATE_PATH), str(tmp))
+    os.replace(str(tmp), str(MODEL_PATH))
+    # Promote SHAP explainer
+    if CANDIDATE_EXPLAINER_PATH.exists():
+        tmp_exp = EXPLAINER_PATH.with_suffix(".promoting")
+        shutil.copy2(str(CANDIDATE_EXPLAINER_PATH), str(tmp_exp))
+        os.replace(str(tmp_exp), str(EXPLAINER_PATH))
+    # Clean up candidates
+    CANDIDATE_PATH.unlink(missing_ok=True)
+    CANDIDATE_EXPLAINER_PATH.unlink(missing_ok=True)
+    logger.info(f"[MLOps] Candidate promoted to champion on disk: {candidate_version}")
 
 
 # ══════════════════════════════════════════════════════════════════════════════

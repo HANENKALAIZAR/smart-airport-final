@@ -24,6 +24,15 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/ml", tags=["ML"])
 
+# ── Clip value from P99 of training target ─────────────────────────────────
+from pathlib import Path
+_P99_CLIP_PATH = Path(__file__).resolve().parents[1] / "ai" / "model" / "target_clip_p99.json"
+if _P99_CLIP_PATH.exists():
+    import json
+    _P99_CLIP = json.load(open(_P99_CLIP_PATH))["target_clip_p99"]
+else:
+    _P99_CLIP = 300.0
+
 
 # ── Training ──────────────────────────────────────────────────────────────
 
@@ -280,11 +289,9 @@ def predict_from_ae_features(
 
     try:
         raw_pred = float(model.predict(vec)[0])
-        # TODO: Load target_clip_p99.json and use stored value
-        # File: backend/app/ai/model/target_clip_p99.json
         if raw_pred is None or (isinstance(raw_pred, float) and math.isnan(raw_pred)):
             raw_pred = 0.0
-        predicted_delay = float(max(0.0, min(300.0, raw_pred)))
+        predicted_delay = float(max(0.0, min(_P99_CLIP, raw_pred)))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Inference failed (check feature dims, V2 expects 15): {e}")
 

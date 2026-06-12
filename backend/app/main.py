@@ -195,12 +195,51 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     )
 
 
+_FIELD_LABELS = {
+    "body": "Message",
+    "subject": "Subject",
+    "to_user_id": "Recipient",
+    "email": "Email address",
+    "password": "Password",
+    "full_name": "Full name",
+    "phone_number": "Phone number",
+    "profile_photo_url": "Profile photo",
+    "category": "Category",
+    "name": "Name",
+    "message": "Message",
+    "airport": "Airport",
+    "airport_code": "Airport code",
+    "status": "Status",
+    "reference_id": "Reference ID",
+    "current_password": "Current password",
+    "new_password": "New password",
+}
+
+def _friendly_field(field: str) -> str:
+    """Map internal field names to user-friendly labels."""
+    parts = field.split(".")
+    friendly = [_FIELD_LABELS.get(p, p.replace("_", " ").title()) for p in parts]
+    return " → ".join(friendly)
+
+def _friendly_validation_message(error: dict) -> str:
+    """Convert a Pydantic validation error to a human-friendly message."""
+    field = ".".join(str(l) for l in error["loc"])
+    msg = error["msg"]
+
+    if msg == "field required":
+        return f'"{_friendly_field(field)}" is required.'
+    if msg.startswith("extra fields not permitted"):
+        return f'"{_friendly_field(field)}" is not a valid field.'
+    if "value is not a valid" in msg:
+        return f'"{_friendly_field(field)}" is not valid.'
+    return f'"{_friendly_field(field)}": {msg}'
+
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """Handle Pydantic validation errors (422) with a clean message."""
-    errors = [f"{'.'.join(str(l) for l in e['loc'])}: {e['msg']}" for e in exc.errors()]
-    message = "; ".join(errors)
-    logger.warning(f"Validation error on {request.url.path}: {message}")
+    """Handle Pydantic validation errors (422) with a clean, human-friendly message."""
+    errors = [_friendly_validation_message(e) for e in exc.errors()]
+    message = " ".join(errors)
+    logger.warning(f"Validation error on {request.url.path}: {'; '.join(str(e) for e in exc.errors())}")
     return JSONResponse(
         status_code=422,
         content={"data": None, "error": message},

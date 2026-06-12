@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
-import { addDays, format, formatDistanceToNow, isSameDay, subDays } from "date-fns";
+import { addDays, format, formatDistanceToNow, isSameDay, isPast, isFuture, subDays } from "date-fns";
 import {
   ArrowUpDown, ArrowDown, ArrowUp, Search, RotateCw, Plane,
   PlaneTakeoff, PlaneLanding, Radio, ChevronLeft, ChevronRight, Building2, Loader2,
@@ -89,12 +89,14 @@ const Flights = () => {
     if (forceRefresh) setRefreshing(true);
     else setLoading(true);
     // direction 'both' includes departures and arrivals
-    const data = await getPassengerFlights(airportCode, 'both');
+    // Pass the selected date so the backend filters flights server-side
+    const dateStr = date ? format(date, "yyyy-MM-dd") : undefined;
+    const data = await getPassengerFlights(airportCode, 'both', dateStr);
     setAllFlights(data);
     setLastUpdated(new Date());
     setLoading(false);
     setRefreshing(false);
-  }, [airportCode]);
+  }, [airportCode, date]);
 
   // Load once when airport changes — no polling interval
   useEffect(() => {
@@ -248,7 +250,6 @@ const Flights = () => {
     setQuery(""); setStatus("all"); setDate(new Date()); setPage(1);
   };
   const icao = IATA_TO_ICAO[airportCode];
-  const liveCount = filtered.filter(f => f.status === "in_air" || f.status === "boarding").length;
   const departuresCount = allFlights.filter(f => f.from.code === airportCode || f.from.code === icao).length;
   const arrivalsCount = allFlights.filter(f => f.to.code === airportCode || f.to.code === icao).length;
 
@@ -346,22 +347,45 @@ const Flights = () => {
               </h2>
             </div>
           <div className="flex items-center gap-3">
-              <div className={cn(
-                "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium",
-                refreshing
-                  ? "border-warning/30 bg-warning/10 text-warning"
-                  : "border-success/30 bg-success/10 text-success"
-              )}>
-                {refreshing ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
+            {/* Date state badge — shows Historical / Today / Future Schedule */}
+            {(() => {
+              const today = new Date();
+              const selDate = date ?? today;
+              const isSelectedToday = isSameDay(selDate, today);
+              const isPastDate = !isSelectedToday && (isPast(selDate) || selDate < today);
+              const isFutureDate = !isSelectedToday && (isFuture(selDate) || selDate > today);
+              let badgeLabel: string;
+              let badgeClasses: string;
+              if (isSelectedToday) {
+                badgeLabel = t("flights_today_badge", "Today");
+                badgeClasses = "border-primary/30 bg-primary/10 text-primary";
+              } else if (isPastDate) {
+                badgeLabel = t("flights_historical_badge", "Historical");
+                badgeClasses = "border-muted-foreground/30 bg-muted/10 text-muted-foreground";
+              } else {
+                badgeLabel = t("flights_future_badge", "Future Schedule");
+                badgeClasses = "border-amber-500/30 bg-amber-500/10 text-amber-500";
+              }
+              return (
+                <div className={cn(
+                  "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium",
+                  badgeClasses
+                )}>
                   <span className="relative flex h-1.5 w-1.5">
-                    <span className="absolute inline-flex h-full w-full rounded-full bg-success opacity-60 animate-ping" />
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-success" />
+                    <span className={cn(
+                      "absolute inline-flex h-full w-full rounded-full opacity-60",
+                      refreshing ? "animate-spin" : "",
+                      isSelectedToday ? "bg-primary" : isPastDate ? "bg-muted-foreground" : "bg-amber-500"
+                    )} />
+                    <span className={cn(
+                      "relative inline-flex rounded-full h-1.5 w-1.5",
+                      isSelectedToday ? "bg-primary" : isPastDate ? "bg-muted-foreground" : "bg-amber-500"
+                    )} />
                   </span>
-                )}
-                {refreshing ? t("flights_refreshing", "Refreshing…") : liveCount > 0 ? t("flights_active_count", { count: liveCount }) : t("flights_board_active", "Board active")}
-              </div>
+                  {refreshing ? t("flights_refreshing", "Refreshing…") : badgeLabel}
+                </div>
+              );
+            })()}
               {lastUpdated && (
                 <span className="text-xs text-muted-foreground hidden sm:inline">
                   <Clock className="inline h-3 w-3 mr-1 opacity-60" />
@@ -479,6 +503,7 @@ const Flights = () => {
                     <Th col="from" label={t("common.departure")} />
                     <Th col="to" label={t("common.arrival")} />
                     <Th col="scheduled" label={t("common.scheduled")} />
+                    <TableHead className="text-xs uppercase tracking-wider">{t("common.flightDate", "Flight Date")}</TableHead>
                     <Th col="estimated" label={t("common.estimated", "Estimated")} />
                     <TableHead className="text-xs uppercase tracking-wider">{t("common.gate")}</TableHead>
                     <TableHead className="text-xs uppercase tracking-wider">{t("common.terminal")}</TableHead>
@@ -489,7 +514,7 @@ const Flights = () => {
                 <TableBody>
                   {pageRows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={10} className="py-16 text-center text-muted-foreground">
+                      <TableCell colSpan={11} className="py-16 text-center text-muted-foreground">
                         <Plane className="h-8 w-8 mx-auto mb-3 opacity-40" />
                         {t("flights_no_results", "No tracked flight found for this search. Some external flights may not yet be synchronized from the realtime provider.")}
                       </TableCell>
@@ -565,6 +590,9 @@ function FlightRow({ flight: f }: { flight: Flight }) {
         <div className="text-xs text-muted-foreground">{t(`airport_${f.to.code.substring(0, 3)}_city`, f.to.city)}</div>
       </TableCell>
       <TableCell className="font-mono text-sm">{formatTime(f.scheduledDeparture)}</TableCell>
+      <TableCell className="font-mono text-xs text-muted-foreground">
+        {f.flightDate ? format(new Date(f.flightDate), "d/M/yyyy") : format(new Date(f.scheduledDeparture), "d/M/yyyy")}
+      </TableCell>
       <TableCell>
         <span className={cn("font-mono text-sm", isDelayed && "text-destructive font-semibold")}>
           {f.delayMin === null ? "—" : formatTime(f.departureTime)}

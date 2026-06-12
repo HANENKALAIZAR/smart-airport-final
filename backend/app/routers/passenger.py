@@ -27,7 +27,7 @@ from app.database import get_db
 from app.models.ae_models import AEFlightSnapshot
 from app.models.models import PassengerAlertSubscription, PassengerAlertLog
 from app.services.flight_cache_service import get_flights_smart, _snapshot_to_api_dict
-from app.services.passenger_rights import get_applicable_rights
+from app.services.passenger_rights import get_applicable_rights, get_compensation_config
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -170,11 +170,14 @@ async def _lookup_flight_snapshot(
 async def list_passenger_flights(
     airport: str = Query("TUN", description="Tunisian airport IATA code"),
     direction: str = Query("both", description="departure | arrival | both"),
+    date: Optional[str] = Query(None, description="YYYY-MM-DD — past, today, or future"),
     db: Session = Depends(get_db),
 ):
     """
     Flight board for a Tunisian airport.
     Served from DB cache (Aviation Edge snapshots). AE API called only when stale.
+    When a date is provided, filtering is applied server-side so only flights
+    belonging to that date are returned.
     """
     iata = airport.upper()
     if iata not in SUPPORTED_AIRPORTS:
@@ -186,7 +189,7 @@ async def list_passenger_flights(
     directions = ["departure", "arrival"] if direction == "both" else [direction]
 
     for d in directions:
-        flights, from_api, age = await get_flights_smart(iata, d, db)
+        flights, from_api, age = await get_flights_smart(iata, d, db, target_date=date)
         seen = {(f["flight_number"], f["direction"]) for f in all_flights}
         for f in flights:
             if (f["flight_number"], f["direction"]) not in seen:
@@ -265,32 +268,73 @@ async def get_passenger_rights(
     dep_region: str = Query("OTHER"),
     arr_region: str = Query("OTHER"),
     distance_km: int = Query(0, ge=0),
+    user_region: str = Query(None),
     db: Session = Depends(get_db),
 ):
     """
     Applicable passenger rights for a flight.
     If the flight exists in DB, use its actual delay. Otherwise use query params.
     Rights are fetched from the passenger_rights table (real DB data).
+
+    The user_region parameter is validated against the departure airport.
+    If a mismatch is detected, the departure-airport region is used instead.
     """
+    import logging
+    logger = logging.getLogger(__name__)
     from app.models.models import PassengerRight
+    from app.services.passenger_rights import resolve_region_from_airport_iata
 
     fn = flight_number.upper()
     snap = await _lookup_flight_snapshot(fn, db)
 
-    # Use real delay from snapshot if available
     actual_delay = delay_minutes
     actual_distance = distance_km
     regions: set[str] = set()
 
+    # Determine departure airport region from snapshot data
+    dep_airport_region = None
     if snap:
         actual_delay = snap.delay_minutes or 0
         regions_from_snap = {dep_region, arr_region}
-        # Resolve regions from dep/arr IATA — best-effort
-        # EU airports (Tunisia → EU routes)
-        EU_IATAS = {"CDG", "ORY", "LHR", "FRA", "FCO", "MAD", "BCN", "AMS", "BRU", "VIE", "MUC", "GVA", "LYS", "NCE", "MRS", "MLA"}
-        if snap.arr_iata in EU_IATAS or snap.dep_iata in EU_IATAS:
+
+        EU_IATAS = {"CDG", "ORY", "FRA", "FCO", "MAD", "BCN", "AMS", "BRU", "VIE", "MUC", "GVA", "LYS", "NCE", "MRS", "MLA", "TLS", "BOD", "LIS", "OPO", "DUB", "CPH", "ARN", "OSL", "HEL", "ZRH", "WAW", "PRG", "BUD", "ATH", "IST"}
+        UK_IATAS = {"LHR", "LGW", "STN", "LTN", "SEN", "LCY", "MAN", "EDI", "GLA", "BHX", "BRS", "LPL", "NCL", "EMA", "ABZ", "BFS", "CWL", "SOU", "EXT", "NQY"}
+        US_IATAS = {"JFK", "EWR", "LGA", "ORD", "DFW", "LAX", "SFO", "MIA", "ATL", "BOS", "SEA", "PHX", "DEN", "IAH", "MCO", "CLT", "PHL", "DCA", "BWI", "SLC", "SAN", "TPA", "STL", "PDX"}
+        CA_IATAS = {"YYZ", "YVR", "YUL", "YYC", "YOW", "YHZ", "YEG", "YWG", "YQB", "YXE", "YYJ", "YTZ"}
+
+        if snap.dep_iata in EU_IATAS:
             regions.add("EU")
+            dep_airport_region = "EU"
+        elif snap.dep_iata in UK_IATAS:
+            regions.add("UK")
+            dep_airport_region = "UK"
+        elif snap.dep_iata in US_IATAS:
+            regions.add("US")
+            dep_airport_region = "US"
+        elif snap.dep_iata in CA_IATAS:
+            regions.add("CA")
+            dep_airport_region = "CA"
+        else:
+            dep_airport_region = "OTHER"
+
+        # Also add rights for arrival region if applicable
+        if snap.arr_iata in EU_IATAS:
+            regions.add("EU")
+        elif snap.arr_iata in UK_IATAS:
+            regions.add("UK")
+        elif snap.arr_iata in US_IATAS:
+            regions.add("US")
+        elif snap.arr_iata in CA_IATAS:
+            regions.add("CA")
+
         regions.update(regions_from_snap - {"OTHER"})
+
+        # Validate user_region against departure airport
+        if user_region and dep_airport_region and user_region != dep_airport_region:
+            logger.warning(
+                "Region mismatch for flight %s: user selected '%s' but departure airport '%s' maps to '%s'. Overriding.",
+                fn, user_region, snap.dep_iata, dep_airport_region
+            )
 
     if not regions:
         regions.add("OTHER")
@@ -305,7 +349,6 @@ async def get_passenger_rights(
         .all()
     )
 
-    # Filter by distance
     applicable = []
     for r in rights:
         if r.distance_min_km and actual_distance < r.distance_min_km:
@@ -324,6 +367,7 @@ async def get_passenger_rights(
     return {
         "flight_number": fn,
         "delay_minutes": actual_delay,
+        "dep_airport_region": dep_airport_region or "OTHER",
         "rights": applicable,
     }
 
@@ -670,4 +714,18 @@ async def unsubscribe_passenger_alert_api(
         "ok": True,
         "message": "Successfully unsubscribed from flight alerts."
     }
+
+
+@router.get("/compensation-config")
+def get_compensation_config_endpoint(
+    db: Session = Depends(get_db),
+):
+    """
+    Returns the full compensation configuration including:
+    - All active per-route passenger_rights (regulations)
+    - All active compensation_limits (baggage caps, denied boarding, Montreal, etc.)
+    Used by the frontend and AI assistant to avoid hardcoded values.
+    """
+    config = get_compensation_config(db)
+    return config.model_dump()
 

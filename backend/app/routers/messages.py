@@ -136,46 +136,45 @@ def mark_inbox_messages_read(
     return {"marked": count}
 
 
-@router.delete("/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{message_id}", status_code=status.HTTP_200_OK)
 def delete_message(
     message_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Delete a message for the current user."""
+    """
+    Delete a message for the current user.
+    - Airport admin: soft-delete (hidden from that admin only)
+    - Super admin:   hard-delete (permanently removes the conversation for all participants)
+    """
     msg = db.query(Message).filter(Message.id == message_id).first()
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
-        
-    is_sender = (msg.from_user_id == current_user.id)
-    is_recipient = (msg.to_user_id == current_user.id)
-    
-    if msg.sender_type == "passenger":
-        # Passenger messages shared in inbox
-        if current_user.role == "super_admin":
-            is_recipient = True
-        elif current_user.role == "airport_admin" and msg.airport_code == current_user.airport_iata:
-            is_recipient = True
-            
-    if not is_sender and not is_recipient and current_user.role != "super_admin":
-        raise HTTPException(status_code=403, detail="You cannot delete this message")
 
     if current_user.role == "super_admin":
-        msg.deleted_by_sender = True
-        msg.deleted_by_recipient = True
-    else:
-        if is_sender:
-            msg.deleted_by_sender = True
-        if is_recipient:
-            msg.deleted_by_recipient = True
+        # Super admin permanently removes the entire conversation
+        db.delete(msg)
+        db.commit()
+        return {"success": True, "message": "Conversation permanently deleted."}
 
-    # If both sides deleted (or for passenger messages if recipient deletes), we could permanently delete,
-    # but for simplicity, we just softly delete from both views.
-    if msg.deleted_by_sender and msg.deleted_by_recipient:
-        pass # Let it stay softly deleted for data integrity
-        
+    # Airport admin: soft-delete (hide from their view only)
+    is_sender = (msg.from_user_id == current_user.id)
+    is_recipient = (msg.to_user_id == current_user.id)
+
+    if msg.sender_type == "passenger":
+        if msg.airport_code == current_user.airport_iata:
+            is_recipient = True
+
+    if not is_sender and not is_recipient:
+        raise HTTPException(status_code=403, detail="You cannot delete this message")
+
+    if is_sender:
+        msg.deleted_by_sender = True
+    if is_recipient:
+        msg.deleted_by_recipient = True
+
     db.commit()
-    return None
+    return {"success": True, "message": "Message hidden from your inbox."}
 
 
 @router.get("")

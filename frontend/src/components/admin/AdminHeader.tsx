@@ -44,14 +44,14 @@ function initialsFromName(name?: string) {
         .toUpperCase();
 }
 
-function formatNotifTime(iso?: string) {
+function formatNotifTime(iso: string | undefined, t: (k: string) => string) {
     if (!iso) return '';
     const d = new Date(iso);
     const diffMin = (Date.now() - d.getTime()) / 60000;
-    if (diffMin < 1) return 'Just now';
-    if (diffMin < 60) return `${Math.floor(diffMin)} min ago`;
+    if (diffMin < 1) return t('justNow');
+    if (diffMin < 60) return `${Math.floor(diffMin)} ${t('minAgo')}`;
     const diffH = diffMin / 60;
-    if (diffH < 24) return `${Math.floor(diffH)}h ago`;
+    if (diffH < 24) return `${Math.floor(diffH)} ${t('hAgo')}`;
     return d.toLocaleDateString();
 }
 
@@ -128,9 +128,9 @@ export default function AdminHeader({ selectedDate, onDateClick, collapsed, setC
     }
 
     const formatDate = (date: Date) => {
-        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-        const months = ['January', 'February', 'March', 'April', 'May', 'June',
-            'July', 'August', 'September', 'October', 'November', 'December'];
+        const days = [t('daySunday'), t('dayMonday'), t('dayTuesday'), t('dayWednesday'), t('dayThursday'), t('dayFriday'), t('daySaturday')];
+        const months = [t('monthJanuary'), t('monthFebruary'), t('monthMarch'), t('monthApril'), t('monthMay'), t('monthJune'),
+            t('monthJuly'), t('monthAugust'), t('monthSeptember'), t('monthOctober'), t('monthNovember'), t('monthDecember')];
         return `${days[date.getDay()]}, ${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
     };
 
@@ -139,7 +139,7 @@ export default function AdminHeader({ selectedDate, onDateClick, collapsed, setC
             <div className="admin-header__left">
                 <button
                     onClick={() => setCollapsed(!collapsed)}
-                    title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                    title={collapsed ? t('expandSidebar') : t('collapseSidebar')}
                     className="admin-header__btn admin-header__btn--square"
                 >
                     <ChevronLeft
@@ -213,8 +213,8 @@ export default function AdminHeader({ selectedDate, onDateClick, collapsed, setC
                 {/* Theme Toggle */}
                 <button
                     onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                    aria-label="Toggle theme"
-                    title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                    aria-label={t('toggleTheme')}
+                    title={theme === 'dark' ? t('switchToLightMode') : t('switchToDarkMode')}
                     className="admin-header__btn admin-header__btn--square"
                 >
                     {theme === 'dark' ? <Sun size={18} className="admin-header__btn-icon" /> : <Moon size={18} className="admin-header__btn-icon" />}
@@ -248,7 +248,7 @@ export default function AdminHeader({ selectedDate, onDateClick, collapsed, setC
                                 {items.length === 0 && (
                                     <div className="admin-notif__item" style={{ color: 'var(--adm-text-muted)', cursor: 'default' }}>
                                         <div className="admin-notif__item-content">
-                                            <div className="admin-notif__item-msg">No notifications yet.</div>
+                                            <div className="admin-notif__item-msg">{t('noNotificationsYet')}</div>
                                         </div>
                                     </div>
                                 )}
@@ -276,7 +276,7 @@ export default function AdminHeader({ selectedDate, onDateClick, collapsed, setC
                                             <div className="admin-notif__item-msg" style={{ whiteSpace: 'normal', lineHeight: 1.35 }}>
                                                 {n.body}
                                             </div>
-                                            <div className="admin-notif__item-time">{formatNotifTime(n.created_at)}</div>
+                                            <div className="admin-notif__item-time">{formatNotifTime(n.created_at, t)}</div>
                                         </div>
                                         {!n.is_read && <span className="admin-notif__item-dot" />}
                                     </button>

@@ -106,36 +106,37 @@ const AVATAR_POOL = [
 
 const STATUS_META: Record<
   AdminStatus,
-  { label: string; tone: string; icon: typeof CheckCircle2 }
+  { labelKey: string; tone: string; icon: typeof CheckCircle2 }
 > = {
-  pending:     { label: "Pending",     tone: "border-warning/40 bg-warning/10 text-warning",       icon: Clock },
-  resubmitted: { label: "Resubmitted", tone: "border-amber/40 bg-amber/10 text-amber",       icon: RefreshCw },
-  approved:    { label: "Verified",    tone: "border-success/40 bg-success/10 text-success",       icon: CheckCircle2 },
-  rejected:    { label: "Rejected",    tone: "border-danger/40 bg-danger/10 text-danger",          icon: X },
-  expired:     { label: "Expired",     tone: "border-rose-500/40 bg-rose-500/10 text-rose-500",    icon: AlertTriangle },
-  archived:    { label: "Archived",    tone: "border-slate-500/40 bg-slate-500/10 text-slate-400", icon: Archive },
-  permanently_rejected: { label: "Perm Rejected", tone: "border-rose-700/40 bg-rose-700/10 text-rose-600", icon: X },
+  pending:     { labelKey: "admin_users_pending",     tone: "border-warning/40 bg-warning/10 text-warning",       icon: Clock },
+  resubmitted: { labelKey: "admin_users_resubmitted", tone: "border-amber/40 bg-amber/10 text-amber",       icon: RefreshCw },
+  approved:    { labelKey: "admin_users_verified",    tone: "border-success/40 bg-success/10 text-success",       icon: CheckCircle2 },
+  rejected:    { labelKey: "admin_users_rejected",    tone: "border-danger/40 bg-danger/10 text-danger",          icon: X },
+  expired:     { labelKey: "status_expired",          tone: "border-rose-500/40 bg-rose-500/10 text-rose-500",    icon: AlertTriangle },
+  archived:    { labelKey: "admin_users_archived",    tone: "border-slate-500/40 bg-slate-500/10 text-slate-400", icon: Archive },
+  permanently_rejected: { labelKey: "admin_users_permanently_rejected", tone: "border-rose-700/40 bg-rose-700/10 text-rose-600", icon: X },
 };
 
-const FILTERS: Array<{ key: "all" | AdminStatus; label: string }> = [
-  { key: "all",         label: "All" },
-  { key: "pending",     label: "Pending" },
-  { key: "resubmitted", label: "Resubmitted" },
-  { key: "approved",    label: "Verified" },
-  { key: "rejected",    label: "Rejected" },
-  { key: "expired",     label: "Expired" },
-  { key: "archived",    label: "Archived" },
-  { key: "permanently_rejected", label: "Perm Rejected" },
+const FILTERS: Array<{ key: "all" | AdminStatus; labelKey: string }> = [
+  { key: "all",         labelKey: "admin_users_all" },
+  { key: "pending",     labelKey: "admin_users_pending" },
+  { key: "resubmitted", labelKey: "admin_users_resubmitted" },
+  { key: "approved",    labelKey: "admin_users_verified" },
+  { key: "rejected",    labelKey: "admin_users_rejected" },
+  { key: "expired",     labelKey: "status_expired" },
+  { key: "archived",    labelKey: "admin_users_archived" },
+  { key: "permanently_rejected", labelKey: "admin_users_permanently_rejected" },
 ];
 
 /* ─────────────── Status badge ─────────────── */
 
 function StatusBadge({ status }: { status: AdminStatus }) {
+  const { t } = useLanguage();
   const meta = STATUS_META[status];
   const Icon = meta.icon;
   return (
     <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider", meta.tone)}>
-      <Icon size={10} className={status === "resubmitted" ? "animate-spin" : ""} /> {meta.label}
+      <Icon size={10} className={status === "resubmitted" ? "animate-spin" : ""} /> {t(meta.labelKey)}
     </span>
   );
 }
@@ -252,6 +253,8 @@ function FieldCard({
   wasRejected: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useLanguage();
+  const [imgFailed, setImgFailed] = useState(false);
   return (
     <div
       className={cn(
@@ -270,7 +273,7 @@ function FieldCard({
         <div className="flex items-center gap-1.5">
           {wasRejected && !isRejecting && (
             <span className="rounded-md bg-amber/15 px-1.5 py-0.5 font-mono-num text-[9px] font-bold uppercase tracking-wider text-amber">
-              Edited
+              {t('field_card_edited')}
             </span>
           )}
           {isRejecting && (
@@ -283,14 +286,23 @@ function FieldCard({
                   : "border-border text-white/60 hover:border-danger/50 hover:text-danger"
               )}
             >
-              {isRejected ? "Marked" : "Reject"}
+              {isRejected ? t('field_card_marked') : t('admin_users_reject')}
             </button>
           )}
         </div>
       </div>
       {field.type === "image" ? (
         <div className="overflow-hidden rounded-lg border border-border bg-navy-deep">
-          <img src={field.value} alt={field.label} className="h-40 w-full object-cover" />
+          {field.value && !imgFailed ? (
+            <img
+              src={field.value}
+              alt={field.label}
+              className="h-40 w-full object-cover"
+              onError={() => setImgFailed(true)}
+            />
+          ) : (
+            <div className="flex h-40 items-center justify-center text-sm text-white/40">{t('admin_users_no_document')}</div>
+          )}
         </div>
       ) : (
         <p className="sa-field-value break-words font-mono-num text-sm text-foreground">{field.value}</p>
@@ -330,6 +342,9 @@ function ReviewDetail({
   const [isRejecting, setIsRejecting] = useState(false);
   const [rejectedFields, setRejectedFields] = useState<string[]>([]);
   const [note, setNote] = useState("");
+  const [showAccessModal, setShowAccessModal] = useState(false);
+  const [accessSaving, setAccessSaving] = useState(false);
+  const [accessState, setAccessState] = useState<Record<string, boolean>>({});
 
   const wasRejected = (key: string) => {
     if (!reviewDetail || !reviewDetail.rejected_fields) return false;
@@ -339,24 +354,24 @@ function ReviewDetail({
   const reviewFields = useMemo(() => {
     if (!reviewDetail) return [];
     return [
-      { key: "fullName", label: "Full Name", value: reviewDetail.full_name || "—", group: "Personal" },
-      { key: "dob", label: "Date of Birth", value: reviewDetail.date_of_birth ? String(reviewDetail.date_of_birth).slice(0, 10) : "—", type: "date", group: "Personal" },
-      { key: "gender", label: "Gender", value: reviewDetail.gender || "—", group: "Personal" },
-      { key: "nationality", label: "Nationality", value: reviewDetail.nationality || "—", group: "Personal" },
-      { key: "address", label: "Residential Address", value: reviewDetail.residential_address || "—", group: "Personal" },
+      { key: "fullName", label: t('review_field_full_name'), value: reviewDetail.full_name || "—", group: "Personal" },
+      { key: "dob", label: t('review_field_date_of_birth'), value: reviewDetail.date_of_birth ? String(reviewDetail.date_of_birth).slice(0, 10) : "—", type: "date", group: "Personal" },
+      { key: "gender", label: t('review_field_gender'), value: reviewDetail.gender || "—", group: "Personal" },
+      { key: "nationality", label: t('review_field_nationality'), value: reviewDetail.nationality || "—", group: "Personal" },
+      { key: "address", label: t('review_field_residential_address'), value: reviewDetail.residential_address || "—", group: "Personal" },
       
-      { key: "phone", label: "Phone Number", value: reviewDetail.phone_number || "—", group: "Contact" },
-      { key: "emergencyName", label: "Emergency Contact Name", value: reviewDetail.emergency_contact_name || "—", group: "Contact" },
-      { key: "emergencyPhone", label: "Emergency Contact Phone", value: reviewDetail.emergency_contact_phone || "—", group: "Contact" },
-      { key: "emergencyRelationship", label: "Emergency Relationship", value: reviewDetail.emergency_contact_relationship || "—", group: "Contact" },
+      { key: "phone", label: t('review_field_phone_number'), value: reviewDetail.phone_number || "—", group: "Contact" },
+      { key: "emergencyName", label: t('review_field_emergency_contact_name'), value: reviewDetail.emergency_contact_name || "—", group: "Contact" },
+      { key: "emergencyPhone", label: t('review_field_emergency_contact_phone'), value: reviewDetail.emergency_contact_phone || "—", group: "Contact" },
+      { key: "emergencyRelationship", label: t('review_field_emergency_relationship'), value: reviewDetail.emergency_contact_relationship || "—", group: "Contact" },
       
-      { key: "cin", label: "CIN Number", value: reviewDetail.cin_number || "—", group: "Identification" },
-      { key: "cinDoc", label: "CIN Front Document", value: reviewDetail.cin_document_url || "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=600", type: "image", group: "Identification" },
-      { key: "cinDocBack", label: "CIN Back Document", value: reviewDetail.cin_document_back_url || "https://images.unsplash.com/photo-1554224155-6726b3ff858f?w=600", type: "image", group: "Identification" },
+      { key: "cin", label: t('review_field_cin_number'), value: reviewDetail.cin_number || "—", group: "Identification" },
+      { key: "cinDoc", label: t('review_field_cin_front'), value: reviewDetail.cin_document_url || "", type: "image", group: "Identification" },
+      { key: "cinDocBack", label: t('review_field_cin_back'), value: reviewDetail.cin_document_back_url || "", type: "image", group: "Identification" },
       
-      { key: "passport", label: "Passport Number", value: reviewDetail.passport_number || "—", group: "Travel" },
-      { key: "passportExp", label: "Passport Expiry", value: reviewDetail.passport_expiry_date ? String(reviewDetail.passport_expiry_date).slice(0, 10) : "—", type: "date", group: "Travel" },
-      { key: "passportDoc", label: "Passport Document", value: reviewDetail.passport_document_url || "https://images.unsplash.com/photo-1569959220744-ff553533f492?w=600", type: "image", group: "Travel" }
+      { key: "passport", label: t('review_field_passport_number'), value: reviewDetail.passport_number || "—", group: "Travel" },
+      { key: "passportExp", label: t('review_field_passport_expiry'), value: reviewDetail.passport_expiry_date ? String(reviewDetail.passport_expiry_date).slice(0, 10) : "—", type: "date", group: "Travel" },
+      { key: "passportDoc", label: t('review_field_passport_document'), value: reviewDetail.passport_document_url || "", type: "image", group: "Travel" }
     ] as AdminField[];
   }, [reviewDetail]);
 
@@ -401,56 +416,20 @@ function ReviewDetail({
           {localStorage.getItem('admin_role') === 'super_admin' && (
             <div className="ml-auto flex items-center gap-2">
               {reviewDetail && admin.status !== "expired" && admin.status !== "archived" && admin.status !== "permanently_rejected" && (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    onClick={() => onToggleEdit(admin.id, 'identity', !!reviewDetail.profile_unlock_identity)}
-                    className={cn(
-                      "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition cursor-pointer",
-                      reviewDetail.profile_unlock_identity
-                        ? "border-amber/55 bg-amber/20 text-amber hover:bg-amber/30"
-                        : "border-white/10 bg-white/5 text-white/70 hover:border-white/20 hover:bg-white/10"
-                    )}
-                  >
-                    <ShieldCheck size={12} />
-                    {reviewDetail.profile_unlock_identity ? "Lock Identity" : "Unlock Identity"}
-                  </button>
-                  <button
-                    onClick={() => onToggleEdit(admin.id, 'passport', !!reviewDetail.profile_unlock_passport)}
-                    className={cn(
-                      "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition cursor-pointer",
-                      reviewDetail.profile_unlock_passport
-                        ? "border-amber/55 bg-amber/20 text-amber hover:bg-amber/30"
-                        : "border-white/10 bg-white/5 text-white/70 hover:border-white/20 hover:bg-white/10"
-                    )}
-                  >
-                    <ShieldCheck size={12} />
-                    {reviewDetail.profile_unlock_passport ? "Lock Passport" : "Unlock Passport"}
-                  </button>
-                  <button
-                    onClick={() => onToggleEdit(admin.id, 'cin_doc', !!reviewDetail.profile_unlock_cin_doc)}
-                    className={cn(
-                      "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition cursor-pointer",
-                      reviewDetail.profile_unlock_cin_doc
-                        ? "border-amber/55 bg-amber/20 text-amber hover:bg-amber/30"
-                        : "border-white/10 bg-white/5 text-white/70 hover:border-white/20 hover:bg-white/10"
-                    )}
-                  >
-                    <ShieldCheck size={12} />
-                    {reviewDetail.profile_unlock_cin_doc ? "Lock CIN Doc" : "Unlock CIN Doc"}
-                  </button>
-                  <button
-                    onClick={() => onToggleEdit(admin.id, 'contact', !!reviewDetail.profile_unlock_contact)}
-                    className={cn(
-                      "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-semibold transition cursor-pointer",
-                      reviewDetail.profile_unlock_contact
-                        ? "border-amber/55 bg-amber/20 text-amber hover:bg-amber/30"
-                        : "border-white/10 bg-white/5 text-white/70 hover:border-white/20 hover:bg-white/10"
-                    )}
-                  >
-                    <ShieldCheck size={12} />
-                    {reviewDetail.profile_unlock_contact ? "Lock Contact" : "Unlock Contact"}
-                  </button>
-                </div>
+                <button
+                  onClick={() => {
+                    setAccessState({
+                      identity: !!reviewDetail.profile_unlock_identity,
+                      passport: !!reviewDetail.profile_unlock_passport,
+                      cin_doc: !!reviewDetail.profile_unlock_cin_doc,
+                      contact: !!reviewDetail.profile_unlock_contact,
+                    });
+                    setShowAccessModal(true);
+                  }}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-amber/40 bg-amber/10 px-3 py-1 text-[11px] font-semibold text-amber transition hover:bg-amber/20 cursor-pointer"
+                >
+                  <ShieldCheck size={12} /> {t('admin_users_manage_access') || 'Manage Edit Access'}
+                </button>
               )}
               
               <button
@@ -527,7 +506,7 @@ function ReviewDetail({
                   <div className="grid h-8 w-8 place-items-center rounded-lg bg-amber/10 text-amber">
                     <Icon size={14} />
                   </div>
-                  <h3 className="sa-group-header font-display text-sm font-semibold text-foreground">{group} {t('admin_users_information') || 'Information'}</h3>
+                  <h3 className="sa-group-header font-display text-sm font-semibold text-foreground">{t('fieldGroup' + group)}</h3>
                   <span className="sa-group-subtext ml-auto font-mono-num text-[10px] uppercase tracking-wider text-white/60">
                     {items.length} {t('admin_users_fields_suffix') || 'fields'}
                   </span>
@@ -617,31 +596,100 @@ function ReviewDetail({
           {admin.status === "expired" && (
             <div className="glass-card sticky bottom-4 flex flex-wrap items-center justify-between gap-3 p-4 z-10 bg-navy-deep/90 backdrop-blur-lg backdrop-blur">
               <p className="text-xs text-white/60 font-medium">
-                This verification request has expired. Select an administrative action.
+                {t('admin_users_expired_desc')}
               </p>
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={() => onReopenVerification(admin.id)}
                   className="inline-flex h-10 items-center gap-2 rounded-lg bg-gradient-success px-4 text-xs font-bold text-white shadow-[0_0_15px_oklch(0.78_0.16_75/0.15)] transition duration-250 hover:opacity-95 cursor-pointer"
                 >
-                  <RefreshCw size={14} /> Reopen Verification
+                  <RefreshCw size={14} /> {t('admin_users_reopen_verification')}
                 </button>
                 <button
                   onClick={() => onArchiveAdmin(admin.id)}
                   className="inline-flex h-10 items-center gap-2 rounded-lg border border-amber/40 bg-amber/10 px-4 text-xs font-semibold text-amber transition-colors duration-250 hover:bg-amber/20 cursor-pointer"
                 >
-                  <Archive size={14} /> Archive Account
+                  <Archive size={14} /> {t('admin_users_archive_account')}
                 </button>
                 <button
                   onClick={() => onPermanentlyRejectAdmin(admin.id)}
                   className="inline-flex h-10 items-center gap-2 rounded-lg border border-danger/40 bg-danger/10 px-4 text-xs font-semibold text-danger transition-colors duration-250 hover:bg-danger/20 cursor-pointer"
                 >
-                  <AlertTriangle size={14} /> Permanently Reject
+                  <AlertTriangle size={14} /> {t('admin_users_permanently_reject')}
                 </button>
               </div>
             </div>
           )}
         </>
+      )}
+
+      {/* Edit Access Modal */}
+      {showAccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setShowAccessModal(false)}>
+          <div className="sa-access-modal rounded-2xl border shadow-2xl w-full max-w-md mx-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h3 className="text-base font-bold text-foreground">{t('admin_users_manage_access_title') || 'Manage Profile Edit Access'}</h3>
+              <button onClick={() => setShowAccessModal(false)} className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <p className="text-xs text-muted-foreground font-medium">{t('admin_users_manage_access_desc') || 'Select which profile sections this admin can edit:'}</p>
+              {[
+                { key: 'identity', labelKey: 'admin_users_manage_access_identity' },
+                { key: 'passport', labelKey: 'admin_users_manage_access_passport' },
+                { key: 'cin_doc', labelKey: 'admin_users_manage_access_cin_doc' },
+                { key: 'contact', labelKey: 'admin_users_manage_access_contact' },
+              ].map(({ key, labelKey }) => (
+                <label key={key} className="flex items-center gap-3 p-3 rounded-xl border border-border bg-card/50 hover:bg-card transition-colors cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!accessState[key]}
+                    onChange={() => setAccessState((prev) => ({ ...prev, [key]: !prev[key] }))}
+                    className="h-4 w-4 rounded border-border accent-amber"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-foreground">{t(labelKey)}</span>
+                  </div>
+                  <span className={cn("text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full", accessState[key] ? "bg-success/10 text-success" : "bg-muted text-muted-foreground")}>
+                    {accessState[key] ? (t('admin_users_verified') || 'On') : (t('admin_users_rejected') || 'Off')}
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border">
+              <button
+                onClick={() => setShowAccessModal(false)}
+                className="px-4 py-2 text-xs font-semibold rounded-lg border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                {t('cancel') || 'Cancel'}
+              </button>
+              <button
+                onClick={async () => {
+                  setAccessSaving(true);
+                  const sections = ['identity', 'passport', 'cin_doc', 'contact'];
+                  const currentState: Record<string, boolean> = {
+                    identity: !!reviewDetail.profile_unlock_identity,
+                    passport: !!reviewDetail.profile_unlock_passport,
+                    cin_doc: !!reviewDetail.profile_unlock_cin_doc,
+                    contact: !!reviewDetail.profile_unlock_contact,
+                  };
+                  for (const section of sections) {
+                    if (accessState[section] !== currentState[section]) {
+                      await onToggleEdit(admin.id, section, currentState[section]);
+                    }
+                  }
+                  setAccessSaving(false);
+                  setShowAccessModal(false);
+                }}
+                disabled={accessSaving}
+                className="px-4 py-2 text-xs font-semibold rounded-lg bg-amber text-navy-deep hover:bg-amber/90 transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {accessSaving ? (t('admin_users_manage_access_saving') || 'Saving…') : (t('admin_users_manage_access_save') || 'Save Permissions')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -757,6 +805,7 @@ export default function SuperAdminUsers() {
 
   const emailRef = useRef<any>(null);
   const nameRef = useRef<any>(null);
+  const suggestEmailIdRef = useRef(0);
 
   const showToast = useCallback((
     type: "success" | "error",
@@ -780,7 +829,7 @@ export default function SuperAdminUsers() {
     const { data, error } = await apiListAdmins();
     setLoading(false);
     if (error) {
-      showToast("error", `Could not load admins: ${error}`);
+      showToast("error", t('admin_users_load_error').replace('{error}', error));
       return;
     }
 
@@ -796,8 +845,8 @@ export default function SuperAdminUsers() {
       return {
         id: u.id,
         displayId: `ADM-${String(u.id).padStart(4, "0")}`,
-        fullName: u.full_name || "Unnamed Admin",
-        role: u.profile_complete ? "Operations Admin" : "Onboarding Admin",
+        fullName: u.full_name || t('admin_users_unnamed'),
+        role: u.profile_complete ? t('admin_users_operations_admin') : t('admin_users_onboarding_admin'),
         airport: airportLabel(u.airport_iata || ""),
         airportIata: u.airport_iata || "—",
         email: u.email || "",
@@ -832,7 +881,7 @@ export default function SuperAdminUsers() {
       const { data, error } = await apiGetAdminReview(Number(activeId));
       setReviewLoading(false);
       if (error) {
-        showToast("error", `Failed to retrieve credentials: ${error}`);
+        showToast("error", t('admin_users_retrieve_error').replace('{error}', error));
         setActiveId(null);
         return;
       }
@@ -881,10 +930,10 @@ export default function SuperAdminUsers() {
     const { error } = await apiPostIdReview(id, "approve", undefined, []);
     setReviewSubmitting(false);
     if (error) {
-      showToast("error", `Approval failed: ${error}`);
+      showToast("error", t('admin_users_approval_error').replace('{error}', error));
       return;
     }
-    showToast("success", "ID credentials successfully verified & approved.");
+    showToast("success", t('admin_users_approval_success'));
     setActiveId(null);
     await fetchAdmins();
   };
@@ -915,10 +964,10 @@ export default function SuperAdminUsers() {
     const { error } = await apiPostIdReview(id, "reject", reason, databaseFields);
     setReviewSubmitting(false);
     if (error) {
-      showToast("error", `Rejection failed: ${error}`);
+      showToast("error", t('admin_users_rejection_error').replace('{error}', error));
       return;
     }
-    showToast("success", "Credentials rejected. Modification request sent to admin.");
+    showToast("success", t('admin_users_rejection_success'));
     setActiveId(null);
     await fetchAdmins();
   };
@@ -927,9 +976,9 @@ export default function SuperAdminUsers() {
   const handleDelete = async (target: AdminSubmission) => {
     const { error } = await apiDeleteAdmin(target.id);
     if (error) {
-      showToast("error", `Deletion failed: ${error}`);
+      showToast("error", t('admin_users_deletion_error').replace('{error}', error));
     } else {
-      showToast("success", `Admin account '${target.fullName}' deleted successfully.`);
+      showToast("success", t('admin_users_deletion_success').replace('{name}', target.fullName));
       setActiveId(null);
       await fetchAdmins();
     }
@@ -942,10 +991,10 @@ export default function SuperAdminUsers() {
     const { data, error } = await apiToggleProfileEdit(userId, nextUnlock, section);
     setReviewSubmitting(false);
     if (error) {
-      showToast("error", `Failed to toggle profile edit: ${error}`);
+      showToast("error", t('admin_users_toggle_edit_error').replace('{error}', error));
       return;
     }
-    showToast("success", data?.message || `Profile edit unlock status updated.`);
+    showToast("success", data?.message || t('admin_users_toggle_edit_success'));
     const key = `profile_unlock_${section}` as any;
     setReviewDetail((prev: any) => {
       if (prev && prev.id === userId) {
@@ -983,10 +1032,10 @@ export default function SuperAdminUsers() {
     const { error } = await apiReopenVerification(userId);
     setReviewSubmitting(false);
     if (error) {
-      showToast("error", `Failed to reopen verification: ${error}`);
+      showToast("error", t('admin_users_reopen_error').replace('{error}', error));
       return;
     }
-    showToast("success", "Verification reopened. Admin has been notified.");
+    showToast("success", t('admin_users_reopen_success'));
     setActiveId(null);
     setReviewDetail(null);
     await fetchAdmins();
@@ -994,17 +1043,17 @@ export default function SuperAdminUsers() {
 
   /* Archive Admin Account */
   const handleArchiveAdmin = useCallback(async (userId: number) => {
-    if (!window.confirm("Are you sure you want to archive this administrator account? This will set the account status to archived and deactivate their login.")) {
+    if (!window.confirm(t('admin_users_archive_confirm'))) {
       return;
     }
     setReviewSubmitting(true);
     const { error } = await apiArchiveAdmin(userId);
     setReviewSubmitting(false);
     if (error) {
-      showToast("error", `Failed to archive account: ${error}`);
+      showToast("error", t('admin_users_archive_error').replace('{error}', error));
       return;
     }
-    showToast("success", "Account successfully archived.");
+    showToast("success", t('admin_users_archive_success'));
     setActiveId(null);
     setReviewDetail(null);
     await fetchAdmins();
@@ -1012,17 +1061,17 @@ export default function SuperAdminUsers() {
 
   /* Permanently Reject Admin */
   const handlePermanentlyRejectAdmin = useCallback(async (userId: number) => {
-    if (!window.confirm("Are you sure you want to permanently reject this administrator? This action is irreversible and the account will be deactivated.")) {
+    if (!window.confirm(t('admin_users_perm_reject_confirm'))) {
       return;
     }
     setReviewSubmitting(true);
     const { error } = await apiPermanentlyRejectAdmin(userId);
     setReviewSubmitting(false);
     if (error) {
-      showToast("error", `Failed to permanently reject: ${error}`);
+      showToast("error", t('admin_users_perm_reject_error').replace('{error}', error));
       return;
     }
-    showToast("success", "Admin has been permanently rejected and deactivated.");
+    showToast("success", t('admin_users_perm_reject_success'));
     setActiveId(null);
     setReviewDetail(null);
     await fetchAdmins();
@@ -1045,9 +1094,11 @@ export default function SuperAdminUsers() {
   /* Generate email suggestion */
   const suggestWorkEmail = useCallback(async (name: string, airport: string) => {
     if (!name.trim() || !airport) return;
+    const id = ++suggestEmailIdRef.current;
     setWorkEmailStatus("checking");
     setWorkEmailWarning("");
     const { data, error } = await apiSuggestEmail(name, airport);
+    if (id !== suggestEmailIdRef.current) return;
     if (error || !data) {
       setWorkEmailStatus(null);
       return;
@@ -1059,6 +1110,7 @@ export default function SuperAdminUsers() {
       setWorkEmailWarning(`${primary} taken — fallback: ${suggested}`);
     }
     const { data: avail } = await apiCheckEmail(suggested);
+    if (id !== suggestEmailIdRef.current) return;
     setWorkEmailStatus(avail?.available ? "available" : "taken");
   }, []);
 
@@ -1094,6 +1146,7 @@ export default function SuperAdminUsers() {
   const handleAirportChange = (airport: string) => {
     setForm((f) => ({ ...f, airport }));
     if (!workEmailEdited && form.name.trim()) suggestWorkEmail(form.name, airport);
+    if (form.name.trim().length >= 3) checkDuplicate(form.name, airport);
   };
 
   const handleWorkEmailChange = (email: string) => {
@@ -1132,14 +1185,14 @@ export default function SuperAdminUsers() {
     });
     setSaving(false);
     if (error) {
-      showToast("error", `Invitation error: ${error}`);
+      showToast("error", t('admin_users_invite_error').replace('{error}', error));
       return;
     }
     showToast(
       "success",
-      `Admin account created! Credentials sent to: ${form.personalEmail.trim()} (Login ID: ${data.email})`,
-      "Admin Account Created Successfully",
-      `Invitation credentials have been dispatched to: ${form.personalEmail.trim()}`,
+      t('admin_users_invite_success').replace('{email}', form.personalEmail.trim()).replace('{loginId}', data.email),
+      t('admin_users_invite_success_title'),
+      t('admin_users_invite_success_details').replace('{email}', form.personalEmail.trim()),
       data.email
     );
     setModalOpen(false);
@@ -1185,7 +1238,7 @@ export default function SuperAdminUsers() {
         <StatCard label={t('admin_users_awaiting_review') || 'Awaiting Review'} value={counts.pending} tone="warning" icon={Clock} />
         <StatCard label={t('admin_users_resubmitted') || 'Resubmitted'} value={counts.resubmitted} tone="primary" icon={RefreshCw} />
         <StatCard label={t('admin_users_verified') || 'Verified'} value={counts.approved} tone="success" icon={CheckCircle2} />
-        <StatCard label="Expired" value={counts.expired} tone="danger" icon={AlertTriangle} />
+        <StatCard label={t('status_expired') || 'Expired'} value={counts.expired} tone="danger" icon={AlertTriangle} />
       </div>
 
       {/* Search + filters */}
@@ -1227,7 +1280,7 @@ export default function SuperAdminUsers() {
         <FilterDropdown
           icon={<BadgeCheck size={13} />}
           label={t('admin_users_verification_filter') || 'Verification'}
-          value={FILTERS.find((f) => f.key === filter)?.label ?? (t('admin_users_all') || 'All')}
+          value={t(FILTERS.find((f) => f.key === filter)?.labelKey ?? 'admin_users_all') || 'All'}
           active={filter !== "all"}
         >
           <DropdownMenuLabel className="sa-filter-menu-label text-[10px] uppercase tracking-[0.2em] text-white/60 font-semibold">
@@ -1240,7 +1293,7 @@ export default function SuperAdminUsers() {
               onClick={() => setFilter(f.key)}
               className={cn("sa-filter-item cursor-pointer focus:bg-amber/10 focus:text-amber hover:bg-amber/10 hover:text-amber transition-colors", filter === f.key ? "active text-amber bg-amber/10 font-semibold" : "text-slate-300")}
             >
-              {f.label}
+              {t(f.labelKey)}
             </DropdownMenuItem>
           ))}
         </FilterDropdown>
@@ -1287,7 +1340,7 @@ export default function SuperAdminUsers() {
           <div className="grid gap-5 lg:grid-cols-[340px_1fr] transition-all duration-300">
             <aside className="hidden flex-col gap-3 lg:flex">
               <p className="sa-queue-header px-1 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-white/60">
-                Queue &middot; {filtered.length}
+                {t('admin_users_queue')} &middot; {filtered.length}
               </p>
               <div className="flex max-h-[calc(100vh-260px)] flex-col gap-[12px] overflow-y-auto pr-2 pb-6">
                 {filtered.map((admin) => (
@@ -1358,9 +1411,8 @@ export default function SuperAdminUsers() {
                       <span className="font-bold text-warning text-xs uppercase tracking-wider">{t('admin_users_possible_duplicate') || 'Possible Duplicate'}</span>
                     </div>
                     <p className="text-xs text-white/60 leading-relaxed font-medium">
-                      An administrator named <strong className="text-white">"{dupInfo?.full_name}"</strong> is already assigned to <strong className="text-white">{airportLabel(dupInfo?.airport_iata)}</strong>.
-                      Registered: {dupInfo?.created_at ? format(new Date(dupInfo.created_at), "MMM d, yyyy") : "—"}.
-                      <br />Confirm if this is a different administrator?
+                      {t('admin_users_duplicate_registered').replace('{name}', dupInfo?.full_name || '').replace('{airport}', airportLabel(dupInfo?.airport_iata)).replace('{date}', dupInfo?.created_at ? format(new Date(dupInfo.created_at), "MMM d, yyyy") : "—")}
+                      <br />{t('admin_users_duplicate_confirm')}
                     </p>
                     <div className="flex gap-2">
                       <button
@@ -1387,7 +1439,7 @@ export default function SuperAdminUsers() {
 
                 {bypassDuplicate && (
                   <div className="rounded-lg border border-success/20 bg-success/5 px-3 py-2 text-[11px] text-success font-medium">
-                    🪪 Admin duplicate bypass is active. A welcome verification email will be dispatched.
+                    {t('admin_users_bypass_notice')}
                   </div>
                 )}
 
@@ -1402,7 +1454,7 @@ export default function SuperAdminUsers() {
                       type="text"
                       value={form.name}
                       onChange={(e) => handleNameChange(e.target.value)}
-                      placeholder="e.g. hanen kalaizar"
+                      placeholder={t('admin_users_name_placeholder')}
                       disabled={dupState === "warning" || saving}
                       className="h-10 w-full rounded-lg border border-slate-700 bg-navy-deep px-3 text-sm text-white placeholder:text-slate-400 outline-none focus:border-amber focus:ring-1 focus:ring-amber transition-all"
                     />
@@ -1423,7 +1475,7 @@ export default function SuperAdminUsers() {
                       type="email"
                       value={form.workEmail}
                       onChange={(e) => handleWorkEmailChange(e.target.value)}
-                      placeholder="hanen.kalaizar@tun-airport.tn"
+                      placeholder={t('admin_users_email_placeholder')}
                       disabled={dupState === "warning" || saving}
                       className={cn(
                         "h-10 w-full rounded-lg border border-slate-700 bg-navy-deep px-3 text-sm text-white placeholder:text-slate-400 outline-none focus:border-amber focus:ring-1 focus:ring-amber transition-all",
@@ -1467,7 +1519,7 @@ export default function SuperAdminUsers() {
                       type="email"
                       value={form.personalEmail}
                       onChange={(e) => setForm((f) => ({ ...f, personalEmail: e.target.value }))}
-                      placeholder="hanen.kalaizar@gmail.com"
+                      placeholder={t('admin_users_personal_email_placeholder')}
                       disabled={dupState === "warning" || saving}
                       className={cn(
                         "h-10 w-full rounded-lg border border-slate-700 bg-navy-deep px-3 text-sm text-white placeholder:text-slate-400 outline-none focus:border-amber focus:ring-1 focus:ring-amber transition-all",

@@ -18,8 +18,6 @@ import PendingApprovalScreen  from './PendingApprovalScreen';
 
 // ── Dashboard routes: lazy-loaded per route for code splitting ────────────
 const AdminDashboard     = lazy(() => import('./AdminDashboard'));
-const AdminFlights       = lazy(() => import('./AdminFlights'));
-const AdminPredict       = lazy(() => import('./AdminPredict'));
 const AdminAnalytics     = lazy(() => import('./AdminAnalytics'));
 const AdminAIExplanations = lazy(() => import('./AdminAIExplanations'));
 const AdminSettings      = lazy(() => import('./AdminSettings'));
@@ -349,7 +347,6 @@ export default function AdminApp() {
                                 <Suspense fallback={<PageLoader />}>
                                     <Routes>
                                         <Route index element={<AdminDashboard selectedDate={selectedDate} onDateChange={setSelectedDate} />} />
-                                        <Route path="predict" element={<AdminPredict />} />
                                         <Route path="analytics" element={<AdminAnalytics />} />
                                         <Route path="messages" element={<AdminMessages />} />
                                         

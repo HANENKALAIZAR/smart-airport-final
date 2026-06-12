@@ -354,6 +354,8 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
 
     const { language } = useLanguage();
     const dateLabel = new Date().toLocaleDateString(language === 'fr' ? 'fr-FR' : language === 'ar' ? 'ar-SA' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const isToday = localDate.toDateString() === new Date().toDateString();
+    const isFuture = localDate > new Date() && !isToday;
 
     const fetchFlights = useCallback(async () => {
         try {
@@ -600,7 +602,7 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                 <div>
                     <h1 className="admin-page__title">{t('admin_dash_ops') || 'Operations Overview'}</h1>
                     <p className="admin-page__subtitle">
-                        Live ops snapshot — <strong>{selectedAirport.name} ({selectedAirport.iata})</strong>, {dateLabel}
+                        {t('admin_dash_subtitle') || 'Live ops snapshot —'} <strong>{selectedAirport.name} ({selectedAirport.iata})</strong>, {dateLabel}
                     </p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -612,7 +614,30 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
             </div>
 
             {/* Sync Failure / Empty State Banner */}
-            {!loading && flights.length === 0 && (
+            {!loading && flights.length === 0 && !error && (
+                <div style={{
+                    background: isFuture ? 'rgba(245, 158, 11, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                    border: isFuture ? '1px solid rgba(245, 158, 11, 0.22)' : '1px solid rgba(239, 68, 68, 0.22)',
+                    padding: '1rem 1.25rem',
+                    borderRadius: 12,
+                    marginBottom: '1.5rem',
+                    color: isFuture ? '#F59E0B' : '#EF4444',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 4
+                }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {isFuture ? <Clock size={16} /> : <AlertTriangle size={16} />}
+                        {isFuture ? (t('admin_dash_no_future_data') || 'No future schedule data available for this date.') : (t('admin_dash_live_feed_unavailable') || 'Real-time flight data is currently unavailable.')}
+                    </div>
+                    {!isFuture && (
+                        <div style={{ fontSize: '0.8rem', color: 'var(--adm-text-sub)', marginLeft: 24 }}>
+                            {t('admin_dash_last_sync') || 'Last successful synchronization:'} {lastSyncTime ? new Date(lastSyncTime).toLocaleString() : (t('admin_dash_never') || 'Never')}
+                        </div>
+                    )}
+                </div>
+            )}
+            {!loading && flights.length === 0 && error && (
                 <div style={{
                     background: 'rgba(239, 68, 68, 0.08)',
                     border: '1px solid rgba(239, 68, 68, 0.22)',
@@ -626,10 +651,10 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                 }}>
                     <div style={{ fontWeight: 700, fontSize: '0.92rem', display: 'flex', alignItems: 'center', gap: 8 }}>
                         <AlertTriangle size={16} style={{ color: '#EF4444' }} />
-                        Real-time flight data is currently unavailable.
+                        {t('admin_dash_live_feed_unavailable') || 'Real-time flight data is currently unavailable.'}
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--adm-text-sub)', marginLeft: 24 }}>
-                        Last successful synchronization: {lastSyncTime ? new Date(lastSyncTime).toLocaleString() : 'Never'}
+                        {t('admin_dash_last_sync') || 'Last successful synchronization:'} {lastSyncTime ? new Date(lastSyncTime).toLocaleString() : (t('admin_dash_never') || 'Never')}
                     </div>
                 </div>
             )}
@@ -637,8 +662,8 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
             {/* ── KPI Cards — exact Skyward grid ── */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
                 <KPICard title={t('admin_dash_total_today') || 'Flights Today'} value={loading ? '…' : kpi.total} icon={<Plane size={28} />} trend={kpi.total > 0 ? 6 : undefined} />
-                <KPICard title={t('admin_dash_on_time_rate') || 'On-Time Rate'} value={loading ? '…' : (kpi.onTimePct !== null ? kpi.onTimePct : 'N/A')} suffix={kpi.onTimePct !== null ? "%" : ""} icon={<Clock size={28} />} trend={kpi.total > 0 ? 2 : undefined} />
-                <KPICard title={t('admin_dash_avg_delay') || 'Avg Delay'} value={loading ? '…' : (kpi.avgDelay !== null ? formatDelay(kpi.avgDelay, false) : 'N/A')} icon={<AlertTriangle size={28} />} trend={kpi.avgDelay !== null && kpi.total > 0 ? (kpi.avgDelay > 15 ? -4 : 2) : undefined} />
+                <KPICard title={t('admin_dash_on_time_rate') || 'On-Time Rate'} value={loading ? '…' : (kpi.onTimePct !== null ? kpi.onTimePct : t('notAvailable'))} suffix={kpi.onTimePct !== null ? "%" : ""} icon={<Clock size={28} />} trend={kpi.total > 0 ? 2 : undefined} />
+                <KPICard title={t('admin_dash_avg_delay') || 'Avg Delay'} value={loading ? '…' : (kpi.avgDelay !== null ? formatDelay(kpi.avgDelay, false) : t('notAvailable'))} icon={<AlertTriangle size={28} />} trend={kpi.avgDelay !== null && kpi.total > 0 ? (kpi.avgDelay > 15 ? -4 : 2) : undefined} />
                 <KPICard title={t('admin_dash_active_departures') || 'Active Departures'} value={loading ? '…' : kpi.activeDeparting} icon={<TrendingUp size={28} />} trend={kpi.total > 0 ? 0 : undefined} />
             </div>
 
@@ -839,7 +864,7 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                     <div style={{ width: '100%' }}>
                         <table className="admin-table" style={{ width: '100%' }}>
                             <thead>
-                                <tr><th></th><th>{t('admin_dash_flight_col') || 'Vol'}</th><th>{t('admin_dash_airline_col') || 'Compagnie'}</th><th>{t('admin_dash_route_col') || 'Itinéraire'}</th><th>{t('admin_dash_dep_col') || 'Départ'}</th><th>{t('admin_dash_arr_col') || 'Arrivée'}</th><th className="col-low-priority">{t('admin_dash_terminal_col') || 'Terminal'}</th><th className="col-low-priority">{t('admin_dash_gate_col') || 'Porte'}</th><th>{t('admin_dash_delay_col') || 'Retard'}</th><th>{t('admin_dash_status_col') || 'Statut'}</th></tr>
+                                <tr><th></th><th>{t('admin_dash_flight_col') || 'Vol'}</th><th>{t('admin_dash_airline_col') || 'Compagnie'}</th><th>{t('admin_dash_route_col') || 'Itinéraire'}</th><th>{t('admin_dash_dep_col') || 'Départ'}</th><th>{t('admin_dash_arr_col') || 'Arrivée'}</th><th className="col-low-priority">{t('admin_dash_terminal_col') || 'Terminal'}</th><th className="col-low-priority">{t('admin_dash_gate_col') || 'Porte'}</th><th className="col-delay">{t('admin_dash_delay_col') || 'Retard'}</th><th>{t('admin_dash_status_col') || 'Statut'}</th></tr>
                             </thead>
                             <tbody>
                                 {pageRows.map(f => {
@@ -854,14 +879,14 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                                     const terminalRaw = (isArr
                                         ? (f.arr_terminal || f.fa_arr_terminal)
                                         : (f.dep_terminal || f.fa_dep_terminal));
-                                    const terminal = terminalRaw && terminalRaw.trim() ? terminalRaw : 'Non assignée';
+                                    const hasTerminal = terminalRaw && terminalRaw.trim();
                                     // Best-available gate: AE first, FA fallback
                                     const gateRaw = (isArr
                                         ? (f.arr_gate || f.fa_arr_gate)
                                         : (f.dep_gate || f.fa_dep_gate));
-                                    const gate = gateRaw && gateRaw.trim() ? gateRaw : 'Non assignée';
+                                    const hasGate = gateRaw && gateRaw.trim();
                                     // Is the gate sourced from FlightAware (not AE)?
-                                    const gateFromFA = gate !== 'Non assignée' && isArr
+                                    const gateFromFA = hasGate && isArr
                                         ? (!f.arr_gate && !!f.fa_arr_gate)
                                         : (!f.dep_gate && !!f.fa_dep_gate);
                                     
@@ -911,16 +936,16 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                                             </td>
                                             <td style={{ whiteSpace: 'nowrap' }}>{depTime}</td>
                                             <td style={{ whiteSpace: 'nowrap' }}>{arrTime}</td>
-                                            <td className="col-low-priority" style={{ color: terminal === 'Non assignée' ? 'var(--adm-text-muted)' : 'inherit', fontSize: terminal === 'Non assignée' ? '0.72rem' : 'inherit' }}>{terminal}</td>
+                                            <td className="col-low-priority" style={{ color: !hasTerminal ? 'var(--adm-text-muted)' : 'inherit', fontSize: !hasTerminal ? '0.72rem' : 'inherit' }}>{hasTerminal ? terminalRaw : t('notAssigned')}</td>
                                             <td className="col-low-priority">
-                                                {gate === 'Non assignée' ? (
-                                                    <span style={{ color: 'var(--adm-text-muted)', fontSize: '0.72rem' }}>Non assignée</span>
+                                                {!hasGate ? (
+                                                    <span style={{ color: 'var(--adm-text-muted)', fontSize: '0.72rem' }}>{t('notAssigned')}</span>
                                                 ) : (
                                                     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                                        <span style={{ fontWeight: 600 }}>{gate}</span>
+                                                        <span style={{ fontWeight: 600 }}>{gateRaw}</span>
                                                         {gateFromFA && (
                                                             <span
-                                                                title="Gate sourced from FlightAware"
+                                                                title={t('admin_dash_gate_fa_tooltip')}
                                                                 style={{
                                                                     fontSize: '0.58rem', fontWeight: 700,
                                                                     padding: '1px 4px', borderRadius: 4,
@@ -935,10 +960,10 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                                                     </span>
                                                 )}
                                             </td>
-                                            <td><span className={f.delay_minutes != null && f.delay_minutes > 0 ? 'admin-table__danger' : ''}>{formatDelay(f.delay_minutes)}</span></td>
+                                            <td className="col-delay"><span className={f.delay_minutes != null && f.delay_minutes > 0 ? 'admin-table__danger' : ''}>{formatDelay(f.delay_minutes)}</span></td>
                                             <td>
                                                 <span 
-                                                    title={f.status === 'stale_unresolved' ? "Realtime provider updates are no longer available for this flight." : undefined}
+                                                    title={f.status === 'stale_unresolved' ? t('admin_dash_stale_tooltip') : undefined}
                                                     style={{
                                                         display: 'inline-flex', alignItems: 'center', gap: 6,
                                                         padding: '3px 9px', borderRadius: 999,
@@ -962,10 +987,14 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                                                 {error ? <AlertTriangle size={32} style={{ color: '#EF4444' }} /> : <Plane size={32} style={{ opacity: 0.5 }} />}
                                             </div>
                                             <div style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--adm-text)', marginBottom: '0.25rem' }}>
-                                                {error ? (t('admin_dash_live_feed_unavailable') || 'Live feed unavailable') : (t('admin_dash_no_flights_found') || 'No tracked flight found for this search')}
+                                                {error ? (t('admin_dash_live_feed_unavailable') || 'Live feed unavailable') 
+                                                 : isFuture ? (t('admin_dash_no_future_data') || 'No future schedule data available for this date.')
+                                                 : (t('admin_dash_no_flights_found') || 'No tracked flight found for this search')}
                                             </div>
                                             <div style={{ fontSize: '0.85rem' }}>
-                                                {error ? (t('admin_dash_check_connection') || 'Check backend connection or AviationEdge API key.') : (t('admin_dash_external_note') || 'Some external flights may not yet be synchronized from the realtime provider.')}
+                                                {error ? (t('admin_dash_check_connection') || 'Check backend connection or AviationEdge API key.')
+                                                 : isFuture ? (t('admin_dash_future_data_hint') || 'Future schedules are loaded if the provider plan supports them. Try selecting today or a past date.')
+                                                 : (t('admin_dash_external_note') || 'Some external flights may not yet be synchronized from the realtime provider.')}
                                             </div>
                                             {activeFilterCount > 0 && !error && (
                                                 <button onClick={resetFilters} className="admin-btn admin-btn--outline" style={{ marginTop: '1.25rem', fontSize: '0.75rem' }}>
@@ -997,7 +1026,7 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                             <div style={{ display: 'flex', alignItems: 'center', gap: 4, overflowX: 'auto', maxWidth: '100%' }}>
                                 <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
                                     style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid var(--adm-border)', background: 'transparent', color: 'var(--adm-text-sub)', cursor: safePage === 1 ? 'not-allowed' : 'pointer', opacity: safePage === 1 ? 0.4 : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                                    aria-label="Page précédente">
+                                    aria-label={t('previousPage')}>
                                     <ChevronLeft size={14} />
                                 </button>
                                 {getVisiblePages().map((n, idx) => {
@@ -1019,7 +1048,7 @@ export default function AdminDashboard({ selectedDate, onDateChange }: AdminDash
                                 })}
                                 <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={safePage === totalPages}
                                     style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid var(--adm-border)', background: 'transparent', color: 'var(--adm-text-sub)', cursor: safePage === totalPages ? 'not-allowed' : 'pointer', opacity: safePage === totalPages ? 0.4 : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                                    aria-label="Page suivante">
+                                    aria-label={t('nextPage')}>
                                     <ChevronRight size={14} />
                                 </button>
                             </div>

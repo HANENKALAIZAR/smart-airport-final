@@ -1,18 +1,20 @@
 {
-  "version": "ae-v2-20260602-2056",
-  "trained_at": "2026-06-02T20:56:12.561744+00:00",
-  "notes": "auto-retrain: ['drift: sustained critical drift']",
+  "version": "ae-v2-20260612-1134",
+  "trained_at": "2026-06-12T11:34:15.692925+00:00",
+  "notes": "auto-retrain: ['performance_degradation: live MAE 17.64 vs train MAE 14.49 (+21.7% worse)']",
   "training_mode": "multi_model_v2",
   "metrics": {
-    "mae": 16.34,
-    "rmse": 25.77,
-    "r2": 0.0306
+    "mae": 16.6,
+    "rmse": 26.07,
+    "r2": 0.1002,
+    "train_mae": 13.953,
+    "overfit_gap": -2.647
   },
   "dataset": {
-    "total_rows": 10875,
-    "train_rows": 8700,
-    "test_rows": 2175,
-    "cutoff_date": "2026-05-24",
+    "total_rows": 11711,
+    "train_rows": 9368,
+    "test_rows": 2343,
+    "cutoff_date": "2026-05-27",
     "feature_columns": [
       "dep_hour",
       "is_weekend",
@@ -34,332 +36,333 @@
   },
   "winner": {
     "name": "random_forest",
-    "mae": 16.34,
-    "rmse": 25.77,
-    "r2": 0.0306,
+    "mae": 16.6,
+    "rmse": 26.07,
+    "r2": 0.1002,
     "beats_baseline": true,
-    "improvement_pct": 6.9,
-    "cv_mae_mean": 15.88,
-    "cv_mae_std": 0.39
+    "improvement_pct": 5.3,
+    "cv_mae_mean": 15.92,
+    "cv_mae_std": 0.53
   },
   "all_models": [
     {
       "name": "xgboost",
-      "mae": 16.49,
-      "rmse": 26.05,
-      "r2": 0.0099,
+      "mae": 16.65,
+      "rmse": 26.26,
+      "r2": 0.0866,
       "beats_baseline": true,
-      "improvement_pct": 6.1,
-      "cv_mae_mean": 16.49,
-      "cv_mae_std": 0.73,
+      "improvement_pct": 5.0,
+      "cv_mae_mean": 16.41,
+      "cv_mae_std": 0.54,
       "cv_folds": 5
     },
     {
       "name": "random_forest",
-      "mae": 16.34,
-      "rmse": 25.77,
-      "r2": 0.0306,
+      "mae": 16.6,
+      "rmse": 26.07,
+      "r2": 0.1002,
       "beats_baseline": true,
-      "improvement_pct": 6.9,
-      "cv_mae_mean": 15.88,
-      "cv_mae_std": 0.39,
+      "improvement_pct": 5.3,
+      "cv_mae_mean": 15.92,
+      "cv_mae_std": 0.53,
       "cv_folds": 5
     }
   ],
   "baseline": {
-    "route_mae": 17.55,
-    "airline_mae": 18.42,
-    "global_mean_delay": 21.88
+    "route_mae": 17.52,
+    "airline_mae": 17.93,
+    "global_mean_delay": 21.81
   },
   "calibration": {
-    "pct_within_5min": 26.7,
-    "pct_within_15min": 62.8,
-    "pct_within_30min": 87.2
+    "pct_within_5min": 25.1,
+    "pct_within_15min": 62.0,
+    "pct_within_30min": 86.8
   },
   "airline_errors": [
     {
-      "group": "SN",
-      "n": 8,
-      "mae": 44.11,
-      "mean_actual": 55.38,
-      "mean_pred": 16.86
+      "group": "Y4",
+      "n": 3,
+      "mae": 48.45,
+      "mean_actual": 83.33,
+      "mean_pred": 37.67
     },
     {
       "group": "PU",
-      "n": 4,
-      "mae": 42.6,
-      "mean_actual": 73.75,
-      "mean_pred": 66.02
-    },
-    {
-      "group": "Q4",
-      "n": 6,
-      "mae": 39.86,
-      "mean_actual": 29.54,
-      "mean_pred": 22.57
-    },
-    {
-      "group": "NB",
-      "n": 18,
-      "mae": 34.27,
-      "mean_actual": 21.08,
-      "mean_pred": 21.14
-    },
-    {
-      "group": "FB",
       "n": 8,
-      "mae": 29.59,
-      "mean_actual": 36.0,
-      "mean_pred": 21.92
+      "mae": 45.55,
+      "mean_actual": 85.62,
+      "mean_pred": 72.51
+    },
+    {
+      "group": "NO",
+      "n": 31,
+      "mae": 33.1,
+      "mean_actual": 56.48,
+      "mean_pred": 37.79
+    },
+    {
+      "group": "L6",
+      "n": 5,
+      "mae": 31.77,
+      "mean_actual": 33.8,
+      "mean_pred": 25.94
+    },
+    {
+      "group": "SN",
+      "n": 13,
+      "mae": 31.38,
+      "mean_actual": 39.77,
+      "mean_pred": 17.0
     },
     {
       "group": "X9",
-      "n": 12,
-      "mae": 28.01,
-      "mean_actual": 33.58,
-      "mean_pred": 47.72
+      "n": 26,
+      "mae": 30.68,
+      "mean_actual": 31.73,
+      "mean_pred": 50.12
     },
     {
       "group": "AH",
-      "n": 21,
-      "mae": 26.72,
-      "mean_actual": 19.81,
-      "mean_pred": 14.71
+      "n": 15,
+      "mae": 28.58,
+      "mean_actual": 24.4,
+      "mean_pred": 12.36
+    },
+    {
+      "group": "BN",
+      "n": 6,
+      "mae": 26.54,
+      "mean_actual": 53.5,
+      "mean_pred": 35.77
+    },
+    {
+      "group": "Q4",
+      "n": 5,
+      "mae": 26.38,
+      "mean_actual": 3.0,
+      "mean_pred": 29.38
     },
     {
       "group": "TU",
-      "n": 421,
-      "mae": 25.11,
-      "mean_actual": 24.68,
-      "mean_pred": 37.77
+      "n": 406,
+      "mae": 25.56,
+      "mean_actual": 29.98,
+      "mean_pred": 37.3
     },
     {
-      "group": "LB",
-      "n": 1,
-      "mae": 25.04,
-      "mean_actual": 0.0,
-      "mean_pred": 25.04
+      "group": "R5",
+      "n": 18,
+      "mae": 25.46,
+      "mean_actual": 5.22,
+      "mean_pred": 30.69
+    },
+    {
+      "group": "BM",
+      "n": 10,
+      "mae": 24.83,
+      "mean_actual": 26.7,
+      "mean_pred": 16.4
     },
     {
       "group": "1I",
       "n": 2,
-      "mae": 24.21,
+      "mae": 24.55,
       "mean_actual": 19.0,
-      "mean_pred": 20.69
+      "mean_pred": 21.26
     },
     {
-      "group": "BN",
-      "n": 1,
-      "mae": 23.28,
-      "mean_actual": 0.0,
-      "mean_pred": 23.28
+      "group": "SV",
+      "n": 8,
+      "mae": 24.51,
+      "mean_actual": 30.0,
+      "mean_pred": 23.55
     },
     {
-      "group": "WY",
-      "n": 18,
-      "mae": 23.27,
-      "mean_actual": 30.11,
-      "mean_pred": 18.94
+      "group": "EY",
+      "n": 8,
+      "mae": 24.11,
+      "mean_actual": 30.0,
+      "mean_pred": 22.45
     },
     {
-      "group": "EW",
-      "n": 13,
-      "mae": 23.21,
-      "mean_actual": 17.54,
-      "mean_pred": 34.93
+      "group": "KU",
+      "n": 8,
+      "mae": 24.1,
+      "mean_actual": 30.0,
+      "mean_pred": 22.48
     },
     {
-      "group": "R5",
-      "n": 22,
-      "mae": 22.42,
-      "mean_actual": 11.27,
-      "mean_pred": 28.02
+      "group": "NB",
+      "n": 10,
+      "mae": 22.39,
+      "mean_actual": 1.0,
+      "mean_pred": 23.39
     },
     {
       "group": "IA",
       "n": 2,
-      "mae": 21.67,
+      "mae": 21.62,
       "mean_actual": 22.0,
-      "mean_pred": 0.33
-    },
-    {
-      "group": "BM",
-      "n": 13,
-      "mae": 21.19,
-      "mean_actual": 25.46,
-      "mean_pred": 13.43
-    },
-    {
-      "group": "QR",
-      "n": 21,
-      "mae": 20.71,
-      "mean_actual": 27.1,
-      "mean_pred": 17.11
-    },
-    {
-      "group": "WB",
-      "n": 21,
-      "mae": 20.71,
-      "mean_actual": 27.1,
-      "mean_pred": 17.16
+      "mean_pred": 0.38
     },
     {
       "group": "UX",
-      "n": 2,
-      "mae": 19.42,
-      "mean_actual": 17.5,
-      "mean_pred": 36.92
+      "n": 8,
+      "mae": 21.47,
+      "mean_actual": 18.12,
+      "mean_pred": 39.6
     },
     {
-      "group": "AT",
-      "n": 27,
-      "mae": 18.91,
-      "mean_actual": 19.48,
-      "mean_pred": 26.93
+      "group": "FB",
+      "n": 4,
+      "mae": 21.43,
+      "mean_actual": 29.75,
+      "mean_pred": 31.72
     }
   ],
   "route_errors": [
     {
-      "group": "NIM->TUN",
+      "group": "JED->MIR",
       "n": 1,
-      "mae": 111.78,
-      "mean_actual": 0.0,
-      "mean_pred": 111.78
+      "mae": 143.43,
+      "mean_actual": 165.0,
+      "mean_pred": 21.57
     },
     {
-      "group": "CKY->TUN",
+      "group": "NIM->TUN",
+      "n": 1,
+      "mae": 114.75,
+      "mean_actual": 0.0,
+      "mean_pred": 114.75
+    },
+    {
+      "group": "ABJ->TUN",
       "n": 2,
-      "mae": 106.31,
-      "mean_actual": 36.0,
-      "mean_pred": 142.31
+      "mae": 96.66,
+      "mean_actual": 5.0,
+      "mean_pred": 101.66
     },
     {
       "group": "MIR->BRQ",
       "n": 2,
-      "mae": 91.53,
-      "mean_actual": 81.13,
-      "mean_pred": 86.45
+      "mae": 92.84,
+      "mean_actual": 82.5,
+      "mean_pred": 92.72
     },
     {
-      "group": "TUN->TOE",
-      "n": 3,
-      "mae": 73.69,
-      "mean_actual": 0.0,
-      "mean_pred": 73.69
+      "group": "CKY->TUN",
+      "n": 1,
+      "mae": 85.47,
+      "mean_actual": 50.0,
+      "mean_pred": 135.47
     },
     {
       "group": "DSS->TUN",
       "n": 1,
-      "mae": 71.77,
-      "mean_actual": 73.0,
-      "mean_pred": 144.77
+      "mae": 75.86,
+      "mean_actual": 49.0,
+      "mean_pred": 124.86
     },
     {
-      "group": "ABJ->TUN",
-      "n": 4,
-      "mae": 68.41,
-      "mean_actual": 58.5,
-      "mean_pred": 112.67
-    },
-    {
-      "group": "DJE->TIA",
+      "group": "MPL->DJE",
       "n": 1,
-      "mae": 54.15,
-      "mean_actual": 75.0,
-      "mean_pred": 20.85
+      "mae": 66.24,
+      "mean_actual": 74.0,
+      "mean_pred": 7.76
+    },
+    {
+      "group": "BCN->TUN",
+      "n": 9,
+      "mae": 56.2,
+      "mean_actual": 83.78,
+      "mean_pred": 47.81
     },
     {
       "group": "MIR->LIL",
       "n": 1,
-      "mae": 51.49,
+      "mae": 55.27,
       "mean_actual": 12.0,
-      "mean_pred": 63.49
+      "mean_pred": 67.27
     },
     {
-      "group": "VIE->TUN",
-      "n": 3,
-      "mae": 47.99,
-      "mean_actual": 2.67,
-      "mean_pred": 50.66
-    },
-    {
-      "group": "MAD->TUN",
-      "n": 6,
-      "mae": 47.43,
-      "mean_actual": 54.88,
-      "mean_pred": 64.38
-    },
-    {
-      "group": "LED->MIR",
-      "n": 3,
-      "mae": 44.08,
-      "mean_actual": 64.67,
-      "mean_pred": 20.59
-    },
-    {
-      "group": "FRA->MIR",
-      "n": 8,
-      "mae": 41.02,
-      "mean_actual": 14.88,
-      "mean_pred": 55.89
-    },
-    {
-      "group": "TUN->MAD",
-      "n": 5,
-      "mae": 39.3,
-      "mean_actual": 47.05,
-      "mean_pred": 18.48
-    },
-    {
-      "group": "BLQ->TUN",
-      "n": 6,
-      "mae": 39.03,
-      "mean_actual": 14.83,
-      "mean_pred": 53.86
-    },
-    {
-      "group": "DUS->TUN",
-      "n": 11,
-      "mae": 37.39,
-      "mean_actual": 19.91,
-      "mean_pred": 57.3
-    },
-    {
-      "group": "BCN->TUN",
-      "n": 4,
-      "mae": 36.87,
-      "mean_actual": 30.25,
-      "mean_pred": 50.79
-    },
-    {
-      "group": "TUN->DSS",
+      "group": "MED->TUN",
       "n": 2,
-      "mae": 36.42,
-      "mean_actual": 70.5,
-      "mean_pred": 106.92
-    },
-    {
-      "group": "TUN->YUL",
-      "n": 2,
-      "mae": 34.83,
-      "mean_actual": 0.0,
-      "mean_pred": 34.83
+      "mae": 49.53,
+      "mean_actual": 62.0,
+      "mean_pred": 12.47
     },
     {
       "group": "CDG->MIR",
-      "n": 9,
-      "mae": 34.39,
-      "mean_actual": 44.0,
-      "mean_pred": 35.64
+      "n": 5,
+      "mae": 49.5,
+      "mean_actual": 65.8,
+      "mean_pred": 29.29
     },
     {
-      "group": "BRU->DJE",
-      "n": 7,
-      "mae": 34.28,
-      "mean_actual": 45.43,
-      "mean_pred": 24.79
+      "group": "TUN->TOE",
+      "n": 2,
+      "mae": 48.38,
+      "mean_actual": 0.0,
+      "mean_pred": 48.38
+    },
+    {
+      "group": "WRO->MIR",
+      "n": 2,
+      "mae": 42.77,
+      "mean_actual": 53.0,
+      "mean_pred": 10.23
+    },
+    {
+      "group": "VIE->TUN",
+      "n": 5,
+      "mae": 41.23,
+      "mean_actual": 25.8,
+      "mean_pred": 43.55
+    },
+    {
+      "group": "BOD->TUN",
+      "n": 6,
+      "mae": 40.46,
+      "mean_actual": 51.0,
+      "mean_pred": 34.41
+    },
+    {
+      "group": "VIE->MIR",
+      "n": 4,
+      "mae": 39.61,
+      "mean_actual": 42.0,
+      "mean_pred": 2.39
+    },
+    {
+      "group": "YUL->TUN",
+      "n": 5,
+      "mae": 39.39,
+      "mean_actual": 101.6,
+      "mean_pred": 85.22
+    },
+    {
+      "group": "DJE->BRU",
+      "n": 4,
+      "mae": 34.73,
+      "mean_actual": 39.75,
+      "mean_pred": 11.55
+    },
+    {
+      "group": "BRU->TUN",
+      "n": 20,
+      "mae": 34.49,
+      "mean_actual": 49.4,
+      "mean_pred": 43.59
+    },
+    {
+      "group": "LUX->MIR",
+      "n": 5,
+      "mae": 33.65,
+      "mean_actual": 41.0,
+      "mean_pred": 13.09
     }
   ],
   "leakage_check": "PASSED \u2014 delay_minutes not in feature set",
-  "split_method": "time-based (no random shuffle)"
+  "split_method": "time-based (no random shuffle)",
+  "cv_limitation": "rolling features computed on full training set \u2014 minor look-ahead bias (~0.5-1.0 min MAE)"
 }

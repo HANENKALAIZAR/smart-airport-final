@@ -264,6 +264,33 @@ class InAppNotification(Base):
 
 
 
+# ── AI Suggestion Decision (persisted approve/reject) ─────────
+class AISuggestionDecision(Base):
+    """
+    Persisted decisions on AI Operational Suggestions.
+    One row per (suggestion_key, date) — the source of truth for
+    approve/reject/workflow status across page refreshes.
+
+    suggestion_key format:
+      {date}:{category}:{airport_iata}:{flight_number or ''}:{route or ''}
+      e.g. "2026-06-07:delay:TUN:TU712:TUN→CDG"
+
+    Once a suggestion_key is recorded as 'approved' or 'rejected',
+    the suggestion engine excludes it from new pending suggestions
+    for that date, preventing re-display.
+    """
+    __tablename__ = "ai_suggestion_decisions"
+
+    id               = Column(Integer,     primary_key=True, autoincrement=True)
+    suggestion_key   = Column(String(200), nullable=False, index=True, unique=True)
+    airport_iata     = Column(String(3),   nullable=False, index=True)
+    suggestion_type  = Column(String(30),  nullable=False)   # e.g. delay, coordination, congestion, prediction, route_reliability, airline_reliability, operational
+    status           = Column(String(10),  nullable=False, default="approved", index=True)  # approved | rejected
+    admin_user_id    = Column(Integer,     ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    timestamp        = Column(TIMESTAMP,   nullable=False, default=_now)
+    suggestion_payload = Column(JSON,      nullable=True)    # full snapshot at decision time
+
+
 # ── AI Alerts ──────────────────────────────────────────────────
 class AIAlert(Base):
     __tablename__ = "ai_alerts"
@@ -329,11 +356,40 @@ class PassengerRight(Base):
     description_en = Column(Text, nullable=False)
     description_fr = Column(Text, nullable=True)
     compensation_amount = Column(String(50), nullable=True)
+    is_active = Column(Boolean, default=True)
+    valid_from = Column(Date, default=lambda: date(2020, 1, 1))
+    valid_to = Column(Date, nullable=True)
+    regulation_version = Column(String(50), default="1.0")
+    last_updated_at = Column(TIMESTAMP, default=_now)
     created_at = Column(TIMESTAMP, default=_now)
 
     __table_args__ = (
         Index("idx_region_delay", "region", "delay_threshold_min"),
     )
+
+
+# ── Compensation Limits ─────────────────────────────────────
+
+class CompensationLimit(Base):
+    __tablename__ = "compensation_limits"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    region = Column(String(30), nullable=False)
+    category = Column(String(60), nullable=False)
+    label_en = Column(String(300), nullable=False)
+    label_fr = Column(String(300), nullable=True)
+    label_ar = Column(String(300), nullable=True)
+    amount_eur = Column(DECIMAL(12, 2), nullable=True)
+    amount_usd = Column(DECIMAL(12, 2), nullable=True)
+    amount_cad = Column(DECIMAL(12, 2), nullable=True)
+    amount_gbp = Column(DECIMAL(12, 2), nullable=True)
+    source_sdr = Column(DECIMAL(12, 2), nullable=True)
+    is_active = Column(Boolean, default=True)
+    valid_from = Column(Date, default=lambda: date(2020, 1, 1))
+    valid_to = Column(Date, nullable=True)
+    regulation_version = Column(String(50), default="1.0")
+    regulation_source = Column(String(200), nullable=True)
+    last_updated_at = Column(TIMESTAMP, default=_now)
 
 
 # ── Internal Message ─────────────────────────────────────────

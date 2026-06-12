@@ -251,6 +251,123 @@ def _ml_prediction(features: np.ndarray) -> tuple[float, int, dict]:
     return risk_score, predicted_delay, contributions
 
 
+def _compute_real_shap(model, vec, feature_names: list[str]) -> dict:
+    """
+    Compute SHAP explanations or fallback feature contributions for a prediction vector.
+    Used by GET /api/intelligence/flight-predict/{id} to populate shap_explanation.
+    Returns:
+        dict: {"feature_contributions": {display_label: {"shap": shap_value, "value": raw_value}}}
+    """
+    # Custom display name mapping matching FlightAIModal.jsx FEATURE_LABEL_TRANS
+    column_to_label = {
+        "dep_hour": "Time of Day",
+        "is_weekend": "Weekend Flight",
+        "is_peak_hour": "Peak Hour Departure",
+        "distance_km": "Flight Distance",
+        "duration_min": "Flight Duration",
+        "airline_enc": "Airline",
+        "dep_airport_enc": "Origin Airport",
+        "arr_airport_enc": "Destination Airport",
+        "route_avg_delay_hist": "Route Historical Delay",
+        "airline_avg_delay_hist": "Airline Historical Delay",
+        "hour_avg_delay_hist": "Hour Historical Delay",
+        "route_flight_count": "Route Traffic Volume",
+        "airline_flight_count": "Airline Traffic Volume",
+        "airport_departure_count": "Airport Departure Load",
+        "dep_month": "Month",
+        "dep_day_of_week": "Day of Week",
+    }
+
+    feature_contributions = {}
+    
+    # 1. Scale feature vector if standard scaler is present in the pipeline
+    vec_scaled = vec
+    if hasattr(model, "named_steps") and "scaler" in model.named_steps:
+        try:
+            vec_scaled = model.named_steps["scaler"].transform(vec)
+        except Exception as e:
+            logger.warning(f"[SHAP] Scaler transform failed: {e}")
+            
+    # 2. Try loading shap explainer from disk
+    import joblib
+    
+    explainer = None
+    try:
+        from app.core.config import settings
+        model_dir = Path(settings.MODEL_DIR)
+    except Exception:
+        model_dir = Path(__file__).resolve().parent.parent / "ai" / "model"
+        
+    explainer_path = model_dir / "shap_explainer.pkl"
+    
+    if explainer_path.exists():
+        try:
+            explainer = joblib.load(str(explainer_path))
+        except Exception as e:
+            logger.warning(f"[SHAP] Failed to load explainer from {explainer_path}: {e}")
+            
+    # 3. Calculate SHAP values or fall back to feature importances
+    shap_calculated = False
+    if explainer is not None:
+        try:
+            import shap
+            shap_values = explainer.shap_values(vec_scaled)
+            # TreeExplainer returns a list of classes for classifier, or a single array for regressor
+            sv = shap_values[1][0] if isinstance(shap_values, list) else shap_values[0]
+            
+            for i, col in enumerate(feature_names):
+                label = column_to_label.get(col, col)
+                raw_val = float(vec[0][i])
+                shap_val = round(float(sv[i]), 4)
+                feature_contributions[label] = {
+                    "shap": shap_val,
+                    "value": raw_val
+                }
+            shap_calculated = True
+        except Exception as e:
+            logger.warning(f"[SHAP] explainer.shap_values failed: {e}")
+
+    # Fallback to feature importances or model-derived values if SHAP explainer is missing/fails
+    if not shap_calculated:
+        try:
+            # Extract regressor/classifier step from pipeline if it is a Pipeline
+            estimator = model.named_steps["regressor"] if hasattr(model, "named_steps") and "regressor" in model.named_steps else model
+            
+            if hasattr(estimator, "feature_importances_"):
+                importances = estimator.feature_importances_
+                for i, col in enumerate(feature_names):
+                    label = column_to_label.get(col, col)
+                    raw_val = float(vec[0][i])
+                    # Approximate contribution using feature importance * scaled value (sign matched)
+                    scaled_val = float(vec_scaled[0][i])
+                    shap_val = round(float(importances[i] * scaled_val * 10.0), 4) # Scale by 10 for visibility
+                    feature_contributions[label] = {
+                        "shap": shap_val,
+                        "value": raw_val
+                    }
+            else:
+                # Fallback to simple values
+                for i, col in enumerate(feature_names):
+                    label = column_to_label.get(col, col)
+                    raw_val = float(vec[0][i])
+                    feature_contributions[label] = {
+                        "shap": 0.0,
+                        "value": raw_val
+                    }
+        except Exception as e:
+            logger.warning(f"[SHAP] Feature importance fallback failed: {e}")
+            # Absolute fallback
+            for i, col in enumerate(feature_names):
+                label = column_to_label.get(col, col)
+                raw_val = float(vec[0][i]) if i < len(vec[0]) else 0.0
+                feature_contributions[label] = {
+                    "shap": 0.0,
+                    "value": raw_val
+                }
+
+    return {"feature_contributions": feature_contributions}
+
+
 # ── Public API ────────────────────────────────────────────────────────────
 
 def _run_prediction(features: np.ndarray, source: str = "ml") -> PredictionOut:

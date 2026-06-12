@@ -39,8 +39,6 @@ from app.services.in_app_notify import notify_all_super_admins, notify_airport_a
 from app.schemas.schemas import (
     ProfileCompleteRequest,
     PatchMySettingsRequest,
-    SuperAdminSelfProfilePatch,
-    SuperAdminAdminProfilePatch,
     IdDocumentReuploadRequest,
     AdminReviewDetail,
     IdReviewRequest,

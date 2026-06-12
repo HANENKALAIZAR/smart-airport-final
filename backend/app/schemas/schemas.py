@@ -234,8 +234,23 @@ class ProfileCompleteRequest(BaseModel):
 
 
 class PatchMySettingsRequest(BaseModel):
+    full_name: Optional[str] = None
     phone_number: Optional[str] = None
     profile_photo_url: Optional[str] = None
+    cin_number: Optional[str] = None
+    date_of_birth: Optional[str] = None
+    nationality: Optional[str] = None
+    gender: Optional[str] = None
+    passport_number: Optional[str] = None
+    passport_document_url: Optional[str] = None
+    passport_expiry_date: Optional[str] = None
+    cin_document_url: Optional[str] = None
+    cin_document_back_url: Optional[str] = None
+    residential_address: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    emergency_contact_relationship: Optional[str] = None
+
 
 
 class IdDocumentReuploadRequest(BaseModel):
@@ -379,3 +394,66 @@ class MessageCreate(BaseModel):
 
 class MessageReplyCreate(BaseModel):
     body: str
+
+
+# ── Compensation / Passenger Rights ──────────────────────────
+
+class CompensationLimitOut(BaseModel):
+    region: str
+    category: str
+    label_en: str
+    label_fr: Optional[str] = None
+    label_ar: Optional[str] = None
+    amount_eur: Optional[float] = None
+    amount_usd: Optional[float] = None
+    amount_cad: Optional[float] = None
+    amount_gbp: Optional[float] = None
+    source_sdr: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+
+class CompensationConfigOut(BaseModel):
+    regulations: list[PassengerRightOut]
+    limits: list[CompensationLimitOut]
+    generated_at: datetime
+
+
+# ── AI Suggestions / Notifications ───────────────────────────
+
+class DecideSuggestionBody(BaseModel):
+    suggestion_key: str
+    airport_iata: str
+    suggestion_type: str
+    status: str
+    suggestion_payload: Optional[dict] = None
+
+
+class AiAlertGeneratedBody(BaseModel):
+    airport_iata: Optional[str] = None
+    flight_number: str
+    brief_cause: str
+    recommendation: str
+    risk_pct: int
+    route: Optional[str] = None
+    delay_formatted: Optional[str] = None
+
+
+class AiAlertActionBody(BaseModel):
+    flight_number: str
+    action: Literal["approved", "rejected", "pending"]
+    airport_iata: Optional[str] = None
+    route: Optional[str] = None
+    delay_formatted: Optional[str] = None
+
+
+class PublicFeedbackCreate(BaseModel):
+    name: str
+    email: str
+    airport: str
+    subject: str
+    message: str
+
+
+

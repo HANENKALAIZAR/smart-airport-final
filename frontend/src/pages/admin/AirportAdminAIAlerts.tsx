@@ -57,7 +57,7 @@ const PRIORITY_CONFIG = {
 };
 
 const WORKFLOW_CONFIG: Record<WorkflowStatus, { color: string; bg: string; border: string; labelKey: string; defaultLabel: string }> = {
-    suggested: { color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.3)', labelKey: 'ai_suggestions_suggested', defaultLabel: 'Suggéré' },
+    suggested: { color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.3)', labelKey: 'ai_suggestions_suggested', defaultLabel: 'Pending' },
     approved:  { color: '#22C55E', bg: 'rgba(34,197,94,0.1)',  border: 'rgba(34,197,94,0.3)',  labelKey: 'ai_suggestions_approved', defaultLabel: 'Approuvé' },
     rejected:  { color: '#6B7280', bg: 'rgba(107,114,128,0.1)', border: 'rgba(107,114,128,0.3)', labelKey: 'ai_suggestions_rejected', defaultLabel: 'Rejeté' },
 };
@@ -468,7 +468,7 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
 
     const filterTabs: { key: WorkflowFilter; labelKey: string; defaultLabel: string; count: number }[] = [
         { key: 'all',       labelKey: 'ai_suggestions_all',      defaultLabel: 'Tous',      count: allItems.length },
-        { key: 'suggested', labelKey: 'ai_suggestions_suggested',  defaultLabel: 'Suggéré',   count: countByStatus('suggested') },
+        { key: 'suggested', labelKey: 'ai_suggestions_suggested',  defaultLabel: 'Pending',   count: countByStatus('suggested') },
         { key: 'approved',  labelKey: 'ai_suggestions_approved',   defaultLabel: 'Approuvé',  count: countByStatus('approved') },
         { key: 'rejected',  labelKey: 'ai_suggestions_rejected',   defaultLabel: 'Rejeté',    count: countByStatus('rejected') },
     ];
@@ -478,7 +478,7 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
             <div className="ai-alerts-panel__header" style={{ flexShrink: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
                     <Zap size={15} style={{ color: '#F59E0B' }} />
-                    <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>{t('ai_suggestions_title') || 'Suggestions IA Opérationnelles'}</span>
+                    <span style={{ fontWeight: 700, fontSize: '0.82rem' }}>{t('ai_suggestions_title') || 'Operational Suggestions'}</span>
                     {highCount > 0 && (
                         <span style={{
                             background: '#EF4444', color: '#fff', borderRadius: 999,
@@ -623,7 +623,7 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
                                 <div style={{ marginTop: 8 }}>
                                     <div style={{ padding: '8px 10px', background: 'rgba(255,255,255,0.04)', borderRadius: 7, border: '1px solid rgba(255,255,255,0.06)', marginBottom: isSuggested ? 10 : 0 }}>
                                         <span style={{ fontSize: '0.62rem', fontWeight: 700, color: cfg.color, textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', marginBottom: 4 }}>
-                                            {t('ai_suggestions_action_recommended') || 'Action recommandée'}
+                                            {t('ai_suggestions_action_recommended') || 'Suggested Action'}
                                         </span>
                                         <span style={{ fontSize: '0.73rem', color: 'var(--adm-text)', lineHeight: 1.55 }}>
                                             {loc.recommendedAction}
@@ -690,7 +690,7 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
                                 </span>
                                 {!isExpanded && isSuggested && (
                                     <span style={{ fontSize: '0.62rem', color: '#F59E0B', opacity: 0.8 }}>
-                                        {t('ai_suggestions_open_action') || 'Ouvrir pour agir →'}
+                                        {t('ai_suggestions_open_action') || 'Open to review →'}
                                     </span>
                                 )}
                             </div>
@@ -701,7 +701,7 @@ export default function AirportAdminAIAlerts({ selectedDate }: { selectedDate: D
 
             {lastRefreshed && !loading && (
                 <div style={{ padding: '0.4rem 0.75rem', borderTop: '1px solid var(--adm-border)', fontSize: '0.62rem', color: 'var(--adm-text-sub)', flexShrink: 0 }}>
-                    {t('ai_suggestions_footer_label') || 'IA Opérationnelle'} · {lastRefreshed.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                    {t('ai_suggestions_footer_label') || 'Ops Monitor'} · {lastRefreshed.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                 </div>
             )}
         </div>

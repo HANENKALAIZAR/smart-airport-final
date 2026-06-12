@@ -695,6 +695,15 @@ const en = {
     ai_explanation_unavailable: 'AI explanation is not available for this flight.',
     ai_top_factors: 'Top contributing factors',
 
+    /* ── Admin Suggestions / Alerts ──────────────────────────── */
+    suggestion_source_label: 'Operational Monitor',
+    ai_suggestions_title: 'Operational Suggestions',
+    ai_suggestions_action_recommended: 'Suggested Action',
+    ai_suggestions_suggested: 'Pending',
+    ai_suggestions_open_action: 'Open to review →',
+    ai_suggestions_footer_label: 'Ops Monitor',
+
+
     /* ── User Management (Super Admin) ──────────────────────── */
     admin_users_nav: 'User Management',
     admin_users_title: '👥 User Management',

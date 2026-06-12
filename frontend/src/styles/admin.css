@@ -1456,8 +1456,24 @@
 
 .ai-alert-card { background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 10px; padding: 0.85rem; transition: border-color 150ms; }
 .ai-alert-card--approved { border-color: rgba(34, 197, 94, 0.25); background: rgba(34, 197, 94, 0.05); }
-.ai-alert-card__top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
-.ai-alert-card__title { font-size: 0.9rem; font-weight: 700; color: #E2E8F0; }
+.ai-alert-card__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    row-gap: 4px;
+    margin-bottom: 5px;
+}
+.ai-alert-card__title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #E2E8F0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1 1 auto;
+}
 .ai-alert-card__risk { font-size: 0.75rem; font-weight: 700; background: rgba(255, 255, 255, 0.07); padding: 2px 8px; border-radius: 12px; }
 .ai-alert-card__issue { font-size: 0.78rem; color: rgba(255, 255, 255, 0.45); margin-bottom: 6px; }
 .ai-alert-card__rec { display: flex; align-items: flex-start; gap: 5px; font-size: 0.78rem; color: rgba(255, 255, 255, 0.6); margin-bottom: 10px; }

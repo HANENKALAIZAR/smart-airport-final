@@ -694,6 +694,15 @@ const ar = {
     ai_explanation_unavailable: 'شرح الذكاء الاصطناعي غير متاح لهذه الرحلة.',
     ai_top_factors: 'أبرز العوامل المؤثرة',
 
+    /* ── Admin Suggestions / Alerts ──────────────────────────── */
+    suggestion_source_label: 'المراقب التشغيلي',
+    ai_suggestions_title: 'الاقتراحات التشغيلية',
+    ai_suggestions_action_recommended: 'الإجراء المقترح',
+    ai_suggestions_suggested: 'قيد الانتظار',
+    ai_suggestions_open_action: 'افتح للمراجعة ←',
+    ai_suggestions_footer_label: 'مراقب العمليات',
+
+
     /* ── إدارة المستخدمين (المدير العام) ────────────────────── */
     admin_users_nav: 'إدارة المستخدمين',
     admin_users_title: '👥 إدارة المستخدمين',

@@ -694,6 +694,15 @@ const fr = {
     ai_explanation_unavailable: 'L\'explication IA n\'est pas disponible pour ce vol.',
     ai_top_factors: 'Principaux facteurs contributifs',
 
+    /* ── Admin Suggestions / Alerts ──────────────────────────── */
+    suggestion_source_label: 'Moniteur opérationnel',
+    ai_suggestions_title: 'Suggestions opérationnelles',
+    ai_suggestions_action_recommended: 'Action suggérée',
+    ai_suggestions_suggested: 'En attente',
+    ai_suggestions_open_action: 'Ouvrir pour examiner →',
+    ai_suggestions_footer_label: 'Moniteur des ops',
+
+
     /* ── Gestion des utilisateurs (Super Admin) ──────────────── */
     admin_users_nav: 'Gestion des utilisateurs',
     admin_users_title: '👥 Gestion des utilisateurs',
